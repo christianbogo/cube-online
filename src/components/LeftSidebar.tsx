@@ -1,5 +1,6 @@
-import { Box, BarChart2, Radio, Sun, Moon, Monitor, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Box, BarChart2, Radio, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Calendar, Users, Star, Info } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
+import { NavLink } from 'react-router-dom';
 
 interface LeftSidebarProps {
     collapsed: boolean;
@@ -7,9 +8,13 @@ interface LeftSidebarProps {
 }
 
 const navItems = [
-    { name: 'Cube', icon: Box },
-    { name: 'Live', icon: Radio },
-    { name: 'Data', icon: BarChart2 },
+    { name: 'Cube', icon: Box, path: '/' },
+    { name: 'Daily', icon: Calendar, path: '/daily' },
+    { name: 'Live', icon: Radio, path: '/live' },
+    { name: 'Shared', icon: Users, path: '/shared' },
+    { name: 'Featured', icon: Star, path: '/featured' },
+    { name: 'Data', icon: BarChart2, path: '/data' },
+    { name: 'About', icon: Info, path: '/about' },
 ];
 
 export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebarProps) {
@@ -21,17 +26,28 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
             <ul className="flex flex-col gap-1 px-2 pt-2 flex-1">
                 {navItems.map((item) => (
                     <li key={item.name}>
-                        <button
-                            className={`w-full flex items-center gap-3 p-2 rounded-md transition-colors hover:bg-bg-hover text-left ${collapsed ? 'justify-center' : ''
-                                }`}
+                        <NavLink
+                            to={item.path}
+                            className={({ isActive }) => `
+                                w-full flex items-center gap-3 p-2 rounded-md transition-colors text-left
+                                ${isActive
+                                    ? 'bg-accent/10 text-accent'
+                                    : 'hover:bg-bg-hover text-text-secondary hover:text-text-primary'
+                                }
+                                ${collapsed ? 'justify-center' : ''}
+                            `}
                         >
-                            <item.icon className="w-5 h-5 text-text-secondary" />
-                            {!collapsed && (
-                                <span className="text-sm font-medium text-text-primary">
-                                    {item.name}
-                                </span>
+                            {({ isActive }) => (
+                                <>
+                                    <item.icon className={`w-5 h-5 ${isActive ? 'text-accent' : 'text-text-secondary'}`} />
+                                    {!collapsed && (
+                                        <span className={`text-sm font-medium ${isActive ? 'text-accent' : 'text-text-primary'}`}>
+                                            {item.name}
+                                        </span>
+                                    )}
+                                </>
                             )}
-                        </button>
+                        </NavLink>
                     </li>
                 ))}
             </ul>

@@ -1,73 +1,66 @@
-# React + TypeScript + Vite
+# Cutter's Cubing - Architecture & Style Guide
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Overview
+Cutter's Cubing is a modern, high-performance speedcubing timer application built with **Vite**, **React**, and **Tailwind CSS**. The design philosophy emphasizes a "No Zoom, No Scroll" main interface for the timer, while specialized pages offer rich data visualization and settings.
 
-Currently, two official plugins are available:
+## Tech Stack
+- **Framework**: React 18+ (with Hooks)
+- **Build Tool**: Vite
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS v4 (configured via `@tailwindcss/vite`)
+- **Icons**: `lucide-react`
+- **Routing**: `react-router-dom`
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Project Structure
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+src/
+├── components/         # Reusable UI components
+│   ├── Layout.tsx      # Main application shell (Sidebar + Content + Resizable Panels)
+│   ├── Topbar.tsx      # Application header
+│   ├── LeftSidebar.tsx # Primary navigation
+│   ├── RightSidebar.tsx# Secondary information panel
+│   ├── Tabs.tsx        # Reusable Tabs component
+│   └── Table.tsx       # Reusable Table component
+├── pages/              # Route components
+│   ├── Cube.tsx        # Home/Timer page
+│   ├── Daily.tsx       # Daily challenges
+│   ├── ...             # Other feature pages
+├── index.css           # Global styles & CSS Variables
+└── App.tsx             # Route definitions
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Styling System
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+We use a semantic CSS variable system integrated with Tailwind. This allows for seamless Light/Dark mode switching and easy theming.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### CSS Variables (`src/index.css`)
+We define semantic colors rather than raw colors.
+- `--bg-primary`: Main background (e.g., `#0d1117` in dark)
+- `--bg-secondary`: Sidebar/Header background (e.g., `#161b22` in dark)
+- `--text-primary`: Main text color
+- `--text-secondary`: Muted text color
+- `--border-color`: Border color for dividers/inputs
+- `--accent`: Brand accent color
+
+### Tailwind Integration
+These variables are mapped to Tailwind classes in the `@theme` directive (or implicitly supported by Tailwind v4 via `var()`).
+Example usage:
+```tsx
+<div className="bg-bg-primary text-text-primary border border-border">
+  Content
+</div>
 ```
+
+### Layout Patterns
+- **Full Screen**: The root `Layout` component is fixed height `h-screen` with `overflow-hidden` to prevent body scroll.
+- **Scrollable Areas**: Individual panels (features pages) use `overflow-y-auto` to handle their own scrolling.
+- **Sidebars**: `LeftSidebar` and `RightSidebar` are resizable flex items.
+
+## Routing
+Routing is handled by `react-router-dom`. The `Layout` component serves as the parent route, rendering child pages via `<Outlet />`.
+
+## Adding New Features
+1. **Create Page**: Add a new component in `src/pages/`.
+2. **Add Route**: Import and add the `<Route>` to `src/App.tsx`.
+3. **Add Navigation**: Add the link and icon to the `navItems` array in `src/components/LeftSidebar.tsx`.

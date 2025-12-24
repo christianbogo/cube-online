@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { Outlet } from 'react-router-dom';
 import Topbar from './Topbar';
 import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
@@ -118,12 +119,8 @@ export default function Layout() {
 
                 {/* Main Content */}
                 <main className="flex-1 flex flex-col relative bg-bg-primary min-w-0">
-                    <div className="flex-1 p-6 flex flex-col items-center justify-center text-text-secondary">
-                        {/* Main page content placeholder */}
-                        <div className="text-center">
-                            <h2 className="text-xl mb-2 text-text-primary">Ready to Solve</h2>
-                            <p className="text-sm">Press Space to start timer (placeholder)</p>
-                        </div>
+                    <div className="flex-1 p-6 overflow-y-auto custom-scrollbar w-full">
+                        <Outlet />
                     </div>
 
                     {/* Footer */}

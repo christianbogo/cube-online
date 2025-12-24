@@ -1,4 +1,5 @@
-import { User, Settings } from 'lucide-react';
+import { User } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function Topbar() {
     return (
@@ -10,12 +11,9 @@ export default function Topbar() {
             </div>
 
             <div className="flex items-center gap-1">
-                <button className="p-2 hover:bg-bg-hover rounded-full transition-colors">
-                    <Settings className="w-5 h-5 text-text-primary" />
-                </button>
-                <button className="p-2 hover:bg-bg-hover rounded-full transition-colors">
+                <Link to="/account" className="p-2 hover:bg-bg-hover rounded-full transition-colors">
                     <User className="w-5 h-5 text-text-primary" />
-                </button>
+                </Link>
             </div>
         </header>
     );
