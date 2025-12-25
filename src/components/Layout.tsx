@@ -8,16 +8,36 @@ export default function Layout() {
     const [leftWidth, setLeftWidth] = useState(240);
     const [lastOpenLeftWidth, setLastOpenLeftWidth] = useState(240);
     const [rightWidth, setRightWidth] = useState(240);
+    const [lastOpenRightWidth, setLastOpenRightWidth] = useState(240); // New state
     const [isResizingLeft, setIsResizingLeft] = useState(false);
     const [isResizingRight, setIsResizingRight] = useState(false);
+    const [consoleInfo, setConsoleInfo] = useState<string | null>(null); // For footer
     const layoutRef = useRef<HTMLDivElement>(null);
 
     // Constants
     const COLLAPSED_WIDTH = 64;
     const MIN_EXPANDED_WIDTH = 180;
     const MAX_WIDTH = 500;
+    const RIGHT_COLLAPSED_WIDTH = 50; // A bit narrower for just the chevron?
 
     const isLeftCollapsed = leftWidth < MIN_EXPANDED_WIDTH;
+    const isRightCollapsed = rightWidth < MIN_EXPANDED_WIDTH;
+
+    // Console interceptor
+    useEffect(() => {
+        const originalWarn = console.warn;
+        console.warn = (...args) => {
+            // Check for cubing.js specific warnings or just capture the last one
+            const msg = args.map(a => a.toString()).join(' ');
+            if (msg.includes('cubing/scramble')) {
+                setConsoleInfo(msg.slice(0, 100)); // Cap length
+            }
+            originalWarn.apply(console, args);
+        };
+        return () => {
+            console.warn = originalWarn;
+        };
+    }, []);
 
     const toggleLeftSidebar = useCallback(() => {
         if (isLeftCollapsed) {
@@ -27,6 +47,15 @@ export default function Layout() {
             setLeftWidth(COLLAPSED_WIDTH);
         }
     }, [isLeftCollapsed, leftWidth, lastOpenLeftWidth]);
+
+    const toggleRightSidebar = useCallback(() => {
+        if (isRightCollapsed) {
+            setRightWidth(lastOpenRightWidth < MIN_EXPANDED_WIDTH ? 240 : lastOpenRightWidth);
+        } else {
+            setLastOpenRightWidth(rightWidth);
+            setRightWidth(RIGHT_COLLAPSED_WIDTH);
+        }
+    }, [isRightCollapsed, rightWidth, lastOpenRightWidth]);
 
     const startResizingLeft = useCallback(() => setIsResizingLeft(true), []);
     const startResizingRight = useCallback(() => setIsResizingRight(true), []);
@@ -45,11 +74,7 @@ export default function Layout() {
             if (isResizingLeft) {
                 let newWidth = e.clientX - containerRect.left;
 
-                // Snap to collapsed or clamp
                 if (newWidth < MIN_EXPANDED_WIDTH) {
-                    // Allow dragging to collapse smoothly or snap?
-                    // User said "grown and shrunk on drag". 
-                    // Let's allow shrinking until a threshold where it snaps to COLLAPSED_WIDTH
                     if (newWidth < (MIN_EXPANDED_WIDTH + COLLAPSED_WIDTH) / 2) {
                         newWidth = COLLAPSED_WIDTH;
                     } else {
@@ -57,8 +82,6 @@ export default function Layout() {
                     }
                 }
                 if (newWidth > MAX_WIDTH) newWidth = MAX_WIDTH;
-
-                // Make sure we don't overlap right bar too much (optional check)
                 setLeftWidth(newWidth);
                 if (newWidth >= MIN_EXPANDED_WIDTH) {
                     setLastOpenLeftWidth(newWidth);
@@ -68,21 +91,28 @@ export default function Layout() {
             if (isResizingRight) {
                 let newWidth = containerRect.right - e.clientX;
 
-                if (newWidth < 100) newWidth = 0; // Snap to closed if desired, or min width
+                if (newWidth < MIN_EXPANDED_WIDTH) {
+                    if (newWidth < (MIN_EXPANDED_WIDTH + RIGHT_COLLAPSED_WIDTH) / 2) {
+                        newWidth = RIGHT_COLLAPSED_WIDTH;
+                    } else {
+                        newWidth = MIN_EXPANDED_WIDTH;
+                    }
+                }
                 if (newWidth > MAX_WIDTH) newWidth = MAX_WIDTH;
-                if (newWidth > 0 && newWidth < 150) newWidth = 150; // Min usable width
 
                 setRightWidth(newWidth);
+                if (newWidth >= MIN_EXPANDED_WIDTH) {
+                    setLastOpenRightWidth(newWidth);
+                }
             }
         },
-        [isResizingLeft, isResizingRight, setLastOpenLeftWidth]
+        [isResizingLeft, isResizingRight, setLastOpenLeftWidth, setLastOpenRightWidth]
     );
 
     useEffect(() => {
         if (isResizingLeft || isResizingRight) {
             window.addEventListener('mousemove', resize);
             window.addEventListener('mouseup', stopResizing);
-            // prevent selection while dragging
             document.body.style.userSelect = 'none';
             document.body.style.cursor = 'col-resize';
         } else {
@@ -124,21 +154,25 @@ export default function Layout() {
                     </div>
 
                     {/* Footer */}
-                    <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between">
+                    <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8">
                         <div className="flex gap-2">
                             <span>Online • v0.1.0</span>
                         </div>
-                        {/* Can add more info */}
+                        {consoleInfo && (
+                            <div className="text-[10px] text-yellow-500/70 truncate max-w-xs font-mono ml-auto" title={consoleInfo}>
+                                ⚠️ {consoleInfo}
+                            </div>
+                        )}
                     </footer>
                 </main>
 
                 {/* Right Sidebar */}
-                <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col border-l border-border backdrop-blur-sm">
+                <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col border-l border-border backdrop-blur-sm transition-[width] duration-300 ease-in-out will-change-[width]">
                     <div
                         className="absolute top-0 left-[-3px] w-1.5 h-full cursor-col-resize hover:bg-accent/50 z-10 transition-colors delay-75"
                         onMouseDown={startResizingRight}
                     />
-                    <RightSidebar />
+                    <RightSidebar collapsed={isRightCollapsed} onToggleCollapse={toggleRightSidebar} />
                 </div>
             </div>
         </div>
