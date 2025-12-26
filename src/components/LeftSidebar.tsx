@@ -1,4 +1,4 @@
-import { Box, BarChart2, Radio, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Calendar, Users, Star, Info, History } from 'lucide-react';
+import { Box, BarChart2, Radio, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Calendar, Info, History } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { NavLink } from 'react-router-dom';
 

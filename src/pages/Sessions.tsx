@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, getDocs, orderBy, writeBatch, doc, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, writeBatch, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSession } from '../contexts/SessionContext';
 import { useSolves } from '../contexts/SolvesContext';
 import { useConfirm } from '../contexts/ConfirmationContext';
-import { calculateBestAverage, calculateBestSingle, formatTime } from '../utils/calculations';
+import { calculateBestAverage, calculateBestSingle } from '../utils/calculations';
 import Table from '../components/Table';
 import { Calendar, Trash, Merge, X, CheckSquare, Square, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -34,7 +34,7 @@ type SortDirection = 'asc' | 'desc';
 
 export default function Sessions() {
     const { user } = useAuth();
-    const { currentSessionId, setCurrentSessionId, setViewedSessionId } = useSession();
+    const { currentSessionId, setCurrentSessionId } = useSession();
     const { solves } = useSolves();
     const { confirm: confirmAction } = useConfirm();
     const [sessions, setSessions] = useState<SessionDoc[]>([]);
@@ -307,13 +307,7 @@ export default function Sessions() {
         return sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />;
     }
 
-    const formatDuration = (ms: number) => {
-        const seconds = Math.floor(ms / 1000);
-        const h = Math.floor(seconds / 3600);
-        const m = Math.floor((seconds % 3600) / 60);
-        if (h > 0) return `${h}h ${m}m`;
-        return `${m}m`;
-    }
+
 
     const getLocalYMD = (d: Date) => {
         return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');

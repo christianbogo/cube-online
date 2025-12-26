@@ -51,6 +51,13 @@ export const calculateBestAverage = (solves: Solve[], size: number): number | 'D
     let best: number | null = null;
     for (let i = 0; i <= solves.length - size; i++) {
         const window = solves.slice(i, i + size);
+
+        // Strict Session Check: All solves must be from the same session
+        const firstSessionId = window[0].sessionId;
+        const allSameSession = window.every(s => s.sessionId === firstSessionId);
+
+        if (!allSameSession) continue;
+
         const avg = calculateAverage(window, size);
         if (typeof avg === 'number') {
             if (best === null || avg < best) {

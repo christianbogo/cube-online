@@ -4,7 +4,7 @@ import { useSession } from '../contexts/SessionContext';
 import { useConfirm } from '../contexts/ConfirmationContext';
 import { Trash2, ChevronRight, ChevronLeft, Menu, Lock } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
-import { calculateBestAverage, calculateBestSingle, formatTime } from '../utils/calculations';
+import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage } from '../utils/calculations';
 import { deleteDoc, doc, collection, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
@@ -26,7 +26,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
     // Filter solves to ONLY user's cloud solves (as per request)
     // Though SolvesContext adds userId locally too, this ensures we match the signed in user.
     const solves = useMemo(() => {
-        if (!user) return [];
+        if (!user) return allSolves;
         return allSolves.filter(s => s.userId === user.uid);
     }, [allSolves, user]);
 
@@ -78,6 +78,16 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
             ao5: calculateBestAverage(currentSessionSolves, 5),
             ao12: calculateBestAverage(currentSessionSolves, 12),
             ao100: calculateBestAverage(currentSessionSolves, 100),
+        };
+    }, [currentSessionSolves]);
+
+    // Current Stats for active session (not best)
+    const currentSessionStats = useMemo(() => {
+        return {
+            single: calculateAverage(currentSessionSolves, 1),
+            ao5: calculateAverage(currentSessionSolves, 5),
+            ao12: calculateAverage(currentSessionSolves, 12),
+            ao100: calculateAverage(currentSessionSolves, 100),
         };
     }, [currentSessionSolves]);
 
@@ -454,25 +464,25 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                                 </div>
 
                                 <div className="text-left pl-1 font-medium text-text-secondary py-1">Single</div>
-                                <div className="font-mono text-text-primary py-1">{formatStatValue(globalStats.current.single)}</div>
+                                <div className="font-mono text-text-primary py-1">{formatStatValue(currentSessionStats.single)}</div>
                                 <div className={`font-mono py-1 ${statsMode === 'session' ? 'text-accent' : 'text-text-primary'}`}>
                                     {formatStatValue(statsMode === 'session' ? sessionStats.single : globalStats.best.single)}
                                 </div>
 
                                 <div className="text-left pl-1 font-medium text-text-secondary py-1 bg-bg-primary/30 rounded-l">Ao5</div>
-                                <div className="font-mono text-text-primary py-1 bg-bg-primary/30">{formatStatValue(globalStats.current.ao5)}</div>
+                                <div className="font-mono text-text-primary py-1 bg-bg-primary/30">{formatStatValue(currentSessionStats.ao5)}</div>
                                 <div className={`font-mono py-1 bg-bg-primary/30 rounded-r ${statsMode === 'session' ? 'text-accent' : 'text-text-primary'}`}>
                                     {formatStatValue(statsMode === 'session' ? sessionStats.ao5 : globalStats.best.ao5)}
                                 </div>
 
                                 <div className="text-left pl-1 font-medium text-text-secondary py-1">Ao12</div>
-                                <div className="font-mono text-text-primary py-1">{formatStatValue(globalStats.current.ao12)}</div>
+                                <div className="font-mono text-text-primary py-1">{formatStatValue(currentSessionStats.ao12)}</div>
                                 <div className={`font-mono py-1 ${statsMode === 'session' ? 'text-accent' : 'text-text-primary'}`}>
                                     {formatStatValue(statsMode === 'session' ? sessionStats.ao12 : globalStats.best.ao12)}
                                 </div>
 
                                 <div className="text-left pl-1 font-medium text-text-secondary py-1 bg-bg-primary/30 rounded-l">Ao100</div>
-                                <div className="font-mono text-text-primary py-1 bg-bg-primary/30">{formatStatValue(globalStats.current.ao100)}</div>
+                                <div className="font-mono text-text-primary py-1 bg-bg-primary/30">{formatStatValue(currentSessionStats.ao100)}</div>
                                 <div className={`font-mono py-1 bg-bg-primary/30 rounded-r ${statsMode === 'session' ? 'text-accent' : 'text-text-primary'}`}>
                                     {formatStatValue(statsMode === 'session' ? sessionStats.ao100 : globalStats.best.ao100)}
                                 </div>

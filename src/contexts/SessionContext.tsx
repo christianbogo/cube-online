@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { doc, collection, addDoc, updateDoc, increment, getDoc, deleteDoc } from 'firebase/firestore';
+import { doc, updateDoc, increment, getDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 
@@ -8,7 +8,7 @@ import { useAuth } from './AuthContext';
 interface SessionContextType {
     currentSessionId: string | null;
     startNewSession: (resume?: boolean) => Promise<string>;
-    updateSessionActivity: (incrementCount?: boolean) => void;
+    updateSessionActivity: (incrementCount?: boolean, overrideSessionId?: string) => void;
     checkSessionStatus: (lastSolveTime: number) => { isNewSessionNeeded: boolean };
     isSessionPromptVisible: boolean;
     setSessionPromptVisible: (visible: boolean) => void;

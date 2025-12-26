@@ -40,9 +40,10 @@ export default function Cube() {
 
     const startTimeRef = useRef<number>(0);
     const primingStartRef = useRef<number | null>(null);
-    const inspectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const initialPenaltyRef = useRef<Solve['penalty']>('none');
     const prevTimerStateRef = useRef<TimerState>('IDLE');
+
+    const inspectionStartTimeRef = useRef<number | null>(null);
 
     // Fetch new scramble
     const generateNewScramble = useCallback(async () => {
@@ -99,17 +100,22 @@ export default function Cube() {
             (timerState === 'PRIMING' && prevTimerStateRef.current === 'INSPECTION');
 
         if (shouldRunInspection) {
+            // Use short interval to update display without drift
             interval = setInterval(() => {
-                setInspectionTime(prev => {
-                    if (prev <= -2) {
-                        // DNF logic handled elsewhere or next tick?
-                        // Actually, if we are priming, we shouldn't change state to IDLE automatically?
-                        // But if inspection runs out while priming => DNF.
-                        return prev - 1;
-                    }
-                    return prev - 1;
-                });
-            }, 1000);
+                if (inspectionStartTimeRef.current) {
+                    const elapsed = (Date.now() - inspectionStartTimeRef.current) / 1000;
+                    // Standard WCA: 15 seconds. 
+                    // Display: 15 (0-1s), 14 (1-2s)...
+                    // We use ceil to match this. 15 - 0.1 = 14.9 -> 15.
+                    const remaining = Math.ceil(15 - elapsed);
+
+                    // Only update state if changing (optimization)
+                    setInspectionTime(prev => {
+                        if (prev !== remaining) return remaining;
+                        return prev;
+                    });
+                }
+            }, 100);
         }
 
         return () => clearInterval(interval);
@@ -168,9 +174,12 @@ export default function Cube() {
         if (e.code === 'Space') {
             if (timerState === 'IDLE') {
                 if (settings.solveInspection) {
+                    prevTimerStateRef.current = timerState;
                     setTimerState('INSPECTION');
                     setInspectionTime(15); // Reset inspection time
+                    inspectionStartTimeRef.current = Date.now();
                 } else {
+                    prevTimerStateRef.current = timerState;
                     primingStartRef.current = Date.now();
                     setTimerState('PRIMING');
                     setPrimingProgress(0);
@@ -179,6 +188,7 @@ export default function Cube() {
                 // primingStart logic only, penalty calculated on release
                 initialPenaltyRef.current = 'none';
 
+                prevTimerStateRef.current = timerState;
                 primingStartRef.current = Date.now();
                 setTimerState('PRIMING');
                 setPrimingProgress(0);
@@ -186,9 +196,12 @@ export default function Cube() {
                 finishSolve();
             } else if (timerState === 'SOLVED') {
                 if (settings.solveInspection) {
+                    prevTimerStateRef.current = timerState;
                     setTimerState('INSPECTION');
                     setInspectionTime(15);
+                    inspectionStartTimeRef.current = Date.now();
                 } else {
+                    prevTimerStateRef.current = timerState;
                     primingStartRef.current = Date.now();
                     setTimerState('PRIMING');
                     setPrimingProgress(0);
@@ -259,6 +272,8 @@ export default function Cube() {
         };
     }, [handleKeyDown, handleKeyUp]);
 
+
+
     // Helpers
     const formatTime = (ms: number) => (ms / 1000).toFixed(2);
 
@@ -266,21 +281,6 @@ export default function Cube() {
         if (inspectionTime > 7) return 'text-text-primary'; // 15-8 (Black/Default)
         if (inspectionTime > 3) return 'text-orange-500';   // 7-4 (Orange)
         return 'text-red-500';                              // 3+ (Red)
-    };
-
-    // Updated Opacity Logic from user:
-    // Holding space (Priming 1) -> 0.6
-    // Primed (Priming 2) -> 0.3
-    // Released (Running) -> 0 ("Solve" text) or Visible time depending on setting
-    const getContentOpacity = () => {
-        if (timerState === 'PRIMING') {
-            const isPrimed = primingProgress >= 1;
-            return isPrimed ? 0.3 : 0.6; // Ready (0.3) vs Priming (0.6)
-        }
-        if (timerState === 'RUNNING') {
-            return 1; // Content wrapper is visible, but we switch what's inside
-        }
-        return 1;
     };
 
     const handleCopyScramble = () => {
@@ -299,7 +299,10 @@ export default function Cube() {
     };
 
     return (
-        <div className="flex flex-col items-center justify-center h-full select-none transition-opacity duration-200" style={{ opacity: getContentOpacity() }}>
+        <div
+            className="flex flex-col items-center justify-center h-full select-none"
+            style={{ opacity: (timerState === 'PRIMING' && primingProgress < 1) ? 0.6 : 1 }}
+        >
 
             {/* Scramble Toolbar & Content */}
             {scrambleVisible ? (

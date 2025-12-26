@@ -4,7 +4,7 @@ import Topbar from './Topbar';
 import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
 import { useSolves } from '../contexts/SolvesContext';
-import { useSession } from '../contexts/SessionContext';
+
 export default function Layout() {
     const navigate = useNavigate();
     const location = useLocation();

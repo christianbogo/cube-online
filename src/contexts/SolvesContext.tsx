@@ -116,6 +116,8 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
                     setSolves(prev => prev.filter(s => s.id !== change.doc.id));
                 }
             });
+        }, (error) => {
+            console.log("Snapshot error (likely permission/sign-out):", error.message);
         });
 
         return () => unsubscribe();
