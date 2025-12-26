@@ -47,6 +47,34 @@ export const calculateAverage = (solves: Solve[], size: number): number | 'DNF' 
     return Math.round(sum / validTimes.length);
 };
 
+export const calculateBestAverage = (solves: Solve[], size: number): number | 'DNF' | null => {
+    let best: number | null = null;
+    for (let i = 0; i <= solves.length - size; i++) {
+        const window = solves.slice(i, i + size);
+        const avg = calculateAverage(window, size);
+        if (typeof avg === 'number') {
+            if (best === null || avg < best) {
+                best = avg;
+            }
+        }
+    }
+    return best;
+};
+
+export const calculateBestSingle = (solves: Solve[]): number | null => {
+    const validSingles = solves
+        .map(s => {
+            if (s.penalty === 'DNF' || s.inspectionPenalty === 'DNF') return Infinity;
+            let t = s.time;
+            if (s.penalty === '+2') t += 2000;
+            if (s.inspectionPenalty === '+2') t += 2000;
+            return t;
+        })
+        .filter(t => t !== Infinity);
+
+    return validSingles.length > 0 ? Math.min(...validSingles) : null;
+};
+
 export const formatTime = (ms: number | 'DNF' | null): string => {
     if (ms === null) return '-';
     if (ms === 'DNF') return 'DNF';

@@ -12,8 +12,6 @@ const navItems = [
     { name: 'Daily', icon: Calendar, path: '/daily' },
     { name: 'Sessions', icon: History, path: '/sessions' },
     { name: 'Live', icon: Radio, path: '/live' },
-    { name: 'Shared', icon: Users, path: '/shared' },
-    { name: 'Featured', icon: Star, path: '/featured' },
     { name: 'Data', icon: BarChart2, path: '/data' },
     { name: 'About', icon: Info, path: '/about' },
 ];

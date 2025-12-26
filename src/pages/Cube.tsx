@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { randomScrambleForEvent } from 'cubing/scramble';
 import { useSettings } from '../contexts/SettingsContext';
 import { useSolves, type Solve } from '../contexts/SolvesContext';
 import { useSession } from '../contexts/SessionContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useConfirm } from '../contexts/ConfirmationContext';
 import Toast from '../components/Toast';
 import { Copy, EyeOff, Info, Minus, Plus, ChevronRight, Check, History } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -15,6 +16,7 @@ export default function Cube() {
     const { addSolve, currentScramble, setCurrentScramble } = useSolves();
     const { startNewSession, currentSessionId } = useSession();
     const { user } = useAuth();
+    const { confirm: confirmAction } = useConfirm();
     const [autoSessionToastVisible, setAutoSessionToastVisible] = useState(false);
 
     // Auto-create session and toast logic
@@ -40,6 +42,7 @@ export default function Cube() {
     const primingStartRef = useRef<number | null>(null);
     const inspectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const initialPenaltyRef = useRef<Solve['penalty']>('none');
+    const prevTimerStateRef = useRef<TimerState>('IDLE');
 
     // Fetch new scramble
     const generateNewScramble = useCallback(async () => {
@@ -86,19 +89,30 @@ export default function Cube() {
     }, [timerState]);
 
     // Inspection Logic
+    // Inspection Timer
     useEffect(() => {
-        if (timerState === 'INSPECTION') {
-            setInspectionTime(15);
-            initialPenaltyRef.current = 'none'; // Reset penalty
-            inspectionIntervalRef.current = setInterval(() => {
-                setInspectionTime(prev => prev - 1);
+        let interval: ReturnType<typeof setInterval>;
+
+        // Run inspection timer if in INSPECTION *OR* if Priming (but came from Inspection)
+        // This prevents the timer from "pausing" when holding spacebar.
+        const shouldRunInspection = timerState === 'INSPECTION' ||
+            (timerState === 'PRIMING' && prevTimerStateRef.current === 'INSPECTION');
+
+        if (shouldRunInspection) {
+            interval = setInterval(() => {
+                setInspectionTime(prev => {
+                    if (prev <= -2) {
+                        // DNF logic handled elsewhere or next tick?
+                        // Actually, if we are priming, we shouldn't change state to IDLE automatically?
+                        // But if inspection runs out while priming => DNF.
+                        return prev - 1;
+                    }
+                    return prev - 1;
+                });
             }, 1000);
-        } else {
-            if (inspectionIntervalRef.current) clearInterval(inspectionIntervalRef.current);
         }
-        return () => {
-            if (inspectionIntervalRef.current) clearInterval(inspectionIntervalRef.current);
-        };
+
+        return () => clearInterval(interval);
     }, [timerState]);
 
     // Priming Animation Loop
@@ -140,15 +154,7 @@ export default function Cube() {
             scramble: scramble,
             date: new Date().toISOString(),
             penalty: 'none', // Manual penalty starts as none
-            inspectionTime: inspectionTime, // Save the actual inspection time state (might need to capture it at start?)
-            // wait, inspectionTime continues to tick if we don't clear interval? 
-            // We clear interval on state change. 
-            // When we switch to PRIMING, inspection stops ticking in the effect?
-            // "if (timerState === 'INSPECTION')" -> effect cleanup runs.
-            // So inspectionTime state should be frozen at the value when we left INSPECTION.
-            // However, handleKeyDown sets inspectionTime to 15 if going from SOLVED/IDLE.
-            // BUT if we came from INSPECTION -> PRIMING -> RUNNING -> finishSolve, 
-            // inspectionTime state variable holds the value when we left inspection.
+            inspectionTime: 15 - inspectionTime, // Store amount of inspection used (approx seconds)
             inspectionPenalty: finalInspectionPenalty
         });
         generateNewScramble();
@@ -179,7 +185,6 @@ export default function Cube() {
             } else if (timerState === 'RUNNING') {
                 finishSolve();
             } else if (timerState === 'SOLVED') {
-                setTime(0);
                 if (settings.solveInspection) {
                     setTimerState('INSPECTION');
                     setInspectionTime(15);
@@ -188,6 +193,12 @@ export default function Cube() {
                     setTimerState('PRIMING');
                     setPrimingProgress(0);
                 }
+            }
+        } else if (e.key === 'Escape') {
+            if (timerState === 'INSPECTION') {
+                setTimerState('IDLE');
+                setInspectionTime(15);
+                // No need to stopPropagation as Layout navigates to '/' which is no-op here
             }
         } else {
             if (timerState === 'RUNNING') {
@@ -264,7 +275,7 @@ export default function Cube() {
     const getContentOpacity = () => {
         if (timerState === 'PRIMING') {
             const isPrimed = primingProgress >= 1;
-            return isPrimed ? 0.3 : 0.6;
+            return isPrimed ? 0.3 : 0.6; // Ready (0.3) vs Priming (0.6)
         }
         if (timerState === 'RUNNING') {
             return 1; // Content wrapper is visible, but we switch what's inside
@@ -314,7 +325,7 @@ export default function Cube() {
 
                         <button
                             onClick={async () => {
-                                if (confirm("Start a new session? This will reset the current solve count.")) {
+                                if (await confirmAction("Start a new session? This will reset the current solve count.")) {
                                     await startNewSession(false);
                                 }
                             }}
@@ -364,6 +375,22 @@ export default function Cube() {
                         <h1 className={`text-9xl font-normal font-mono text-text-primary tracking-widest`}>
                             SOLVE
                         </h1>
+                    )
+                ) : timerState === 'PRIMING' ? (
+                    primingProgress >= 1 ? (
+                        <h1 className="text-9xl font-normal font-mono text-green-500">
+                            Ready
+                        </h1>
+                    ) : (
+                        prevTimerStateRef.current === 'INSPECTION' ? (
+                            <h1 className={`text-9xl font-normal font-mono ${getInspectionColor()}`}>
+                                {Math.abs(inspectionTime)}
+                            </h1>
+                        ) : (
+                            <h1 className={`text-9xl font-normal font-mono text-text-primary ${primingProgress < 1 ? 'opacity-50' : ''}`}>
+                                {formatTime(time)}
+                            </h1>
+                        )
                     )
                 ) : (
                     <h1 className={`text-9xl font-normal font-mono text-text-primary`}>

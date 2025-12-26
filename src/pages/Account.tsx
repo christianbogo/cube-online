@@ -1,4 +1,4 @@
-import { Settings, Check, X, LogOut, Info, Trash2, Download, Upload, TriangleAlert, Cloud } from 'lucide-react';
+import { Settings, Check, X, LogOut, Info, Trash2, Download, Upload, TriangleAlert } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSolves } from '../contexts/SolvesContext';
@@ -28,25 +28,11 @@ export default function Account() {
 
     // Sync & Local Data Settings State
     const { trimSolves } = useSolves();
-    const [tempSyncOption, setTempSyncOption] = useState<string | null>(null);
     const [localLimitInput, setLocalLimitInput] = useState(settings.localDataSettings?.localLimit || 250);
 
     useEffect(() => {
         setLocalLimitInput(settings.localDataSettings?.localLimit || 250);
     }, [settings.localDataSettings]);
-
-    const handleSyncChange = (option: 'all' | 'session-bests' | 'all-time-bests' | 'local-only') => {
-        setTempSyncOption(option);
-    };
-
-    const saveSyncSettings = () => {
-        if (tempSyncOption && tempSyncOption !== settings.dataBackup) {
-            if (confirm("Changing sync settings may remove data from cloud or local storage depending on the option. Are you sure?")) {
-                updateSettings({ dataBackup: tempSyncOption as any });
-                setTempSyncOption(null);
-            }
-        }
-    };
 
     const saveLocalLimit = () => {
         if (localLimitInput !== settings.localDataSettings.localLimit) {
@@ -144,21 +130,7 @@ export default function Account() {
         </div>
     );
 
-    const RadioOption = ({
-        label,
-        selected,
-        onClick
-    }: { label: string, selected: boolean, onClick: () => void }) => (
-        <div
-            onClick={onClick}
-            className="flex items-center gap-3 cursor-pointer py-1 group"
-        >
-            <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-colors ${selected ? 'border-accent bg-accent' : 'border-text-secondary/50 bg-transparent group-hover:border-accent/50'}`}>
-                <div className={`w-1.5 h-1.5 bg-white rounded-full transition-opacity ${selected ? 'opacity-100' : 'opacity-0'}`} />
-            </div>
-            <span className={`text-sm ${selected ? 'text-text-primary font-medium' : 'text-text-secondary group-hover:text-text-primary'}`}>{label}</span>
-        </div>
-    );
+
 
     return (
         <div className="w-full max-w-3xl flex flex-col items-start text-left p-4 sm:p-0 pb-20">
@@ -316,61 +288,7 @@ export default function Account() {
                 </div>
             )}
 
-            {/* Cloud Sync Settings */}
-            {user && (
-                <div className="w-full mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
-                        <Cloud className="w-5 h-5 text-blue-400" /> Cloud Sync
-                    </h3>
 
-                    <div className="space-y-4 pl-4 border-l border-border/50 ml-2">
-                        <div className="space-y-2">
-                            {['all', 'session-bests', 'all-time-bests', 'local-only'].map((option) => (
-                                <RadioOption
-                                    key={option}
-                                    label={
-                                        option === 'all' ? 'All Solves' :
-                                            option === 'session-bests' ? 'Session Bests (Recommended)' :
-                                                option === 'all-time-bests' ? 'All-Time Bests' : 'Local Only'
-                                    }
-                                    selected={(tempSyncOption || settings.dataBackup) === option}
-                                    onClick={() => handleSyncChange(option as any)}
-                                />
-                            ))}
-                        </div>
-
-                        {tempSyncOption && tempSyncOption !== settings.dataBackup && (
-                            <div className="pt-2 animate-in fade-in">
-                                <button
-                                    onClick={saveSyncSettings}
-                                    className="px-4 py-2 bg-accent text-white rounded-md text-sm font-medium hover:bg-accent/90 shadow-sm"
-                                >
-                                    Save Sync Changes
-                                </button>
-                                <p className="text-xs text-text-secondary mt-1">
-                                    Changing sync settings may affect how your data is stored remotely.
-                                </p>
-                            </div>
-                        )}
-
-                        <div className="pt-4">
-                            <div className="text-sm font-medium text-text-primary mb-2">Daily Solves</div>
-                            <div className="space-y-2">
-                                <RadioOption
-                                    label="Opt-in"
-                                    selected={settings.dailySolves === true}
-                                    onClick={() => updateSettings({ dailySolves: true })}
-                                />
-                                <RadioOption
-                                    label="Opt-out"
-                                    selected={settings.dailySolves === false}
-                                    onClick={() => updateSettings({ dailySolves: false })}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* Device Settings (Vertical List) */}
             <div className="w-full mb-12">

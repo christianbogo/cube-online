@@ -31,7 +31,7 @@ export default function Table<T extends { id: string | number }>({ data, columns
                     {data.map((row) => (
                         <tr key={row.id} className="hover:bg-bg-hover/50 transition-colors">
                             {columns.map((col, colIndex) => (
-                                <td key={colIndex} className="p-3 text-text-primary">
+                                <td key={colIndex} className={`p-3 text-text-primary ${col.className || ''}`}>
                                     {typeof col.accessor === 'function'
                                         ? col.accessor(row)
                                         : (row[col.accessor] as React.ReactNode)}

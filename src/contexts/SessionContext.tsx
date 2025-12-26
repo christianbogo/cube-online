@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { doc, collection, addDoc, updateDoc, increment } from 'firebase/firestore';
+import { doc, collection, addDoc, updateDoc, increment, getDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 
@@ -12,6 +12,9 @@ interface SessionContextType {
     checkSessionStatus: (lastSolveTime: number) => { isNewSessionNeeded: boolean };
     isSessionPromptVisible: boolean;
     setSessionPromptVisible: (visible: boolean) => void;
+    setCurrentSessionId: (id: string | null) => void;
+    viewedSessionId: string | null;
+    setViewedSessionId: (id: string | null) => void;
 }
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
@@ -21,6 +24,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const [currentSessionId, setCurrentSessionId] = useState<string | null>(() => {
         return localStorage.getItem('cutter_current_session_id');
     });
+    const [viewedSessionId, setViewedSessionId] = useState<string | null>(null);
     const [isSessionPromptVisible, setSessionPromptVisible] = useState(false);
 
     useEffect(() => {
@@ -32,37 +36,38 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const startNewSession = async (resume = false) => {
         if (!user) return '';
 
-        // If resume is true, we might just want to keep the current one or find the last one.
-        // For now, "Resume" logic implies we just don't create a new one if we are prompted.
-        // But if we are starting a FRESH session:
         if (!resume) {
-            try {
-                const docRef = await addDoc(collection(db, 'sessions'), {
-                    userId: user.uid,
-                    startedAt: new Date().toISOString(),
-                    lastActiveAt: new Date().toISOString(),
-                    solveCount: 0
-                });
-                setCurrentSessionId(docRef.id);
-                return docRef.id;
-            } catch (e) {
-                console.error("Error creating session", e);
-                // Fallback local ID?
-                const localId = `local_${Date.now()}`;
-                setCurrentSessionId(localId);
-                return localId;
+            // Check if current session is empty (0 solves) and delete it if so
+            if (currentSessionId && !currentSessionId.startsWith('local_')) {
+                try {
+                    const sessionDoc = await getDoc(doc(db, 'sessions', currentSessionId));
+                    if (sessionDoc.exists()) {
+                        if (sessionDoc.data().solveCount === 0) {
+                            await deleteDoc(doc(db, 'sessions', currentSessionId));
+                        }
+                    }
+                } catch (e) {
+                    // Suppress permission errors or missing doc errors during cleanup
+                    // We simply want to ensure we move on visually.
+                    console.warn("Could not delete empty session (likely permission or already deleted):", e);
+                }
             }
+
+            // Don't create new one yet. Set to null.
+            setCurrentSessionId(null);
+            localStorage.removeItem('cutter_current_session_id');
+            return '';
         } else {
-            // Resume means we just keep using the old ID, effectively doing nothing but closing prompt
             return currentSessionId || '';
         }
     };
 
-    const updateSessionActivity = async (incrementCount: boolean = false) => {
-        if (currentSessionId && !currentSessionId.startsWith('local_') && user) {
+    const updateSessionActivity = async (incrementCount: boolean = false, overrideSessionId?: string) => {
+        const targetId = overrideSessionId || currentSessionId;
+        if (targetId && !targetId.startsWith('local_') && user) {
             try {
                 // Update firestore
-                const sessionRef = doc(db, 'sessions', currentSessionId);
+                const sessionRef = doc(db, 'sessions', targetId);
 
                 const updates: any = {
                     lastActiveAt: new Date().toISOString()
@@ -103,7 +108,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             updateSessionActivity,
             checkSessionStatus,
             isSessionPromptVisible,
-            setSessionPromptVisible
+            setSessionPromptVisible,
+            setCurrentSessionId, // Exposed for merge logic
+            viewedSessionId,
+            setViewedSessionId
         }}>
             {children}
         </SessionContext.Provider>

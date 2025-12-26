@@ -3,7 +3,7 @@ import { useSettings } from './SettingsContext';
 import { calculateAverage } from '../utils/calculations';
 import { useAuth } from './AuthContext';
 import { useSession } from './SessionContext';
-import { doc, setDoc, deleteDoc, collection, query, where, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection, query, where, onSnapshot, serverTimestamp, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export interface Solve {
@@ -53,7 +53,7 @@ const SolvesContext = createContext<SolvesContextType | undefined>(undefined);
 export function SolvesProvider({ children }: { children: ReactNode }) {
     const { settings } = useSettings();
     const { user } = useAuth();
-    const { currentSessionId, checkSessionStatus, setSessionPromptVisible, updateSessionActivity } = useSession();
+    const { currentSessionId, checkSessionStatus, setSessionPromptVisible, updateSessionActivity, setCurrentSessionId } = useSession();
 
     const [solves, setSolves] = useState<Solve[]>(() => {
         const stored = localStorage.getItem('cutter-cubing-solves');
@@ -134,10 +134,8 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
                 // Given requirement: "Last 100 solves + Bests" for some modes.
                 // Assuming efficient enough to just write all for now unless restricted.
                 // If mode is 'local-only', do NOT write.
-                if (settings.dataBackup === 'local-only') {
-                    setSyncStatus('idle');
-                    return;
-                }
+                // Syncing all solves by default now (unlimited sync)
+                // if (settings.dataBackup === 'local-only') { setSyncStatus('idle'); return; }
 
                 await setDoc(doc(db, 'solves', solve.id), {
                     ...solve,
@@ -218,10 +216,30 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
     };
 
     const addSolve = async (solve: Solve) => {
+        let activeSessionId = currentSessionId;
+
+        // Lazy Session Creation: if no active session (and user logged in), create one now.
+        if (!activeSessionId && user) {
+            try {
+                const docRef = await addDoc(collection(db, 'sessions'), {
+                    userId: user.uid,
+                    startedAt: new Date().toISOString(),
+                    lastActiveAt: new Date().toISOString(),
+                    solveCount: 0
+                });
+                activeSessionId = docRef.id;
+                setCurrentSessionId(activeSessionId);
+            } catch (e) {
+                console.error("Error creating lazy session", e);
+                activeSessionId = `local_${Date.now()}`;
+                setCurrentSessionId(activeSessionId);
+            }
+        }
+
         const solveWithSession = {
             ...solve,
             userId: user?.uid,
-            sessionId: currentSessionId || undefined
+            sessionId: activeSessionId || undefined
         };
 
         // Check for session gap
@@ -238,8 +256,8 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
         // Unless user clicks "Start Fresh". But that happens async via Toast.
         // For now, increment current. If user starts fresh, this solve remains in old session (correct).
         // If user resumes, count is correct.
-        if (currentSessionId && user) {
-            updateSessionActivity(true);
+        if (activeSessionId && user) {
+            updateSessionActivity(true, activeSessionId);
         }
 
         setSolves(prev => {

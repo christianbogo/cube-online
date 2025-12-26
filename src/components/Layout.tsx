@@ -174,6 +174,11 @@ export default function Layout() {
                     toggleLeftSidebar();
                 }
             }
+            // Navigation Shortcuts
+            if (e.key === 's') navigate('/sessions');
+            if (e.key === 'a') navigate('/account');
+            if (e.key === 'c') navigate('/');
+            if (e.key === 'd') navigate('/daily');
         };
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
