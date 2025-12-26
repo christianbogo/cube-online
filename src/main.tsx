@@ -9,7 +9,7 @@ import { SolvesProvider } from './contexts/SolvesContext'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider defaultTheme="dark" storageKey="cutter-cubing-theme">
+    <ThemeProvider defaultTheme="system" storageKey="cutter-cubing-theme">
       <SettingsProvider>
         <SolvesProvider>
           <App />

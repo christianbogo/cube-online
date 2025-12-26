@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import Topbar from './Topbar';
 import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
 
 export default function Layout() {
+    const navigate = useNavigate();
     const [leftWidth, setLeftWidth] = useState(240);
     const [lastOpenLeftWidth, setLastOpenLeftWidth] = useState(240);
     const [rightWidth, setRightWidth] = useState(240);
@@ -18,7 +19,7 @@ export default function Layout() {
     const COLLAPSED_WIDTH = 64;
     const MIN_EXPANDED_WIDTH = 180;
     const MAX_WIDTH = 500;
-    const RIGHT_COLLAPSED_WIDTH = 50; // A bit narrower for just the chevron?
+    const RIGHT_COLLAPSED_WIDTH = 50;
 
     const isLeftCollapsed = leftWidth < MIN_EXPANDED_WIDTH;
     const isRightCollapsed = rightWidth < MIN_EXPANDED_WIDTH;
@@ -27,10 +28,9 @@ export default function Layout() {
     useEffect(() => {
         const originalWarn = console.warn;
         console.warn = (...args) => {
-            // Check for cubing.js specific warnings or just capture the last one
             const msg = args.map(a => a.toString()).join(' ');
             if (msg.includes('cubing/scramble')) {
-                setConsoleInfo(msg.slice(0, 100)); // Cap length
+                setConsoleInfo(msg.slice(0, 100));
             }
             originalWarn.apply(console, args);
         };
@@ -38,6 +38,17 @@ export default function Layout() {
             console.warn = originalWarn;
         };
     }, []);
+
+    // Global ESC Shortcut
+    useEffect(() => {
+        const handleGlobalKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                navigate('/');
+            }
+        };
+        window.addEventListener('keydown', handleGlobalKeyDown);
+        return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    }, [navigate]);
 
     const toggleLeftSidebar = useCallback(() => {
         if (isLeftCollapsed) {
@@ -129,6 +140,31 @@ export default function Layout() {
         };
     }, [isResizingLeft, isResizingRight, resize, stopResizing]);
 
+    // Global Shortcuts
+    useEffect(() => {
+        const handleGlobalKeyDown = (e: KeyboardEvent) => {
+            // Ignore if input/textarea is focused
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement).isContentEditable) {
+                return;
+            }
+
+            if (e.key === 'Escape') {
+                navigate('/');
+            }
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                toggleRightSidebar();
+            }
+            if (e.key === 'Shift') {
+                if (!e.repeat) {
+                    toggleLeftSidebar();
+                }
+            }
+        };
+        window.addEventListener('keydown', handleGlobalKeyDown);
+        return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    }, [navigate, toggleRightSidebar, toggleLeftSidebar]);
+
     return (
         <div className="h-full flex flex-col bg-bg-primary text-text-primary overflow-hidden">
             <Topbar />
@@ -138,7 +174,7 @@ export default function Layout() {
                 className="flex-1 flex overflow-hidden relative"
             >
                 {/* Left Sidebar */}
-                <div style={{ width: leftWidth }} className="flex-shrink-0 relative flex flex-col border-r border-border backdrop-blur-sm transition-[width] duration-300 ease-in-out will-change-[width]">
+                <div style={{ width: leftWidth }} className="flex-shrink-0 relative flex flex-col border-r border-border backdrop-blur-sm will-change-[width]">
                     <LeftSidebar collapsed={isLeftCollapsed} onToggleCollapse={toggleLeftSidebar} />
                     {/* Drag Handle */}
                     <div
@@ -167,7 +203,7 @@ export default function Layout() {
                 </main>
 
                 {/* Right Sidebar */}
-                <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col border-l border-border backdrop-blur-sm transition-[width] duration-300 ease-in-out will-change-[width]">
+                <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col border-l border-border backdrop-blur-sm will-change-[width]">
                     <div
                         className="absolute top-0 left-[-3px] w-1.5 h-full cursor-col-resize hover:bg-accent/50 z-10 transition-colors delay-75"
                         onMouseDown={startResizingRight}
