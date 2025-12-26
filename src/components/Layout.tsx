@@ -3,7 +3,8 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import Topbar from './Topbar';
 import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
-
+import { useSolves } from '../contexts/SolvesContext';
+import { useSession } from '../contexts/SessionContext';
 export default function Layout() {
     const navigate = useNavigate();
     const location = useLocation();
@@ -206,6 +207,7 @@ export default function Layout() {
                     <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8">
                         <div className="flex gap-2">
                             <span>Online • v0.1.0</span>
+                            <SyncIndicator />
                         </div>
                         {consoleInfo && (
                             <div className="text-[10px] text-yellow-500/70 truncate max-w-xs font-mono ml-auto" title={consoleInfo}>
@@ -229,3 +231,17 @@ export default function Layout() {
         </div>
     );
 }
+
+function SyncIndicator() {
+    const { syncStatus } = useSolves();
+
+    if (syncStatus === 'idle') return null;
+
+    return (
+        <span className={`transition-opacity duration-500 ${syncStatus === 'syncing' ? 'opacity-100' : 'opacity-50'} text-[10px] uppercase tracking-wider font-semibold text-text-secondary/50 flex items-center gap-1`}>
+            {syncStatus === 'syncing' ? 'Syncing...' : syncStatus === 'synced' ? 'Synced' : 'Sync Error'}
+        </span>
+    );
+}
+
+// SessionToast moved to Cube page as per request

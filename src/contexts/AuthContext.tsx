@@ -6,7 +6,7 @@ import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword
 } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, query, collection, where, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../lib/firebase';
 
 interface UserData {
@@ -23,6 +23,7 @@ interface AuthContextType {
     emailSignUp: (email: string, pass: string) => Promise<any>;
     emailSignIn: (email: string, pass: string) => Promise<any>;
     logout: () => Promise<void>;
+    deleteUserAccount?: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -90,10 +91,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const logout = async () => {
         await firebaseSignOut(auth);
+        // Clear local cache
+        localStorage.removeItem('cached_user_profile');
+        setUser(null);
+    };
+
+    const deleteUserAccount = async () => {
+        if (!user || !user.uid) return;
+
+        try {
+            // 1. Delete all user solves
+            const q = query(collection(db, 'solves'), where('userId', '==', user.uid));
+            const snapshot = await getDocs(q);
+            const batch = writeBatch(db);
+            snapshot.docs.forEach((doc) => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+
+            // 2. Delete user profile
+            await deleteDoc(doc(db, 'users', user.uid));
+
+            // 3. Delete Firebase Auth User
+            // Note: This requires re-authentication if recent login is old, 
+            // but for simplicity we assume active session.
+            const currentUser = auth.currentUser;
+            if (currentUser) {
+                await currentUser.delete();
+            }
+        } catch (error) {
+            console.error("Error deleting account", error);
+            throw error;
+        }
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, signInWithGoogle, emailSignUp, emailSignIn, logout }}>
+        <AuthContext.Provider value={{ user, loading, signInWithGoogle, emailSignUp, emailSignIn, logout, deleteUserAccount }}>
             {children}
         </AuthContext.Provider>
     );

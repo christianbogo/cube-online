@@ -4,17 +4,11 @@ import './index.css'
 import App from './App.tsx'
 
 import { ThemeProvider } from './components/ThemeProvider'
-import { SettingsProvider } from './contexts/SettingsContext'
-import { SolvesProvider } from './contexts/SolvesContext'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider defaultTheme="system" storageKey="cutter-cubing-theme">
-      <SettingsProvider>
-        <SolvesProvider>
-          <App />
-        </SolvesProvider>
-      </SettingsProvider>
+      <App />
     </ThemeProvider>
   </StrictMode>,
 )

@@ -1,6 +1,7 @@
-import { Settings, Check, X, LogOut, Info, Trash2, Download, Upload, TriangleAlert } from 'lucide-react';
+import { Settings, Check, X, LogOut, Info, Trash2, Download, Upload, TriangleAlert, Cloud } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useSolves } from '../contexts/SolvesContext';
 import { useState, useEffect, useRef } from 'react';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -24,6 +25,40 @@ export default function Account() {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [authError, setAuthError] = useState('');
     const [isSignUpMode, setIsSignUpMode] = useState(false);
+
+    // Sync & Local Data Settings State
+    const { trimSolves } = useSolves();
+    const [tempSyncOption, setTempSyncOption] = useState<string | null>(null);
+    const [localLimitInput, setLocalLimitInput] = useState(settings.localDataSettings?.localLimit || 250);
+
+    useEffect(() => {
+        setLocalLimitInput(settings.localDataSettings?.localLimit || 250);
+    }, [settings.localDataSettings]);
+
+    const handleSyncChange = (option: 'all' | 'session-bests' | 'all-time-bests' | 'local-only') => {
+        setTempSyncOption(option);
+    };
+
+    const saveSyncSettings = () => {
+        if (tempSyncOption && tempSyncOption !== settings.dataBackup) {
+            if (confirm("Changing sync settings may remove data from cloud or local storage depending on the option. Are you sure?")) {
+                updateSettings({ dataBackup: tempSyncOption as any });
+                setTempSyncOption(null);
+            }
+        }
+    };
+
+    const saveLocalLimit = () => {
+        if (localLimitInput !== settings.localDataSettings.localLimit) {
+            if (confirm(`Saving this limit will permanently delete local solves exceeding ${localLimitInput}. This cannot be undone. Are you sure?`)) {
+                updateSettings({
+                    localDataSettings: { ...settings.localDataSettings, localLimit: localLimitInput }
+                });
+                // Trigger trim immediately
+                trimSolves(localLimitInput);
+            }
+        }
+    };
 
     // Initial load
     useEffect(() => {
@@ -285,32 +320,38 @@ export default function Account() {
             {user && (
                 <div className="w-full mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
-                        Cloud Sync
+                        <Cloud className="w-5 h-5 text-blue-400" /> Cloud Sync
                     </h3>
 
-                    <div className="space-y-4 pl-1">
+                    <div className="space-y-4 pl-4 border-l border-border/50 ml-2">
                         <div className="space-y-2">
-                            <RadioOption
-                                label="All Solves"
-                                selected={settings.dataBackup === 'all'}
-                                onClick={() => updateSettings({ dataBackup: 'all' })}
-                            />
-                            <RadioOption
-                                label="Session Bests (Recommended)"
-                                selected={settings.dataBackup === 'session-bests'}
-                                onClick={() => updateSettings({ dataBackup: 'session-bests' })}
-                            />
-                            <RadioOption
-                                label="All-Time Bests"
-                                selected={settings.dataBackup === 'all-time-bests'}
-                                onClick={() => updateSettings({ dataBackup: 'all-time-bests' })}
-                            />
-                            <RadioOption
-                                label="Local Only"
-                                selected={settings.dataBackup === 'local-only'}
-                                onClick={() => updateSettings({ dataBackup: 'local-only' })}
-                            />
+                            {['all', 'session-bests', 'all-time-bests', 'local-only'].map((option) => (
+                                <RadioOption
+                                    key={option}
+                                    label={
+                                        option === 'all' ? 'All Solves' :
+                                            option === 'session-bests' ? 'Session Bests (Recommended)' :
+                                                option === 'all-time-bests' ? 'All-Time Bests' : 'Local Only'
+                                    }
+                                    selected={(tempSyncOption || settings.dataBackup) === option}
+                                    onClick={() => handleSyncChange(option as any)}
+                                />
+                            ))}
                         </div>
+
+                        {tempSyncOption && tempSyncOption !== settings.dataBackup && (
+                            <div className="pt-2 animate-in fade-in">
+                                <button
+                                    onClick={saveSyncSettings}
+                                    className="px-4 py-2 bg-accent text-white rounded-md text-sm font-medium hover:bg-accent/90 shadow-sm"
+                                >
+                                    Save Sync Changes
+                                </button>
+                                <p className="text-xs text-text-secondary mt-1">
+                                    Changing sync settings may affect how your data is stored remotely.
+                                </p>
+                            </div>
+                        )}
 
                         <div className="pt-4">
                             <div className="text-sm font-medium text-text-primary mb-2">Daily Solves</div>
@@ -334,10 +375,10 @@ export default function Account() {
             {/* Device Settings (Vertical List) */}
             <div className="w-full mb-12">
                 <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
-                    <Settings className="w-5 h-5" /> Device Settings
+                    <Settings className="w-5 h-5 text-zinc-400" /> Device Settings
                 </h3>
 
-                <div className="flex flex-col gap-2 max-w-md w-full">
+                <div className="flex flex-col gap-2 max-w-md w-full pl-4 border-l border-border/50 ml-2">
                     <SettingRow label="Solve Inspection" description="Enable 15s inspection timer before solve.">
                         <input
                             type="checkbox"
@@ -366,6 +407,32 @@ export default function Account() {
                             })}
                         />
                     </SettingRow>
+
+                    {!settings.localDataSettings.saveAll && (
+                        <div className="animate-in fade-in slide-in-from-top-1">
+                            <SettingRow label="Local Storage Limit" description="Max number of solves to keep locally.">
+                                <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1 font-mono text-sm">
+                                        <input
+                                            type="number"
+                                            value={localLimitInput}
+                                            onChange={(e) => setLocalLimitInput(parseInt(e.target.value) || 0)}
+                                            className="bg-transparent border-b border-border text-text-primary w-16 text-right focus:outline-none focus:border-accent"
+                                        />
+                                        <span className="text-text-secondary">solves</span>
+                                    </div>
+                                    {localLimitInput !== settings.localDataSettings.localLimit && (
+                                        <button
+                                            onClick={saveLocalLimit}
+                                            className="ml-2 text-xs bg-accent text-white px-2 py-1 rounded hover:bg-accent/90"
+                                        >
+                                            Save
+                                        </button>
+                                    )}
+                                </div>
+                            </SettingRow>
+                        </div>
+                    )}
 
                     <SettingRow label="Priming Length" description="Seconds to hold spacebar to ready (0.0 - 3.0s).">
                         <div className="flex items-center gap-1 font-mono text-sm">

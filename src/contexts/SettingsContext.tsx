@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 interface LocalDataSettings {
     saveAll: boolean;
     saveLastX: number;
+    localLimit: number;
 }
 
 interface Settings {
@@ -26,8 +27,9 @@ const defaultSettings: Settings = {
     showLiveTimer: false,
     scrambleSize: 1.5,
     localDataSettings: {
-        saveAll: true, // Deprecated in UI but kept for now or repurposed
+        saveAll: true,
         saveLastX: 100,
+        localLimit: 250,
     },
     dataBackup: 'session-bests',
     dailySolves: true,

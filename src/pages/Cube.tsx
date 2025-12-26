@@ -2,7 +2,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { randomScrambleForEvent } from 'cubing/scramble';
 import { useSettings } from '../contexts/SettingsContext';
 import { useSolves, type Solve } from '../contexts/SolvesContext';
-import { Copy, EyeOff, Info, Minus, Plus, ChevronRight, Check } from 'lucide-react';
+import { useSession } from '../contexts/SessionContext';
+import { useAuth } from '../contexts/AuthContext';
+import Toast from '../components/Toast';
+import { Copy, EyeOff, Info, Minus, Plus, ChevronRight, Check, History } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 type TimerState = 'IDLE' | 'INSPECTION' | 'PRIMING' | 'RUNNING' | 'SOLVED';
@@ -10,6 +13,19 @@ type TimerState = 'IDLE' | 'INSPECTION' | 'PRIMING' | 'RUNNING' | 'SOLVED';
 export default function Cube() {
     const { settings, updateSettings } = useSettings();
     const { addSolve, currentScramble, setCurrentScramble } = useSolves();
+    const { startNewSession, currentSessionId } = useSession();
+    const { user } = useAuth();
+    const [autoSessionToastVisible, setAutoSessionToastVisible] = useState(false);
+
+    // Auto-create session and toast logic
+    useEffect(() => {
+        if (user && !currentSessionId) {
+            startNewSession(false).then(() => {
+                setAutoSessionToastVisible(true);
+                setTimeout(() => setAutoSessionToastVisible(false), 3000);
+            });
+        }
+    }, [user, currentSessionId, startNewSession]);
 
     const [scramble, setScramble] = useState<string>(currentScramble || 'Generating scramble...');
     const [timerState, setTimerState] = useState<TimerState>('IDLE');
@@ -296,6 +312,18 @@ export default function Cube() {
                             </button>
                         </div>
 
+                        <button
+                            onClick={async () => {
+                                if (confirm("Start a new session? This will reset the current solve count.")) {
+                                    await startNewSession(false);
+                                }
+                            }}
+                            className="hover:text-accent transition-colors"
+                            title="New Session"
+                        >
+                            <History className="w-5 h-5" />
+                        </button>
+
                         <button onClick={handleCopyScramble} className="hover:text-accent transition-colors" title="Copy Scramble">
                             {isCopied ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
                         </button>
@@ -343,6 +371,46 @@ export default function Cube() {
                     </h1>
                 )}
             </div>
+
+            {/* Session Prompt Toast */}
+            <SessionToast />
+
+            {/* Auto-Created Session Toast */}
+            <Toast
+                visible={autoSessionToastVisible}
+                message="New session started automatically."
+                onClose={() => setAutoSessionToastVisible(false)}
+            />
         </div>
     );
+}
+
+function SessionToast() {
+    const { isSessionPromptVisible, setSessionPromptVisible, startNewSession } = useSession();
+
+    return (
+        <Toast
+            visible={isSessionPromptVisible}
+            message="It's been a while. Start a new session?"
+            onClose={() => setSessionPromptVisible(false)}
+            actions={[
+                {
+                    label: "Resume Previous",
+                    onClick: () => {
+                        startNewSession(true);
+                        setSessionPromptVisible(false);
+                    },
+                    variant: 'secondary'
+                },
+                {
+                    label: "Start Fresh",
+                    onClick: async () => {
+                        await startNewSession(false);
+                        setSessionPromptVisible(false);
+                    },
+                    variant: 'primary'
+                }
+            ]}
+        />
+    )
 }

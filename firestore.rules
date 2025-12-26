@@ -9,11 +9,20 @@ service cloud.firestore {
     // User profiles
     match /users/{userId} {
       allow read, write: if isOwner(userId);
-      
-      // Solves subcollection (for future sync)
-      match /solves/{solveId} {
-        allow read, write: if isOwner(userId);
-      }
+    }
+    
+    // Solves
+    match /solves/{solveId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+    }
+
+    // Sessions
+    match /sessions/{sessionId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
     }
   }
 }

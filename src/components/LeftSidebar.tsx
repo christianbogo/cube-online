@@ -1,4 +1,4 @@
-import { Box, BarChart2, Radio, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Calendar, Users, Star, Info } from 'lucide-react';
+import { Box, BarChart2, Radio, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Calendar, Users, Star, Info, History } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { NavLink } from 'react-router-dom';
 
@@ -10,6 +10,7 @@ interface LeftSidebarProps {
 const navItems = [
     { name: 'Cube', icon: Box, path: '/' },
     { name: 'Daily', icon: Calendar, path: '/daily' },
+    { name: 'Sessions', icon: History, path: '/sessions' },
     { name: 'Live', icon: Radio, path: '/live' },
     { name: 'Shared', icon: Users, path: '/shared' },
     { name: 'Featured', icon: Star, path: '/featured' },
