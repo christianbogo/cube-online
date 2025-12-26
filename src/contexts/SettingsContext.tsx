@@ -11,6 +11,8 @@ interface Settings {
     showLiveTimer: boolean;
     scrambleSize: number; // in rem
     localDataSettings: LocalDataSettings;
+    dataBackup: 'all' | 'session-bests' | 'all-time-bests' | 'local-only';
+    dailySolves: boolean;
 }
 
 interface SettingsContextType {
@@ -24,9 +26,11 @@ const defaultSettings: Settings = {
     showLiveTimer: false,
     scrambleSize: 1.5,
     localDataSettings: {
-        saveAll: true,
+        saveAll: true, // Deprecated in UI but kept for now or repurposed
         saveLastX: 100,
     },
+    dataBackup: 'session-bests',
+    dailySolves: true,
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);

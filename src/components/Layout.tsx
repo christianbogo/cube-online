@@ -1,15 +1,28 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import Topbar from './Topbar';
 import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
 
 export default function Layout() {
     const navigate = useNavigate();
-    const [leftWidth, setLeftWidth] = useState(240);
-    const [lastOpenLeftWidth, setLastOpenLeftWidth] = useState(240);
-    const [rightWidth, setRightWidth] = useState(240);
-    const [lastOpenRightWidth, setLastOpenRightWidth] = useState(240); // New state
+    const location = useLocation();
+    // Persistence Helpers
+    const getStoredWidth = (key: string, defaultWidth: number) => {
+        const stored = localStorage.getItem(key);
+        return stored ? parseInt(stored, 10) : defaultWidth;
+    };
+
+    const [leftWidth, setLeftWidth] = useState(() => getStoredWidth('sidebar_left_width', 240));
+    const [lastOpenLeftWidth, setLastOpenLeftWidth] = useState(() => getStoredWidth('sidebar_left_last_width', 240));
+    const [rightWidth, setRightWidth] = useState(() => getStoredWidth('sidebar_right_width', 240));
+    const [lastOpenRightWidth, setLastOpenRightWidth] = useState(() => getStoredWidth('sidebar_right_last_width', 240));
+
+    // Persistence Effects
+    useEffect(() => localStorage.setItem('sidebar_left_width', leftWidth.toString()), [leftWidth]);
+    useEffect(() => localStorage.setItem('sidebar_left_last_width', lastOpenLeftWidth.toString()), [lastOpenLeftWidth]);
+    useEffect(() => localStorage.setItem('sidebar_right_width', rightWidth.toString()), [rightWidth]);
+    useEffect(() => localStorage.setItem('sidebar_right_last_width', lastOpenRightWidth.toString()), [lastOpenRightWidth]);
     const [isResizingLeft, setIsResizingLeft] = useState(false);
     const [isResizingRight, setIsResizingRight] = useState(false);
     const [consoleInfo, setConsoleInfo] = useState<string | null>(null); // For footer
@@ -202,14 +215,16 @@ export default function Layout() {
                     </footer>
                 </main>
 
-                {/* Right Sidebar */}
-                <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col border-l border-border backdrop-blur-sm will-change-[width]">
-                    <div
-                        className="absolute top-0 left-[-3px] w-1.5 h-full cursor-col-resize hover:bg-accent/50 z-10 transition-colors delay-75"
-                        onMouseDown={startResizingRight}
-                    />
-                    <RightSidebar collapsed={isRightCollapsed} onToggleCollapse={toggleRightSidebar} />
-                </div>
+                {/* Right Sidebar - Hidden on Account Page */}
+                {location.pathname !== '/account' && (
+                    <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col border-l border-border backdrop-blur-sm will-change-[width]">
+                        <div
+                            className="absolute top-0 left-[-3px] w-1.5 h-full cursor-col-resize hover:bg-accent/50 z-10 transition-colors delay-75"
+                            onMouseDown={startResizingRight}
+                        />
+                        <RightSidebar collapsed={isRightCollapsed} onToggleCollapse={toggleRightSidebar} />
+                    </div>
+                )}
             </div>
         </div>
     );

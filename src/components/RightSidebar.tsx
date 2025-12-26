@@ -12,7 +12,13 @@ type View = 'list' | 'stats';
 export default function RightSidebar({ onToggleCollapse, collapsed }: RightSidebarProps) {
     const { solves, stats, updateSolve, deleteSolve, clearSolves } = useSolves();
     const [expandedSolveId, setExpandedSolveId] = useState<string | null>(null);
-    const [view, setView] = useState<View>('list'); // 'list' = Local Solves, 'stats' = Statistics
+    const [view, setView] = useState<View>(() => {
+        return (localStorage.getItem('cutter-cubing-sidebar-view') as View) || 'list';
+    });
+
+    useEffect(() => {
+        localStorage.setItem('cutter-cubing-sidebar-view', view);
+    }, [view]);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -252,7 +258,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
 
             <div className="flex-1 overflow-y-auto custom-scrollbar p-2 relative">
                 {view === 'stats' && (
-                    <div className="flex flex-col gap-4 p-2 mb-4">
+                    <div className="flex flex-col gap-2 p-2 mb-2">
                         {/* Stats Grid */}
                         <div className="grid grid-cols-3 gap-2 text-center text-xs">
                             <div className="col-span-1 font-semibold text-text-secondary text-left pl-1"></div>
@@ -276,7 +282,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                             <div className="font-mono text-text-primary">{formatStat(stats.best.ao100)}</div>
                         </div>
 
-                        <div className="border-t border-border/50 my-2" />
+                        <div className="border-t border-border/50 my-1" />
 
                     </div>
                 )}
@@ -285,16 +291,16 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                 <SolvesList />
             </div>
 
-            {/* Footer: Clear Buttons & Collapse Toggle */}
-            <div className="bg-bg-secondary border-t border-border sticky bottom-0 z-10 flex flex-col">
+            {/* Footer: Clear Buttons & Collapse Toggle - Matches LeftSidebar Style */}
+            <div className="p-2 border-t border-border flex flex-col gap-2 bg-bg-secondary">
                 {/* Clear Buttons */}
-                <div className="py-2 flex gap-4 justify-center border-b border-border/50">
+                <div className="flex items-center gap-2">
                     <button
                         onClick={() => {
                             if (confirm('Clear all non-best solves from local history?')) clearSolves(true);
                         }}
-                        className="text-[10px] text-text-secondary/40 hover:text-text-secondary transition-colors"
-                        title="Clears all solves except those included in your best Single, Ao5, Ao12, and Ao100."
+                        className="flex-1 p-2 rounded-md bg-bg-hover hover:bg-bg-primary text-text-secondary hover:text-text-primary transition-colors text-xs font-medium border border-border/50 shadow-sm"
+                        title="Clear Safe (Keeps Bests)"
                     >
                         Clear Safe
                     </button>
@@ -302,7 +308,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                         onClick={() => {
                             if (confirm('PERMANENTLY clear ALL local solves? This cannot be undone.')) clearSolves(false);
                         }}
-                        className="text-[10px] text-red-500/40 hover:text-red-500 transition-colors"
+                        className="flex-1 p-2 rounded-md bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-600 transition-colors text-xs font-medium border border-red-500/20"
                         title="Clear All Solves"
                     >
                         Clear All
@@ -311,11 +317,13 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
 
                 {/* Collapse Toggle */}
                 {onToggleCollapse && (
-                    <div className="p-2 flex justify-start">
-                        <button onClick={onToggleCollapse} className="p-2 hover:bg-bg-primary rounded-md text-text-secondary hover:text-text-primary transition-colors">
-                            {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                        </button>
-                    </div>
+                    <button
+                        onClick={onToggleCollapse}
+                        className="w-full flex items-center justify-center p-2 rounded-md hover:bg-bg-hover transition-colors text-text-secondary hover:text-text-primary"
+                        title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+                    >
+                        {collapsed ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+                    </button>
                 )}
             </div>
         </aside>

@@ -6,7 +6,7 @@ import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../lib/firebase';
 
 interface UserData {
@@ -28,36 +28,45 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<UserData | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [user, setUser] = useState<UserData | null>(() => {
+        const cached = localStorage.getItem('cached_user_profile');
+        return cached ? JSON.parse(cached) : null;
+    });
+    const [loading, setLoading] = useState(!user);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
             if (firebaseUser) {
-                // Fetch extra user data from Firestore
+                // Real-time listener for user data
                 const userDocRef = doc(db, 'users', firebaseUser.uid);
-                const userDoc = await getDoc(userDocRef);
+                const unsubscribeDoc = onSnapshot(userDocRef, (docSnap) => {
+                    let userData: UserData;
+                    if (docSnap.exists()) {
+                        userData = {
+                            uid: firebaseUser.uid,
+                            email: firebaseUser.email,
+                            ...docSnap.data() as { username: string; color: string }
+                        };
+                    } else {
+                        userData = {
+                            uid: firebaseUser.uid,
+                            email: firebaseUser.email,
+                            username: firebaseUser.displayName || 'CubingUser',
+                            color: '#3b82f6'
+                        };
+                    }
+                    setUser(userData);
+                    localStorage.setItem('cached_user_profile', JSON.stringify(userData));
+                    setLoading(false);
+                });
 
-                if (userDoc.exists()) {
-                    setUser({
-                        uid: firebaseUser.uid,
-                        email: firebaseUser.email,
-                        ...userDoc.data() as { username: string; color: string }
-                    });
-                } else {
-                    // Start of a flow where we might need to create the doc
-                    // For now, let's set a partial user or handle in UI.
-                    setUser({
-                        uid: firebaseUser.uid,
-                        email: firebaseUser.email,
-                        username: firebaseUser.displayName || 'CubingUser',
-                        color: '#3b82f6' // Default Blue
-                    });
-                }
+                // Cleanup subscription when auth state changes or component unmounts
+                return () => unsubscribeDoc();
             } else {
                 setUser(null);
+                localStorage.removeItem('cached_user_profile');
+                setLoading(false);
             }
-            setLoading(false);
         });
 
         return () => unsubscribe();
