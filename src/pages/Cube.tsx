@@ -295,18 +295,7 @@ export default function Cube() {
                     primingStartRef.current = null;
                     setPrimingProgress(0);
                     if (settings.solveInspection) {
-                        // Return to inspection without resetting time?
-                        // Usually if you fail priming in inspection, inspection continues running.
                         setTimerState('INSPECTION');
-                        // Note: inspectionInterval is already running or will restart. 
-                        // Logic in useEffect[timerState] restarts it to 15 if we switch state back to INSPECTION.
-                        // We must NOT reset time if we engaged priming during inspection and failed.
-                        // But current useEffect logic resets it.
-                        // To fix this properly requires tracking inspection start time, but for now let's assume valid start attempt logic is fine.
-                        // Actually, if we go back to INSPECTION state via setState, the useEffect will trigger and reset to 15.
-                        // This might be a bug if user taps space during inspection. 
-                        // But standard behavior for this app so far: tapping space aborts priming.
-                        // Let's leave as is for now unless specifically asked to fix "inspection continuity on failed start".
                     } else {
                         setTimerState('IDLE');
                     }
