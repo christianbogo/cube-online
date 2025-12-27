@@ -19,12 +19,24 @@ export default function Cube() {
     const { confirm: confirmAction } = useConfirm();
     const [autoSessionToastVisible, setAutoSessionToastVisible] = useState(false);
 
+    // Loot Stats State
+    const [lootModifier, setLootModifier] = useState<number>(0);
+
     // Auto-create session and toast logic
     useEffect(() => {
         if (user && !currentSessionId) {
             startNewSession(false).then(() => {
                 setAutoSessionToastVisible(true);
                 setTimeout(() => setAutoSessionToastVisible(false), 3000);
+            });
+        }
+
+        // Fetch loot stats
+        if (user) {
+            import('../utils/dailyScramble').then(({ getUserScrambleStats }) => {
+                getUserScrambleStats(user.uid).then(stats => {
+                    if (stats) setLootModifier(stats.loot_chance_modifier);
+                });
             });
         }
     }, [user, currentSessionId, startNewSession]);
@@ -44,10 +56,32 @@ export default function Cube() {
     const prevTimerStateRef = useRef<TimerState>('IDLE');
 
     const inspectionStartTimeRef = useRef<number | null>(null);
+    const inspectionUsedRef = useRef<number>(0); // Store exact inspection time used (ms)
+
+    const [specialType, setSpecialType] = useState<'normal' | 'y' | 'm' | 'w' | 'd' | 'h'>('normal');
+    const [specialId, setSpecialId] = useState<string | null>(null);
 
     // Fetch new scramble
     const generateNewScramble = useCallback(async () => {
         try {
+            // Check for special scramble first if user is logged in
+            if (user) {
+                //Dynamic import to avoid circular dep issues early on if any
+                const { getDailyScramble } = await import('../utils/dailyScramble');
+                const special = await getDailyScramble(user.uid);
+
+                if (special.type !== 'normal' && special.scramble) {
+                    setScramble(special.scramble);
+                    setCurrentScramble(special.scramble);
+                    setSpecialType(special.type);
+                    setSpecialId(special.id || null);
+                    return;
+                }
+            }
+
+            // Normal Flow
+            setSpecialType('normal');
+            setSpecialId(null);
             // Using 333 for now as requested default, can expand later
             const s = await randomScrambleForEvent('333');
             const scrambleStr = s.toString();
@@ -58,8 +92,10 @@ export default function Cube() {
             const fallback = "R U R' U'";
             setScramble(fallback);
             setCurrentScramble(fallback);
+            setSpecialType('normal');
+            setSpecialId(null);
         }
-    }, [setCurrentScramble]);
+    }, [setCurrentScramble, user]);
 
     useEffect(() => {
         if (!currentScramble) {
@@ -98,6 +134,10 @@ export default function Cube() {
         // This prevents the timer from "pausing" when holding spacebar.
         const shouldRunInspection = timerState === 'INSPECTION' ||
             (timerState === 'PRIMING' && prevTimerStateRef.current === 'INSPECTION');
+
+        // We need to track *exact* inspection elapsed time for the record
+        // The display interval (below) is for UI.
+        // We can capture the exact elapsed time when spacing (transition to PRIMING).
 
         if (shouldRunInspection) {
             // Use short interval to update display without drift
@@ -160,11 +200,18 @@ export default function Cube() {
             scramble: scramble,
             date: new Date().toISOString(),
             penalty: 'none', // Manual penalty starts as none
-            inspectionTime: 15 - inspectionTime, // Store amount of inspection used (approx seconds)
+            inspectionTime: inspectionUsedRef.current || (15 - inspectionTime), // Use precise ref, fallback to state
+            daily: specialType !== 'normal' ? specialId : null,
             inspectionPenalty: finalInspectionPenalty
         });
+        if (specialType !== 'normal' && user && specialId) {
+            // Dynamic import
+            import('../utils/dailyScramble').then(({ markScrambleComplete }) => {
+                markScrambleComplete(user.uid, specialType, specialId);
+            });
+        }
         generateNewScramble();
-    }, [time, scramble, addSolve, generateNewScramble, inspectionTime]);
+    }, [time, scramble, addSolve, generateNewScramble, inspectionTime, specialType, user, specialId]);
 
     const handleKeyDown = useCallback((e: KeyboardEvent) => {
         if (e.repeat) return;
@@ -187,6 +234,11 @@ export default function Cube() {
             } else if (timerState === 'INSPECTION') {
                 // primingStart logic only, penalty calculated on release
                 initialPenaltyRef.current = 'none';
+
+                if (inspectionStartTimeRef.current) {
+                    const elapsed = Date.now() - inspectionStartTimeRef.current;
+                    inspectionUsedRef.current = elapsed;
+                }
 
                 prevTimerStateRef.current = timerState;
                 primingStartRef.current = Date.now();
@@ -308,6 +360,24 @@ export default function Cube() {
             {scrambleVisible ? (
                 <>
                     <div className="flex items-center gap-6 mb-4 text-text-secondary transition-opacity hover:text-text-primary">
+                        {/* SPECIAL ICON INDICATOR */}
+                        {specialType !== 'normal' && (
+                            <div className="flex items-center justify-center animate-in zoom-in spin-in-12 duration-500">
+                                <div
+                                    className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold capitalize text-white shadow-lg
+                                    ${specialType === 'h' ? 'bg-gray-500' : ''}
+                                    ${specialType === 'd' ? 'bg-green-500' : ''}
+                                    ${specialType === 'w' ? 'bg-blue-500' : ''}
+                                    ${specialType === 'm' ? 'bg-purple-500' : ''}
+                                    ${specialType === 'y' ? 'bg-yellow-500 text-black' : ''}
+                                    `}
+                                    title={`Special Scramble: ${specialType === 'h' ? 'Hourly' : specialType === 'd' ? 'Daily' : specialType === 'w' ? 'Weekly' : specialType === 'm' ? 'Monthly' : 'Yearly'}`}
+                                >
+                                    {specialType.toUpperCase()}
+                                </div>
+                            </div>
+                        )}
+
                         <Link to="/about" className="hover:text-accent transition-colors" title="Scramble Info">
                             <Info className="w-5 h-5" />
                         </Link>
@@ -347,7 +417,14 @@ export default function Cube() {
                         </button>
                     </div>
 
-                    <div className="mb-10 text-center max-w-2xl min-h-[4rem] flex items-center justify-center">
+                    <div className="mb-10 text-center max-w-2xl min-h-[4rem] flex flex-col items-center justify-center">
+                        {/* Loot Chance Display */}
+                        {user && (
+                            <div className="text-center text-xs text-text-secondary mb-2 animate-in fade-in slide-in-from-top-2 duration-500">
+                                Loot Chance: <span className="text-accent font-medium">{((0.60 + lootModifier) * 100).toFixed(0)}%</span>
+                                {lootModifier > 0 && <span className="ml-1 text-green-500 font-bold">(+{(lootModifier * 100).toFixed(0)}%)</span>}
+                            </div>
+                        )}
                         <p className="font-mono text-text-secondary leading-relaxed text-center transition-all" style={{ fontSize: `${settings.scrambleSize}rem` }}>
                             {scramble}
                         </p>

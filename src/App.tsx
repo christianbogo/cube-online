@@ -25,6 +25,7 @@ function App() {
                     <Route index element={<Cube />} />
                     <Route path="daily" element={<Daily />} />
                     <Route path="data" element={<Data />} />
+                    <Route path="data/:type/:id" element={<Data />} />
                     <Route path="sessions" element={<Sessions />} />
                     <Route path="about" element={<About />} />
                     <Route path="account" element={<Account />} />

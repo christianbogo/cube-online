@@ -28,8 +28,8 @@ export default function Table<T extends { id: string | number }>({ data, columns
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                    {data.map((row) => (
-                        <tr key={row.id} className="hover:bg-bg-hover/50 transition-colors">
+                    {data.map((row, index) => (
+                        <tr key={row.id || index} className="hover:bg-bg-hover/50 transition-colors">
                             {columns.map((col, colIndex) => (
                                 <td key={colIndex} className={`p-3 text-text-primary ${col.className || ''}`}>
                                     {typeof col.accessor === 'function'

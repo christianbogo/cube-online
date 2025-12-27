@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useMemo, type ReactNode } from 'react';
 import { useSettings } from './SettingsContext';
-import { calculateAverage } from '../utils/calculations';
+import { calculateAverage, calculateBestAverage } from '../utils/calculations';
 import { useAuth } from './AuthContext';
 import { useSession } from './SessionContext';
 import { doc, setDoc, deleteDoc, collection, query, where, onSnapshot, serverTimestamp, addDoc } from 'firebase/firestore';
@@ -16,6 +16,7 @@ export interface Solve {
     penalty: 'none' | '+2' | 'DNF';
     inspectionTime?: number;
     inspectionPenalty?: 'none' | '+2' | 'DNF';
+    daily?: string | null; // ID of the daily scramble if applicable
 }
 
 interface Stats {
@@ -98,6 +99,7 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
                         penalty: data.penalty,
                         inspectionTime: data.inspectionTime,
                         inspectionPenalty: data.inspectionPenalty,
+                        daily: data.daily,
                         sessionId: data.sessionId,
                         userId: data.userId
                     };
@@ -169,21 +171,17 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
             ao100: calculateAverage(solves, 100),
         };
 
+        // For "Best" stats, we strictly check cloud/official solves if user is signed in.
+        // This excludes guest/local solves.
+        const bestSolves = user ? solves.filter(s => s.userId === user.uid) : solves;
+
         const getBestAverage = (size: number) => {
-            let best: number | null = null;
-            for (let i = 0; i <= solves.length - size; i++) {
-                const window = solves.slice(i, i + size);
-                const avg = calculateAverage(window, size);
-                if (typeof avg === 'number') {
-                    if (best === null || avg < best) {
-                        best = avg;
-                    }
-                }
-            }
-            return best;
+            return calculateBestAverage(bestSolves, size);
         };
 
-        const validSingles = solves
+        // Note: calculateBestSingle is also available in utils/calculations now, or we can use local logic.
+        // The local logic below for single needs to be updated to use bestSolves.
+        const validSingles = bestSolves
             .map(s => {
                 if (s.penalty === 'DNF' || s.inspectionPenalty === 'DNF') return Infinity;
                 let t = s.time;
@@ -204,7 +202,7 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
                 ao100: getBestAverage(100),
             }
         };
-    }, [solves]);
+    }, [solves, user]);
 
     const trimSolves = (limit: number) => {
         setSolves(prev => {
