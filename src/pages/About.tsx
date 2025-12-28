@@ -1,4 +1,4 @@
-import { Info, Heart, Code } from 'lucide-react';
+import { Info, Heart } from 'lucide-react';
 
 export default function About() {
     return (
@@ -32,33 +32,7 @@ export default function About() {
                 </p>
             </section>
 
-            <section className="w-full mb-12">
-                <h3 className="text-xl font-medium text-text-primary mb-4 flex items-center gap-2">
-                    <Code className="w-5 h-5 text-blue-500" /> Open Source
-                </h3>
-                <p className="text-text-secondary mb-4 leading-7">
-                    We believe in transparency and collaboration. While the core platform is managed by our team,
-                    we welcome feedback and suggestions from the community.
-                </p>
-                <p className="text-text-secondary">
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-                    Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-                </p>
-            </section>
 
-            {/* Verification of long scrolling */}
-            <section className="w-full mb-12 text-zinc-500 dark:text-zinc-600 text-sm">
-                <h4 className="font-semibold mb-2 uppercase tracking-wider">Terms of Service</h4>
-                <p className="mb-2">
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur eget leo at velit imperdiet varius.
-                    In eu ipsum vitae velit congue iaculis vitae at risus. Nullam tortor nunc, bibendum vitae semper a,
-                    volutpat eget massa.
-                </p>
-                <p>
-                    Donec dapibus odio et lacus ornare, sit amet rhoncus velit sagittis.
-                    Phasellus vel turpis nunc. Integer at faucibus velit.
-                </p>
-            </section>
         </div>
     );
 }

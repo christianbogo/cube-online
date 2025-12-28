@@ -41,41 +41,45 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
         <nav className="h-full bg-bg-secondary flex flex-col select-none w-full transition-colors duration-200">
             {/* Navigation Items */}
             <ul className="flex flex-col gap-1 px-2 pt-2 flex-1">
-                {navItems.map((item) => (
-                    <li key={item.name}>
-                        <NavLink
-                            to={!user && ['Daily', 'Sessions', 'Live', 'Data'].includes(item.name) ? '#' : item.path}
-                            onClick={(e) => {
-                                if (!user && ['Daily', 'Sessions', 'Live', 'Data'].includes(item.name)) {
-                                    e.preventDefault();
-                                    return;
-                                }
-                                handleNavClick(e, item.path);
-                            }}
-                            className={({ isActive }) => `
+                {navItems.map((item) => {
+                    const isItemLocked = (item.name === 'Live') || (!user && ['Daily', 'Sessions', 'Data'].includes(item.name));
+
+                    return (
+                        <li key={item.name}>
+                            <NavLink
+                                to={isItemLocked ? '#' : item.path}
+                                onClick={(e) => {
+                                    if (isItemLocked) {
+                                        e.preventDefault();
+                                        return;
+                                    }
+                                    handleNavClick(e, item.path);
+                                }}
+                                className={({ isActive }) => `
                                 w-full flex items-center gap-3 p-2 rounded-md transition-colors text-left
-                                ${(isActive && !['Daily', 'Sessions', 'Live', 'Data'].includes(item.name)) || (isActive && user)
-                                    ? 'bg-accent/10 text-accent'
-                                    : (!user && ['Daily', 'Sessions', 'Live', 'Data'].includes(item.name))
-                                        ? 'opacity-30 cursor-not-allowed text-text-secondary'
-                                        : 'hover:bg-bg-hover text-text-secondary hover:text-text-primary'
-                                }
+                                ${(isActive && !isItemLocked)
+                                        ? 'bg-accent/10 text-accent'
+                                        : isItemLocked
+                                            ? 'opacity-30 cursor-not-allowed text-text-secondary'
+                                            : 'hover:bg-bg-hover text-text-secondary hover:text-text-primary'
+                                    }
                                 ${collapsed ? 'justify-center' : ''}
                             `}
-                        >
-                            {({ isActive }) => (
-                                <>
-                                    <item.icon className={`w-5 h-5 ${(isActive && user) || (isActive && !['Daily', 'Sessions', 'Live', 'Data'].includes(item.name)) ? 'text-accent' : 'text-text-secondary'}`} />
-                                    {!collapsed && (
-                                        <span className={`text-sm font-medium ${(isActive && user) || (isActive && !['Daily', 'Sessions', 'Live', 'Data'].includes(item.name)) ? 'text-accent' : 'text-text-primary'}`}>
-                                            {item.name}
-                                        </span>
-                                    )}
-                                </>
-                            )}
-                        </NavLink>
-                    </li>
-                ))}
+                            >
+                                {({ isActive }) => (
+                                    <>
+                                        <item.icon className={`w-5 h-5 ${(isActive && !isItemLocked) ? 'text-accent' : 'text-text-secondary'}`} />
+                                        {!collapsed && (
+                                            <span className={`text-sm font-medium ${(isActive && !isItemLocked) ? 'text-accent' : 'text-text-primary'}`}>
+                                                {item.name}
+                                            </span>
+                                        )}
+                                    </>
+                                )}
+                            </NavLink>
+                        </li>
+                    )
+                })}
             </ul>
 
             {/* Bottom Actions */}

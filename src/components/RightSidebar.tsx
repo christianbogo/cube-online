@@ -49,16 +49,18 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
     const [statsMode, setStatsMode] = useState<StatsMode>('session');
 
     const currentSessionSolves = useMemo(() => {
+        if (isPrivateMode) return displaySolves;
         if (!currentSessionId) return [];
         return displaySolves.filter(s => s.sessionId === currentSessionId);
-    }, [displaySolves, currentSessionId]);
+    }, [displaySolves, currentSessionId, isPrivateMode]);
 
     const stats = useMemo(() => {
         const activeSolves = currentSessionSolves;
-        const totalSolves = displaySolves; // For "Best"
+        const totalSolves = displaySolves; // For "All Time Best"
 
         const cs = (size: number) => calculateAverage(activeSolves, size);
-        const bs = (size: number) => calculateBestAverage(totalSolves, size);
+        const cbs = (size: number) => calculateBestAverage(activeSolves, size); // Session Best
+        const bs = (size: number) => calculateBestAverage(totalSolves, size); // Global Best
 
         return {
             current: {
@@ -68,7 +70,14 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                 ao100: cs(100),
                 ao1000: totalSolves.length >= 1000 ? cs(1000) : null
             },
-            best: {
+            sessionBest: {
+                single: calculateBestSingle(activeSolves),
+                ao5: cbs(5),
+                ao12: cbs(12),
+                ao100: cbs(100),
+                ao1000: activeSolves.length >= 1000 ? cbs(1000) : null
+            },
+            allTimeBest: {
                 single: calculateBestSingle(totalSolves),
                 ao5: bs(5),
                 ao12: bs(12),
@@ -104,21 +113,59 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
     const copyScramble = (scramble: string, e: React.MouseEvent) => {
         e.stopPropagation();
         navigator.clipboard.writeText(scramble);
+        // Visual feedback handled in SolveItem component state if needed, 
+        // OR we can use a Toast? User asked for visual feedback.
+        // Let's pass a success callback or handle it in SolveItem.
+        // Actually copyScramble is passed to SolveItem. 
+        // I'll update SolveItem to handle the UI state.
     };
 
     if (collapsed) {
         return (
-            <div className="h-full flex flex-col items-center py-4 bg-bg-secondary border-l border-border transition-all duration-300 w-[50px]">
-                <button
-                    onClick={onToggleCollapse}
-                    className="mt-auto w-full py-4 text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors flex justify-center"
-                    title="Toggle Sidebar (])"
-                >
-                    <ChevronLeft className="w-5 h-5" />
-                </button>
-            </div>
+            <aside className="h-full bg-bg-secondary w-[50px] flex flex-col border-l border-border transition-all duration-300">
+                <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col items-center py-4 gap-1">
+                    {/* Stack of squares for current session */}
+                    {currentSessionSolves.map(solve => {
+                        let bgClass = "bg-text-secondary/20";
+                        if (solve.daily) {
+                            if (solve.daily.includes('daily')) bgClass = "bg-green-500";
+                            else if (solve.daily.includes('weekly')) bgClass = "bg-blue-500";
+                            else if (solve.daily.includes('monthly')) bgClass = "bg-purple-500";
+                            else if (solve.daily.includes('project_2025')) bgClass = "bg-yellow-500";
+                            else if (solve.daily.includes('hour')) bgClass = "bg-zinc-500";
+                        }
+                        return (
+                            <div key={solve.id} className={`w-3 h-1.5 rounded-[1px] ${bgClass}`} title={formatTime(solve.time)} />
+                        );
+                    })}
+                </div>
+
+                <div className="p-2 border-t border-border flex flex-col gap-2 items-center">
+                    {/* Private Mode Toggle (Icon Only) */}
+                    <button
+                        onClick={togglePrivateMode}
+                        onFocus={(e) => e.target.blur()}
+                        className={`w-full flex items-center justify-center p-1 rounded-md transition-colors
+                            ${isPrivateMode ? 'text-accent bg-bg-tertiary shadow-inner' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
+                        title={isPrivateMode ? "Exit Private Mode" : "Enter Private Mode"}
+                    >
+                        <EyeOff className={`w-5 h-5 ${isPrivateMode ? 'animate-pulse' : ''}`} />
+                    </button>
+
+                    <button
+                        onClick={onToggleCollapse}
+                        className="w-full flex items-center justify-center p-2 rounded-md hover:bg-bg-hover transition-colors text-text-secondary hover:text-text-primary"
+                        title="Expand Sidebar ([)"
+                    >
+                        <ChevronLeft className="w-5 h-5" />
+                    </button>
+                </div>
+            </aside>
         );
     }
+
+    // Prepare stats for display
+    const bestStats = statsMode === 'session' ? stats.sessionBest : stats.allTimeBest;
 
     return (
         <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-text-secondary text-sm overflow-hidden min-w-0 border-l border-border font-sans relative">
@@ -126,23 +173,23 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
             {/* Header Area (Stats) */}
             <div className="flex flex-col border-b border-border bg-bg-secondary sticky top-0 z-10">
                 {/* Stats Table */}
-                <div className="grid grid-cols-3 gap-y-2 gap-x-2 text-center text-xs p-4">
+                <div className="grid grid-cols-3 gap-y-2 gap-x-2 text-center text-xs p-4 items-center">
                     <div className="col-span-1"></div>
-                    <div className="col-span-1 font-semibold text-text-secondary border-b border-transparent pb-1">Current</div>
+                    <div className="col-span-1 font-semibold text-text-secondary border-b border-transparent">Current</div>
 
                     {/* Toggle Header */}
                     <div
-                        className="col-span-1 font-semibold text-text-primary border border-border/50 pb-1 cursor-pointer hover:bg-white/5 transition-colors select-none rounded flex items-center justify-center gap-1"
+                        className="col-span-1 font-semibold text-text-primary border border-border/50 pb-1 pt-1 cursor-pointer hover:bg-white/5 transition-colors select-none rounded flex items-center justify-center gap-1"
                         onClick={() => setStatsMode(prev => prev === 'best' ? 'session' : 'best')}
                     >
                         {statsMode === 'best' ? 'Best' : 'Session'}
                     </div>
 
-                    <StatItem label="Single" current={stats.current.single} best={stats.best.single} show={true} statsMode={statsMode} />
-                    <StatItem label="mo3" current={null} best={null} show={false} statsMode={statsMode} />
-                    <StatItem label="ao5" current={stats.current.ao5} best={stats.best.ao5} show={true} statsMode={statsMode} />
-                    <StatItem label="ao12" current={stats.current.ao12} best={stats.best.ao12} show={true} statsMode={statsMode} />
-                    <StatItem label="ao100" current={stats.current.ao100} best={stats.best.ao100} show={true} statsMode={statsMode} />
+                    <StatItem label="Single" current={stats.current.single} best={bestStats.single} show={true} />
+                    <StatItem label="mo3" current={null} best={null} show={false} />
+                    <StatItem label="ao5" current={stats.current.ao5} best={bestStats.ao5} show={true} />
+                    <StatItem label="ao12" current={stats.current.ao12} best={bestStats.ao12} show={true} />
+                    <StatItem label="ao100" current={stats.current.ao100} best={bestStats.ao100} show={true} />
                 </div>
             </div>
 
@@ -215,11 +262,12 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
             </div>
 
             {/* Footer */}
-            <div className="border-t border-border bg-bg-secondary flex flex-col">
+            <div className="p-2 border-t border-border flex flex-col gap-2">
                 {/* Private Mode Toggle (Ghost) */}
                 <button
                     onClick={togglePrivateMode}
-                    className={`w-full flex items-center justify-center gap-2 py-3 px-4 text-xs font-medium transition-colors border-b border-border/10
+                    onFocus={(e) => e.target.blur()}
+                    className={`w-full flex items-center justify-center gap-2 py-2 px-4 text-xs font-medium transition-colors border-b border-border/10
                         ${isPrivateMode ? 'text-text-primary bg-bg-tertiary shadow-inner' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
                     title={isPrivateMode ? "Exit Private Mode" : "Enter Private Mode"}
                 >
@@ -230,10 +278,14 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                 {/* Collapse Toggle */}
                 <button
                     onClick={onToggleCollapse}
-                    className="w-8 h-8 mx-auto flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors rounded-full"
-                    title="Toggle Sidebar (])"
+                    className={`w-full flex items-center justify-center p-2 rounded-md hover:bg-bg-hover transition-colors text-text-secondary hover:text-text-primary`}
+                    title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
                 >
-                    <ChevronRight className="w-4 h-4" />
+                    {collapsed ? (
+                        <ChevronRight className="w-5 h-5" />
+                    ) : (
+                        <ChevronRight className="w-5 h-5" />
+                    )}
                 </button>
             </div>
 
@@ -243,14 +295,14 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
 
 // -- Sub-Components --
 
-const StatItem = ({ label, current, best, show, statsMode }: { label: string, current: any, best: any, show: boolean, statsMode: StatsMode }) => {
+const StatItem = ({ label, current, best, show }: { label: string, current: any, best: any, show: boolean }) => {
     if (!show) return null;
     return (
         <>
             <div className="text-left pl-1 font-medium text-text-secondary py-1">{label}</div>
             <div className="font-mono text-text-primary py-1">{formatTime(current)}</div>
-            <div className={`font-mono py-1 ${statsMode === 'session' ? 'text-text-primary' : 'text-text-primary'}`}>
-                {formatTime(statsMode === 'session' ? current : best)}
+            <div className="font-mono text-text-primary py-1">
+                {formatTime(best)}
             </div>
         </>
     );
@@ -267,6 +319,8 @@ interface SolveItemProps {
 }
 
 const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onCopy }: SolveItemProps) => {
+    const [isCopied, setIsCopied] = useState(false);
+
     const formatTimeDisplay = (solve: Solve) => {
         if (solve.penalty === 'DNF' || solve.inspectionPenalty === 'DNF') return 'DNF';
         let tVal = solve.time;
@@ -281,15 +335,21 @@ const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onC
         return tStr;
     };
 
+    const handleCopy = (e: React.MouseEvent) => {
+        onCopy(solve.scramble, e);
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+    };
+
     // Special Scramble Logic
     let badge = null;
     if (solve.daily) {
-        if (solve.daily.includes('daily')) badge = { text: 'D', color: 'text-green-500', bg: 'bg-green-500/10' };
-        else if (solve.daily.includes('weekly')) badge = { text: 'W', color: 'text-blue-500', bg: 'bg-blue-500/10' };
-        else if (solve.daily.includes('monthly')) badge = { text: 'M', color: 'text-purple-500', bg: 'bg-purple-500/10' };
-        // Assuming yearly/hourly IDs follow pattern or fallback
-        else if (solve.daily.includes('project_2025')) badge = { text: 'Y', color: 'text-yellow-500', bg: 'bg-yellow-500/10' }; // Example for yearly
-        else if (solve.daily.includes('hour')) badge = { text: 'H', color: 'text-zinc-500', bg: 'bg-zinc-500/10' }; // Example for hourly
+        const id = solve.daily.toLowerCase();
+        if (id.includes('daily') || id.startsWith('d-')) badge = { text: 'D', color: 'text-green-500', bg: 'bg-green-500/10' };
+        else if (id.includes('weekly') || id.startsWith('w-')) badge = { text: 'W', color: 'text-blue-500', bg: 'bg-blue-500/10' };
+        else if (id.includes('monthly') || id.startsWith('m-')) badge = { text: 'M', color: 'text-purple-500', bg: 'bg-purple-500/10' };
+        else if (id.includes('project_2025') || id.startsWith('y-')) badge = { text: 'Y', color: 'text-yellow-500', bg: 'bg-yellow-500/10' };
+        else if (id.includes('hour') || id.startsWith('h-')) badge = { text: 'H', color: 'text-zinc-500', bg: 'bg-zinc-500/10' };
         else badge = { text: 'S', color: 'text-accent', bg: 'bg-accent/10' };
     }
 
@@ -327,11 +387,12 @@ const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onC
 
                     {/* Scramble */}
                     <div
-                        onClick={(e) => onCopy(solve.scramble, e)}
-                        className="text-[11px] font-mono text-text-secondary/70 break-all leading-normal bg-black/20 p-2 rounded cursor-pointer hover:bg-black/30 hover:text-text-primary transition-colors"
+                        onClick={handleCopy}
+                        className={`text-[11px] font-mono break-all leading-normal bg-black/20 p-2 rounded cursor-pointer transition-colors
+                            ${isCopied ? 'text-green-500 bg-green-500/10' : 'text-text-secondary/70 hover:bg-black/30 hover:text-text-primary'}`}
                         title="Click to copy"
                     >
-                        {solve.scramble}
+                        {isCopied ? 'Copied to clipboard!' : solve.scramble}
                     </div>
 
                     {/* Actions */}
