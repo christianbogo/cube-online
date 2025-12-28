@@ -33,7 +33,7 @@ interface LiveUser {
 
 export default function Live() {
     const { settings, updateSettings } = useSettings();
-    const { addSolve, currentScramble, setCurrentScramble, solves } = useSolves();
+    const { addSolve, currentScramble, setCurrentScramble, solves, isPrivateMode } = useSolves();
     const { startNewSession, currentSessionId } = useSession();
     const { user, toggleStarUser, toggleBlockUser } = useAuth();
     const [autoSessionToastVisible, setAutoSessionToastVisible] = useState(false);
@@ -67,6 +67,9 @@ export default function Live() {
     const prevTimerStateRef = useRef<TimerState>('IDLE');
     const inspectionStartTimeRef = useRef<number | null>(null);
     const inspectionUsedRef = useRef<number>(0);
+
+    const [specialType, setSpecialType] = useState<'normal' | 'y' | 'm' | 'w' | 'd' | 'h'>('normal');
+    const [specialId, setSpecialId] = useState<string | null>(null);
 
     // Helper to format solves for broadcast (Last 4)
     const formatRecentSolves = useCallback((): SimpleSolve[] => {
@@ -140,6 +143,23 @@ export default function Live() {
     // Fetch new scramble
     const generateNewScramble = useCallback(async () => {
         try {
+            // Check for special scramble first if user is logged in AND NOT PRIVATE
+            if (user && !isPrivateMode) {
+                const { getDailyScramble } = await import('../utils/dailyScramble');
+                const special = await getDailyScramble(user.uid);
+
+                if (special.type !== 'normal' && special.scramble) {
+                    setScramble(special.scramble);
+                    setCurrentScramble(special.scramble);
+                    setSpecialType(special.type);
+                    setSpecialId(special.id || null);
+                    return;
+                }
+            }
+
+            // Normal Flow
+            setSpecialType('normal');
+            setSpecialId(null);
             const s = await randomScrambleForEvent('333');
             const scrambleStr = s.toString();
             setScramble(scrambleStr);
@@ -149,8 +169,10 @@ export default function Live() {
             const fallback = "R U R' U'";
             setScramble(fallback);
             setCurrentScramble(fallback);
+            setSpecialType('normal');
+            setSpecialId(null);
         }
-    }, [setCurrentScramble]);
+    }, [setCurrentScramble, user, isPrivateMode]);
 
     useEffect(() => {
         if (!currentScramble) {
@@ -229,11 +251,18 @@ export default function Live() {
             date: new Date().toISOString(),
             penalty: 'none',
             inspectionTime: inspectionUsedRef.current || (15 - inspectionTime),
-            daily: null,
+            daily: specialType !== 'normal' ? specialId : null,
             inspectionPenalty: finalInspectionPenalty
         });
+
+        if (specialType !== 'normal' && user && specialId && !isPrivateMode) {
+            import('../utils/dailyScramble').then(({ markScrambleComplete }) => {
+                markScrambleComplete(user.uid, specialType, specialId);
+            });
+        }
+
         generateNewScramble();
-    }, [time, scramble, addSolve, generateNewScramble, inspectionTime]);
+    }, [time, scramble, addSolve, generateNewScramble, inspectionTime, specialType, specialId, user, isPrivateMode]);
 
     const handleKeyDown = useCallback((e: KeyboardEvent) => {
         if (e.repeat) return;

@@ -20,12 +20,46 @@ interface ScrambleResult {
 export const BASE_RATE = 0.60;
 export const LOOT_WEIGHTS = { h: 2000, d: 250, w: 50, m: 10, y: 1 };
 
-// Helper to get consistent ISO strings
-const getISO = (date: Date) => date.toISOString().split('T')[0];
-const getISOHour = (date: Date) => {
-    const iso = date.toISOString();
-    return iso.split('T')[0] + '-' + iso.split('T')[1].split(':')[0];
-};
+
+
+const GENESIS_DATE = new Date('2025-01-01T00:00:00Z');
+
+// Helper to generate the "Pool" of potential IDs
+function generateIdPool(type: 'h' | 'd' | 'w' | 'm' | 'y'): string[] {
+    const pool: string[] = [];
+    const now = new Date();
+    let cursor = new Date(GENESIS_DATE);
+
+    while (cursor <= now) {
+        const y = cursor.getFullYear();
+        const m = String(cursor.getMonth() + 1).padStart(2, '0');
+        const d = cursor.toISOString().split('T')[0];
+
+        if (type === 'y') {
+            pool.push(`y-${y}`);
+            cursor.setFullYear(cursor.getFullYear() + 1);
+        }
+        else if (type === 'm') {
+            pool.push(`m-${y}-${m}`);
+            cursor.setMonth(cursor.getMonth() + 1);
+        }
+        else if (type === 'w') {
+            const week = String(Math.ceil((cursor.getDate() + 6 - cursor.getDay()) / 7)).padStart(2, '0');
+            pool.push(`w-${y}-${week}`);
+            cursor.setDate(cursor.getDate() + 7);
+        }
+        else if (type === 'd') {
+            pool.push(`d-${d}`);
+            cursor.setDate(cursor.getDate() + 1);
+        }
+        else if (type === 'h') {
+            const h = cursor.toISOString().split('T')[1].split(':')[0];
+            pool.push(`h-${d}-${h}`);
+            cursor.setHours(cursor.getHours() + 1);
+        }
+    }
+    return pool;
+}
 
 export async function getDailyScramble(userId: string): Promise<ScrambleResult> {
     if (!userId) return { scramble: '', type: 'normal' };
@@ -60,7 +94,6 @@ export async function getDailyScramble(userId: string): Promise<ScrambleResult> 
     const chance = BASE_RATE + (stats.loot_chance_modifier || 0);
 
     if (roll >= chance) {
-        // Failed roll - increment modifier
         await updateDoc(userStatsRef, {
             loot_chance_modifier: (stats.loot_chance_modifier || 0) + 0.05
         });
@@ -70,11 +103,9 @@ export async function getDailyScramble(userId: string): Promise<ScrambleResult> 
     // Success! Reset modifier
     await updateDoc(userStatsRef, { loot_chance_modifier: 0 });
 
-    // 3. Phase B: Candidate Selection & Phase C: Weighted Roll
-    // Simplified Logic for NOW:
-    // Determine Type based on simple weights first, then find ID.
-    // Weights: Hour (2000), Day (250), Week (50), Month (10), Year (1)
+    // 3. Phase B: Candy Selection - Mining Logic
 
+    // Determine Type
     const weights = LOOT_WEIGHTS;
     const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
     let r = Math.random() * totalWeight;
@@ -88,53 +119,46 @@ export async function getDailyScramble(userId: string): Promise<ScrambleResult> 
         r -= w;
     }
 
-    // Generate ID for selected type
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    // Simple week number (approximation)
-    const week = String(Math.ceil((now.getDate() + 6 - now.getDay()) / 7)).padStart(2, '0');
-    const day = getISO(now);
-    const hour = getISOHour(now);
+    // Generate Pool & Filter
+    const fullPool = generateIdPool(selectedType);
 
-    let id = '';
-    // Check completion (Simple check against "last completed" for day/hour, array for others)
-    // NOTE: This logic is simplified; real implementation needs full backlog check.
-    // Assuming "Current" for now.
+    let completed: string[] = [];
+    if (selectedType === 'y') completed = stats.completed_years || [];
+    if (selectedType === 'm') completed = stats.completed_months || [];
+    if (selectedType === 'w') completed = stats.completed_weeks || [];
+    if (selectedType === 'd') completed = stats.completed_days || [];
+    if (selectedType === 'h') completed = stats.completed_hours || [];
 
-    if (selectedType === 'y') id = `y-${year}`;
-    if (selectedType === 'm') id = `m-${year}-${month}`;
-    if (selectedType === 'w') id = `w-${year}-${week}`; // Warning: week calculation varies
-    if (selectedType === 'd') id = `d-${day}`;
-    if (selectedType === 'h') id = `h-${hour}`;
+    const candidates = fullPool.filter(id => !completed.includes(id));
 
-    // Verify if already completed?
-    // For simplicity in this first pass, we allow re-rolls or just serve it.
-    // Ideally we check `stats.completed_years.includes(id)`.
-    // If completed, we should degrade to 'normal' or find 'backlog'.
-    // For MVP/first pass: if completed, degrade to normal.
-    let isCompleted = false;
-    if (selectedType === 'y' && stats.completed_years.includes(id)) isCompleted = true;
-    if (selectedType === 'm' && stats.completed_months.includes(id)) isCompleted = true;
-    if (selectedType === 'w' && stats.completed_weeks.includes(id)) isCompleted = true;
-    if (selectedType === 'd' && stats.completed_days?.includes(id)) isCompleted = true;
-    if (selectedType === 'h' && stats.completed_hours?.includes(id)) isCompleted = true;
-
-    if (isCompleted) {
-        // Fallback to normal (or implement backlog later)
+    if (candidates.length === 0) {
         return { scramble: '', type: 'normal' };
     }
 
-    // 4. Fetch Scramble content
+    // 4. Phase C: Biased Selection
+    const BIAS_FACTOR = 0.3;
+    const biasedRandom = Math.pow(Math.random(), BIAS_FACTOR);
+    const selectedIndex = Math.floor(candidates.length * biasedRandom);
+
+    const selectedId = candidates[selectedIndex];
+
+    // 5. Fetch Scramble content
+    const idParts = selectedId.split('-');
+    const scrambleYear = idParts[1];
+
     try {
-        const response = await fetch(`/scrambles/scrambles-${year}.json`);
-        if (!response.ok) throw new Error('Scramble file not found');
+        const response = await fetch(`/scrambles/scrambles-${scrambleYear}.json`);
+        // Note: fetch paths in client-side code are relative to public/
+        if (!response.ok) throw new Error(`Scramble file for ${scrambleYear} not found`);
         const data = await response.json();
 
-        const scrambleString = data[id];
-        if (!scrambleString) return { scramble: '', type: 'normal' }; // ID not in file
+        const scrambleString = data[selectedId];
+        if (!scrambleString) {
+            console.warn(`Scramble ID ${selectedId} not found in json`);
+            return { scramble: '', type: 'normal' };
+        }
 
-        return { scramble: scrambleString, type: selectedType, id };
+        return { scramble: scrambleString, type: selectedType, id: selectedId };
     } catch (e) {
         console.error("Error loading scramble file", e);
         return { scramble: '', type: 'normal' };
@@ -145,7 +169,6 @@ export async function markScrambleComplete(userId: string, type: string, id: str
     if (!userId || !type || !id) return;
     const userStatsRef = doc(db, 'users', userId, 'private', 'scrambleStats');
 
-    // Construct updates based on type
     const updates: any = {};
     if (type === 'y') updates.completed_years = arrayUnion(id);
     if (type === 'm') updates.completed_months = arrayUnion(id);

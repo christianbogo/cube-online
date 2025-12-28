@@ -128,11 +128,12 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                     {currentSessionSolves.map(solve => {
                         let bgClass = "bg-text-secondary/20";
                         if (solve.daily) {
-                            if (solve.daily.includes('daily')) bgClass = "bg-green-500";
-                            else if (solve.daily.includes('weekly')) bgClass = "bg-blue-500";
-                            else if (solve.daily.includes('monthly')) bgClass = "bg-purple-500";
-                            else if (solve.daily.includes('project_2025')) bgClass = "bg-yellow-500";
-                            else if (solve.daily.includes('hour')) bgClass = "bg-zinc-500";
+                            const id = solve.daily;
+                            if (id.startsWith('d-') || id.includes('daily')) bgClass = "bg-green-500";
+                            else if (id.startsWith('w-') || id.includes('weekly')) bgClass = "bg-blue-500";
+                            else if (id.startsWith('m-') || id.includes('monthly')) bgClass = "bg-purple-500";
+                            else if (id.startsWith('y-') || id.includes('project_2025')) bgClass = "bg-yellow-500";
+                            else if (id.startsWith('h-') || id.includes('hour')) bgClass = "bg-zinc-500";
                         }
                         return (
                             <div key={solve.id} className={`w-3 h-1.5 rounded-[1px] ${bgClass}`} title={formatTime(solve.time)} />

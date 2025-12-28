@@ -353,34 +353,7 @@ export default function Cube() {
             {scrambleVisible ? (
                 <>
                     <div className="flex items-center gap-6 mb-4 text-text-secondary transition-opacity hover:text-text-primary">
-                        {/* SPECIAL ICON INDICATOR - Hidden until solved or revealed */}
-                        {specialType !== 'normal' && timerState !== 'SOLVED' && (
-                            // Requirement: "Remove showing if the displayed scramble is a special scramble, it should only be revealed to the user after they complete the scramble."
-                            // So hide this block entirely unless SOLVED?
-                            // But maybe keep a mystery icon?
-                            // "it should only be revealed to the user after they complete the scramble."
-                            // This implies they shouldn't know it's special.
-                            // So I'll hide it.
-                            null
-                        )}
-
-                        {/* If solved, show it! */}
-                        {specialType !== 'normal' && timerState === 'SOLVED' && (
-                            <div className="flex items-center justify-center animate-in zoom-in spin-in-12 duration-500">
-                                <div
-                                    className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold capitalize text-white shadow-lg
-                                    ${specialType === 'h' ? 'bg-gray-500' : ''}
-                                    ${specialType === 'd' ? 'bg-green-500' : ''}
-                                    ${specialType === 'w' ? 'bg-blue-500' : ''}
-                                    ${specialType === 'm' ? 'bg-purple-500' : ''}
-                                    ${specialType === 'y' ? 'bg-yellow-500 text-black' : ''}
-                                    `}
-                                    title={`Special Scramble: ${specialType === 'h' ? 'Hourly' : specialType === 'd' ? 'Daily' : specialType === 'w' ? 'Weekly' : specialType === 'm' ? 'Monthly' : 'Yearly'}`}
-                                >
-                                    {specialType.toUpperCase()}
-                                </div>
-                            </div>
-                        )}
+                        {/* Special Icon Removed as requested */}
 
                         <Link to="/about" className="hover:text-accent transition-colors" title="Scramble Info">
                             <Info className="w-5 h-5" />

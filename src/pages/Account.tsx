@@ -368,6 +368,75 @@ export default function Account() {
                 </div>
             </div>
 
+            {/* Social Settings */}
+            {user && (
+                <div className="w-full mb-12">
+                    <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
+                        <Users className="w-5 h-5 text-zinc-400" /> Social
+                    </h3>
+
+                    <div className="flex flex-col gap-6 pl-4 border-l border-border/50 ml-2">
+
+                        {/* Favorites */}
+                        <div>
+                            <h4 className="text-sm font-semibold text-text-primary mb-2 flex items-center gap-2">
+                                <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" /> Favorites
+                            </h4>
+                            {starredProfiles.length === 0 ? (
+                                <p className="text-xs text-text-secondary italic">No favorite users yet.</p>
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {starredProfiles.map(p => (
+                                        <div key={p.uid} className="flex items-center justify-between p-2 bg-surface-elevation-1 rounded border border-border group">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-6 h-6 rounded-full" style={{ backgroundColor: p.color }} />
+                                                <span className="text-sm font-medium text-text-primary truncate">{p.username}</span>
+                                            </div>
+                                            <button
+                                                onClick={() => toggleStarUser(p.uid)}
+                                                className="text-text-secondary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                                                title="Unfavorite"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Blocked */}
+                        <div>
+                            <h4 className="text-sm font-semibold text-text-primary mb-2 flex items-center gap-2">
+                                <Ban className="w-4 h-4 text-red-500" /> Blocked Users
+                            </h4>
+                            {blockedProfiles.length === 0 ? (
+                                <p className="text-xs text-text-secondary italic">No blocked users.</p>
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {blockedProfiles.map(p => (
+                                        <div key={p.uid} className="flex items-center justify-between p-2 bg-surface-elevation-1 rounded border border-border group">
+                                            <div className="flex items-center gap-2 opacity-50">
+                                                <div className="w-6 h-6 rounded-full" style={{ backgroundColor: p.color }} />
+                                                <span className="text-sm font-medium text-text-primary truncate">{p.username}</span>
+                                            </div>
+                                            <button
+                                                onClick={() => toggleBlockUser(p.uid)}
+                                                className="text-text-secondary hover:text-green-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                                                title="Unblock"
+                                            >
+                                                <Check className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                    </div>
+                </div>
+            )}
+
             {/* "Dangerous Buttons" Footer */}
             {user && (
                 <div className="w-full pt-8 border-t border-border mt-8">
