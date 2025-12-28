@@ -2,6 +2,7 @@ import { Box, BarChart2, Radio, Sun, Moon, Monitor, ChevronLeft, ChevronRight, C
 import { useTheme } from './ThemeProvider';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useSolves } from '../contexts/SolvesContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useConfirm } from '../contexts/ConfirmationContext';
 
 interface LeftSidebarProps {
@@ -20,6 +21,7 @@ const navItems = [
 
 export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebarProps) {
     const { theme, setTheme } = useTheme();
+    const { user } = useAuth();
 
     const { isPrivateMode, togglePrivateMode } = useSolves();
     const { confirm: confirmAction } = useConfirm();
@@ -42,22 +44,30 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
                 {navItems.map((item) => (
                     <li key={item.name}>
                         <NavLink
-                            to={item.path}
-                            onClick={(e) => handleNavClick(e, item.path)}
+                            to={!user && ['Daily', 'Sessions', 'Live', 'Data'].includes(item.name) ? '#' : item.path}
+                            onClick={(e) => {
+                                if (!user && ['Daily', 'Sessions', 'Live', 'Data'].includes(item.name)) {
+                                    e.preventDefault();
+                                    return;
+                                }
+                                handleNavClick(e, item.path);
+                            }}
                             className={({ isActive }) => `
                                 w-full flex items-center gap-3 p-2 rounded-md transition-colors text-left
-                                ${isActive
+                                ${(isActive && !['Daily', 'Sessions', 'Live', 'Data'].includes(item.name)) || (isActive && user)
                                     ? 'bg-accent/10 text-accent'
-                                    : 'hover:bg-bg-hover text-text-secondary hover:text-text-primary'
+                                    : (!user && ['Daily', 'Sessions', 'Live', 'Data'].includes(item.name))
+                                        ? 'opacity-30 cursor-not-allowed text-text-secondary'
+                                        : 'hover:bg-bg-hover text-text-secondary hover:text-text-primary'
                                 }
                                 ${collapsed ? 'justify-center' : ''}
                             `}
                         >
                             {({ isActive }) => (
                                 <>
-                                    <item.icon className={`w-5 h-5 ${isActive ? 'text-accent' : 'text-text-secondary'}`} />
+                                    <item.icon className={`w-5 h-5 ${(isActive && user) || (isActive && !['Daily', 'Sessions', 'Live', 'Data'].includes(item.name)) ? 'text-accent' : 'text-text-secondary'}`} />
                                     {!collapsed && (
-                                        <span className={`text-sm font-medium ${isActive ? 'text-accent' : 'text-text-primary'}`}>
+                                        <span className={`text-sm font-medium ${(isActive && user) || (isActive && !['Daily', 'Sessions', 'Live', 'Data'].includes(item.name)) ? 'text-accent' : 'text-text-primary'}`}>
                                             {item.name}
                                         </span>
                                     )}

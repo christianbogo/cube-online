@@ -4,7 +4,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useSolves, type Solve } from '../contexts/SolvesContext';
 import { useSession } from '../contexts/SessionContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useConfirm } from '../contexts/ConfirmationContext';
+// import { useConfirm } from '../contexts/ConfirmationContext'; // Unused
 import Toast from '../components/Toast';
 import { EyeOff, Info, Minus, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -17,11 +17,11 @@ export default function Cube() {
     const { addSolve, currentScramble, setCurrentScramble } = useSolves();
     const { startNewSession, currentSessionId } = useSession();
     const { user } = useAuth();
-    const { confirm: confirmAction } = useConfirm();
+    // const { confirm: confirmAction } = useConfirm(); // Unused
     const [autoSessionToastVisible, setAutoSessionToastVisible] = useState(false);
 
     // Loot Stats State
-    const [lootModifier, setLootModifier] = useState<number>(0);
+    // const [lootModifier, setLootModifier] = useState<number>(0); // Unused
 
     // Auto-create session and toast logic
     useEffect(() => {
@@ -36,14 +36,12 @@ export default function Cube() {
             });
         }
 
-        // Fetch loot stats
-        if (user && !isPrivateMode) { // No loot stats in private mode?
-            import('../utils/dailyScramble').then(({ getUserScrambleStats }) => {
-                getUserScrambleStats(user.uid).then(stats => {
-                    if (stats) setLootModifier(stats.loot_chance_modifier);
-                });
-            });
+        // Fetch loot stats - REMOVED (Feature removed)
+        /*
+        if (user && !isPrivateMode) {
+           ...
         }
+        */
     }, [user, currentSessionId, startNewSession, isPrivateMode]);
 
     const [scramble, setScramble] = useState<string>(currentScramble || 'Generating scramble...');
@@ -52,7 +50,7 @@ export default function Cube() {
     const [inspectionTime, setInspectionTime] = useState(15);
     const [primingProgress, setPrimingProgress] = useState(0); // 0 to 1
     const [scrambleVisible, setScrambleVisible] = useState(true);
-    const [scrambleRotation, setScrambleRotation] = useState(0); // For simple animation
+    // const [scrambleRotation, setScrambleRotation] = useState(0); // For simple animation // Unused
     const [isCopied, setIsCopied] = useState(false);
 
     const startTimeRef = useRef<number>(0);
@@ -335,10 +333,10 @@ export default function Cube() {
         setTimeout(() => setIsCopied(false), 2000);
     };
 
-    const handleNextScramble = () => {
-        setScrambleRotation(prev => prev + 360);
-        generateNewScramble();
-    };
+    // const handleNextScramble = () => { // Unused
+    //     setScrambleRotation(prev => prev + 360);
+    //     generateNewScramble();
+    // };
 
     const changeScrambleSize = (delta: number) => {
         updateSettings({ scrambleSize: Math.max(0.8, Math.min(3, settings.scrambleSize + delta)) });

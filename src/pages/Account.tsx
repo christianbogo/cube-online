@@ -1,7 +1,7 @@
 import { Settings, Check, X, LogOut, Info, Trash2, Download, Upload, TriangleAlert } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useSolves } from '../contexts/SolvesContext';
+// import { useSolves } from '../contexts/SolvesContext'; // Unused
 import { useState, useEffect, useRef } from 'react';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -27,7 +27,9 @@ export default function Account() {
     const [isSignUpMode, setIsSignUpMode] = useState(false);
 
     // Sync & Local Data Settings State
-    const { trimSolves } = useSolves();
+    // Sync & Local Data Settings State
+    // const { solves, clearSolves } = useSolves(); // Unused
+
 
     // Initial load
     useEffect(() => {
@@ -264,9 +266,7 @@ export default function Account() {
                                 </div>
                             </div>
                         )}
-                        <p className="text-text-secondary text-xs text-center mt-2">
-                            Sync unlimited solves across devices.
-                        </p>
+                        Local solves are wiped on sign in/out. Sign in to sync unlimited solves.
                     </div>
                 </div>
             )}

@@ -10,8 +10,6 @@ interface SessionContextType {
     startNewSession: (resume?: boolean) => Promise<string>;
     updateSessionActivity: (incrementCount?: boolean, overrideSessionId?: string) => void;
     checkSessionStatus: (lastSolveTime: number) => { isNewSessionNeeded: boolean };
-    isSessionPromptVisible: boolean;
-    setSessionPromptVisible: (visible: boolean) => void;
     setCurrentSessionId: (id: string | null) => void;
     viewedSessionId: string | null;
     setViewedSessionId: (id: string | null) => void;
@@ -25,7 +23,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         return localStorage.getItem('cutter_current_session_id');
     });
     const [viewedSessionId, setViewedSessionId] = useState<string | null>(null);
-    const [isSessionPromptVisible, setSessionPromptVisible] = useState(false);
 
     useEffect(() => {
         if (currentSessionId) {
@@ -107,8 +104,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             startNewSession,
             updateSessionActivity,
             checkSessionStatus,
-            isSessionPromptVisible,
-            setSessionPromptVisible,
             setCurrentSessionId, // Exposed for merge logic
             viewedSessionId,
             setViewedSessionId

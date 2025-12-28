@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useRef, type ReactNode } from 'react';
-import { AlertCircle } from 'lucide-react';
+// import { AlertCircle } from 'lucide-react'; // Unused
+import { useState, useRef, createContext, useContext, type ReactNode } from 'react';
 
 interface ConfirmationContextType {
     confirm: (message: string) => Promise<boolean>;

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo, useRef, type ReactNode } from 'react';
 import { calculateAverage, calculateBestAverage } from '../utils/calculations';
 import { useAuth } from './AuthContext';
 import { useSession } from './SessionContext';
@@ -57,11 +57,34 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
     const { user } = useAuth();
     const { currentSessionId, checkSessionStatus, updateSessionActivity, setCurrentSessionId, startNewSession } = useSession();
 
-    const [isPrivateMode, setIsPrivateMode] = useState(false);
-    const [privateSolves, setPrivateSolves] = useState<Solve[]>([]); // New local-only solves for Private Mode
+    // Private Mode Persistence
+    const [isPrivateMode, setIsPrivateMode] = useState(() => {
+        return localStorage.getItem('cutter-cubing-private-mode') === 'true';
+    });
+
+    const [privateSolves, setPrivateSolves] = useState<Solve[]>(() => {
+        const stored = localStorage.getItem('cutter-cubing-private-solves');
+        return stored ? JSON.parse(stored) : [];
+    });
+
+    useEffect(() => {
+        localStorage.setItem('cutter-cubing-private-mode', String(isPrivateMode));
+    }, [isPrivateMode]);
+
+    useEffect(() => {
+        localStorage.setItem('cutter-cubing-private-solves', JSON.stringify(privateSolves));
+    }, [privateSolves]);
 
     const togglePrivateMode = () => {
-        setIsPrivateMode(prev => !prev);
+        setIsPrivateMode(prev => {
+            const next = !prev;
+            if (!next) {
+                // Exiting Private Mode -> Wipe private solves
+                setPrivateSolves([]);
+                localStorage.removeItem('cutter-cubing-private-solves');
+            }
+            return next;
+        });
     };
 
     const [solves, setSolves] = useState<Solve[]>(() => {
@@ -69,22 +92,37 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
         return stored ? JSON.parse(stored) : [];
     });
 
-    // Check for session gap on initial load or focused // (Only for main solves)
+    const prevUserRef = useRef<{ uid: string } | null | undefined>(undefined);
+
+    // Wipe local solves on auth state change (Sign In / Sign Out)
     useEffect(() => {
-        // Silent Gap Check logic moved to addSolve mostly, but user might want a visual prompt on load?
-        // Requirement said "Remove the popups".
-        // So we do nothing here or just let visual divider handle it.
-        // We can keep this empty or remove the effect if strictly no popup.
-        // I'll leave it as no-op or remove it if unused. 
-        // Logic below:
+        const isFirstRun = prevUserRef.current === undefined;
+        const prevUser = prevUserRef.current;
+        const currentUser = user;
+
+        if (!isFirstRun) {
+            const prevUid = prevUser?.uid;
+            const currentUid = currentUser?.uid;
+
+            if (prevUid !== currentUid) {
+                // Auth change detected
+                setSolves([]);
+                localStorage.removeItem('cutter-cubing-solves');
+            }
+        }
+
+        prevUserRef.current = user;
+    }, [user]);
+
+    // Check for session gap on initial load or focused // (Only for main solves)
+    // REMOVED popups as requested
+    /*
+    useEffect(() => {
         if (!isPrivateMode && solves.length > 0) {
-            // const lastSolve = solves[0];
-            // const { isNewSessionNeeded } = checkSessionStatus(new Date(lastSolve.date).getTime());
-            // if (isNewSessionNeeded) {
-            //    setSessionPromptVisible(true); // REMOVED
-            // }
+           ...
         }
     }, [isPrivateMode]);
+    */
 
     const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
 
@@ -189,8 +227,20 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
         // For Normal Mode: Best stats check cloud/official solves if signed in, or just local.
 
         let bestSolves = activeSolves;
-        if (!isPrivateMode && user) {
-            bestSolves = solves.filter(s => s.userId === user.uid);
+        if (!isPrivateMode) {
+            // If signed in, we might want to filter by user. But activeSolves is already solves.
+            // If solves contains local items before sign in, they get wiped on sign in.
+            // If solves contains cloud items, they have userId.
+            // If we are signed OUT, solves contains local items (userId undefined).
+            // So we should filter by userId ONLY if we are looking for "Account Best".
+            // But for "Local Best" (signed out), we just use all activeSolves.
+
+            if (user) {
+                bestSolves = solves.filter(s => s.userId === user.uid);
+            } else {
+                // Signed out / Local
+                bestSolves = solves;
+            }
         }
 
         const getBestAverage = (size: number) => {
@@ -265,18 +315,32 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
         }
 
         // Lazy Session Creation (Main Mode)
-        if (!activeSessionId && user) {
-            try {
-                const docRef = await addDoc(collection(db, 'sessions'), {
-                    userId: user.uid,
-                    startedAt: new Date().toISOString(),
-                    lastActiveAt: new Date().toISOString(),
-                    solveCount: 0
-                });
-                activeSessionId = docRef.id;
-                setCurrentSessionId(activeSessionId);
-            } catch (e) {
-                console.error("Error creating lazy session", e);
+        if (!activeSessionId) {
+            // Logic for both Auth and Anon
+            // If Auth: create firestore doc
+            // If Anon: create local session ID?
+            // "When not signed into an account... stats table is not updating." 
+            // Stats table relies on 'currentSessionId'.
+            // If we don't have one, session stats are empty. 
+            // We need a local session concept.
+
+            if (user) {
+                try {
+                    const docRef = await addDoc(collection(db, 'sessions'), {
+                        userId: user.uid,
+                        startedAt: new Date().toISOString(),
+                        lastActiveAt: new Date().toISOString(),
+                        solveCount: 0
+                    });
+                    activeSessionId = docRef.id;
+                    setCurrentSessionId(activeSessionId);
+                } catch (e) {
+                    console.error("Error creating lazy session", e);
+                    activeSessionId = `local_${Date.now()}`;
+                    setCurrentSessionId(activeSessionId);
+                }
+            } else {
+                // Anon user
                 activeSessionId = `local_${Date.now()}`;
                 setCurrentSessionId(activeSessionId);
             }

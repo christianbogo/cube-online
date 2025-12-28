@@ -2,7 +2,7 @@ import { useSolves, type Solve } from '../contexts/SolvesContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSession } from '../contexts/SessionContext';
 import { useConfirm } from '../contexts/ConfirmationContext';
-import { Trash2, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
+import { Trash2, ChevronLeft, ChevronRight, EyeOff } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage } from '../utils/calculations';
 
@@ -14,9 +14,9 @@ interface RightSidebarProps {
 type StatsMode = 'best' | 'session';
 
 export default function RightSidebar({ onToggleCollapse, collapsed }: RightSidebarProps) {
-    const { solves: allSolves, updateSolve, deleteSolve, isPrivateMode } = useSolves();
+    const { solves: allSolves, updateSolve, deleteSolve, isPrivateMode, togglePrivateMode } = useSolves();
     const { user } = useAuth();
-    const { currentSessionId, startNewSession } = useSession();
+    const { currentSessionId } = useSession();
     const { confirm: confirmAction } = useConfirm();
 
     // -- Derived State --
@@ -35,6 +35,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
     // -- Pagination --
     const [pageLimit, setPageLimit] = useState(100);
     const paginatedSolves = useMemo(() => {
+        // Solves are already sorted Newest -> Oldest in Context
         return displaySolves.slice(0, pageLimit);
     }, [displaySolves, pageLimit]);
 
@@ -110,7 +111,8 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
             <div className="h-full flex flex-col items-center py-4 bg-bg-secondary border-l border-border transition-all duration-300 w-[50px]">
                 <button
                     onClick={onToggleCollapse}
-                    className="mt-auto p-2 text-text-secondary hover:text-text-primary rounded-full hover:bg-bg-hover transition-colors"
+                    className="mt-auto w-full py-4 text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors flex justify-center"
+                    title="Toggle Sidebar (])"
                 >
                     <ChevronLeft className="w-5 h-5" />
                 </button>
@@ -124,13 +126,13 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
             {/* Header Area (Stats) */}
             <div className="flex flex-col border-b border-border bg-bg-secondary sticky top-0 z-10">
                 {/* Stats Table */}
-                <div className="grid grid-cols-3 gap-y-1 gap-x-2 text-center text-xs p-2">
+                <div className="grid grid-cols-3 gap-y-2 gap-x-2 text-center text-xs p-4">
                     <div className="col-span-1"></div>
-                    <div className="col-span-1 font-semibold text-accent border-b border-transparent pb-1">Current</div>
+                    <div className="col-span-1 font-semibold text-text-secondary border-b border-transparent pb-1">Current</div>
 
                     {/* Toggle Header */}
                     <div
-                        className="col-span-1 font-semibold text-text-primary border-b border-border/50 pb-1 cursor-pointer hover:bg-white/5 transition-colors select-none rounded-t flex items-center justify-center gap-1"
+                        className="col-span-1 font-semibold text-text-primary border border-border/50 pb-1 cursor-pointer hover:bg-white/5 transition-colors select-none rounded flex items-center justify-center gap-1"
                         onClick={() => setStatsMode(prev => prev === 'best' ? 'session' : 'best')}
                     >
                         {statsMode === 'best' ? 'Best' : 'Session'}
@@ -148,36 +150,40 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
             <div className="flex-1 overflow-y-auto custom-scrollbar">
                 <div className="flex flex-col">
                     {paginatedSolves.map((solve, index) => {
-                        const prevSolve = paginatedSolves[index + 1];
-                        const showDivider = prevSolve && (
-                            (new Date(solve.date).getTime() - new Date(prevSolve.date).getTime() > 1000 * 60 * 60) || // 60 min gap
-                            (solve.sessionId !== prevSolve.sessionId)
+                        // For dividers: we actually want to show the divider BEFORE the group if logic implies break.
+                        // But here we iterate Newest -> Oldest.
+                        // So if index+1 (older) is different session than current, current starts a NEW session block (visually above older).
+                        // So we render header ABOVE current if it's the start of a block (relative to older).
+                        // Wait, list is top-down. Top is newest.
+                        // If solve is start of a session (vs older neighbour), header goes ABOVE solve.
+                        // Logic: If NO newer solve (index 0) OR newer solve (index-1) belongs to different session/gap => Header.
+
+                        const newerSolve = paginatedSolves[index - 1]; // Newer
+                        const showHeader = !newerSolve || (
+                            (new Date(newerSolve.date).getTime() - new Date(solve.date).getTime() > 1000 * 60 * 60) ||
+                            (newerSolve.sessionId !== solve.sessionId)
                         );
 
-                        let sessionIndex = allSolves.length - index;
-                        if (solve.sessionId) {
-                            const solvesInSession = allSolves.filter(s => s.sessionId === solve.sessionId);
-                            const indexInSession = solvesInSession.findIndex(s => s.id === solve.id);
-                            if (indexInSession !== -1) {
-                                sessionIndex = solvesInSession.length - indexInSession;
-                            }
-                        }
+                        // Numbering: Total - Index
+                        // Assuming allSolves is complete list.
+                        // If local experience, simple length - index.
+                        // If filtering... we filtered `displaySolves`.
+                        const solveNumber = displaySolves.length - index;
 
                         return (
                             <div key={solve.id}>
-                                {showDivider && (
-                                    <div className="py-2 flex items-center justify-center relative">
-                                        <div className="text-[10px] bg-transparent text-text-secondary/40 font-mono z-10 px-2">
-                                            {new Date(prevSolve.date).toLocaleString(undefined, {
-                                                month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
-                                            })}
-                                        </div>
-                                        <div className="w-full h-px border-t border-dashed border-border/30 absolute z-[-1]" />
+                                {showHeader && (
+                                    <div className="py-2 pl-4 text-[10px] text-text-secondary/40 font-mono text-left">
+                                        {new Date(solve.date).toLocaleString(undefined, {
+                                            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                                        })}
                                     </div>
                                 )}
                                 <SolveItem
                                     solve={solve}
-                                    index={sessionIndex}
+                                    number={solveNumber}
+                                    expanded={expandedSolveId === solve.id}
+                                    onToggle={() => toggleExpand(solve.id)}
                                     onDelete={handleDeleteSolve}
                                     onPenalty={handlePenalty}
                                     onCopy={copyScramble}
@@ -203,27 +209,32 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                             <ChevronRight className="w-6 h-6 opacity-20" />
                         </div>
                         <span className="text-sm">No solves yet</span>
-                        {!user && !isPrivateMode && <span className="text-xs opacity-50">Sign in to sync.</span>}
+                        {!user && !isPrivateMode && <span className="text-xs opacity-50">Sign in to save solves.</span>}
                     </div>
                 )}
             </div>
 
             {/* Footer */}
-            <div className="p-3 border-t border-border bg-bg-secondary flex justify-between items-center text-xs">
+            <div className="border-t border-border bg-bg-secondary flex flex-col">
+                {/* Private Mode Toggle (Ghost) */}
+                <button
+                    onClick={togglePrivateMode}
+                    className={`w-full flex items-center justify-center gap-2 py-3 px-4 text-xs font-medium transition-colors border-b border-border/10
+                        ${isPrivateMode ? 'text-text-primary bg-bg-tertiary shadow-inner' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
+                    title={isPrivateMode ? "Exit Private Mode" : "Enter Private Mode"}
+                >
+                    <EyeOff className={`w-3.5 h-3.5 ${isPrivateMode ? 'text-accent animate-pulse' : ''}`} />
+                    {isPrivateMode ? 'Private Mode Active' : 'Private Mode'}
+                </button>
+
+                {/* Collapse Toggle */}
                 <button
                     onClick={onToggleCollapse}
-                    className="p-2 text-text-secondary hover:text-text-primary rounded-md hover:bg-bg-hover transition-colors"
-                    title="Collapse sidebar"
+                    className="w-8 h-8 mx-auto flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors rounded-full"
+                    title="Toggle Sidebar (])"
                 >
                     <ChevronRight className="w-4 h-4" />
                 </button>
-
-                {isPrivateMode && (
-                    <div className="flex items-center gap-2 text-text-secondary px-3 py-1.5 bg-bg-tertiary rounded-md border border-border/50">
-                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                        Private Session
-                    </div>
-                )}
             </div>
 
         </aside>
@@ -238,7 +249,7 @@ const StatItem = ({ label, current, best, show, statsMode }: { label: string, cu
         <>
             <div className="text-left pl-1 font-medium text-text-secondary py-1">{label}</div>
             <div className="font-mono text-text-primary py-1">{formatTime(current)}</div>
-            <div className={`font-mono py-1 ${statsMode === 'session' ? 'text-accent' : 'text-text-primary'}`}>
+            <div className={`font-mono py-1 ${statsMode === 'session' ? 'text-text-primary' : 'text-text-primary'}`}>
                 {formatTime(statsMode === 'session' ? current : best)}
             </div>
         </>
@@ -247,13 +258,15 @@ const StatItem = ({ label, current, best, show, statsMode }: { label: string, cu
 
 interface SolveItemProps {
     solve: Solve;
-    index: number;
+    number: number;
+    expanded: boolean;
+    onToggle: () => void;
     onDelete: (id: string, e: React.MouseEvent) => void;
     onPenalty: (id: string, type: '+2' | 'DNF', currentPenalty: string, e: React.MouseEvent) => void;
     onCopy: (scramble: string, e: React.MouseEvent) => void;
 }
 
-const SolveItem = ({ solve, index, onDelete, onPenalty, onCopy }: SolveItemProps) => {
+const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onCopy }: SolveItemProps) => {
     const formatTimeDisplay = (solve: Solve) => {
         if (solve.penalty === 'DNF' || solve.inspectionPenalty === 'DNF') return 'DNF';
         let tVal = solve.time;
@@ -268,55 +281,86 @@ const SolveItem = ({ solve, index, onDelete, onPenalty, onCopy }: SolveItemProps
         return tStr;
     };
 
+    // Special Scramble Logic
+    let badge = null;
+    if (solve.daily) {
+        if (solve.daily.includes('daily')) badge = { text: 'D', color: 'text-green-500', bg: 'bg-green-500/10' };
+        else if (solve.daily.includes('weekly')) badge = { text: 'W', color: 'text-blue-500', bg: 'bg-blue-500/10' };
+        else if (solve.daily.includes('monthly')) badge = { text: 'M', color: 'text-purple-500', bg: 'bg-purple-500/10' };
+        // Assuming yearly/hourly IDs follow pattern or fallback
+        else if (solve.daily.includes('project_2025')) badge = { text: 'Y', color: 'text-yellow-500', bg: 'bg-yellow-500/10' }; // Example for yearly
+        else if (solve.daily.includes('hour')) badge = { text: 'H', color: 'text-zinc-500', bg: 'bg-zinc-500/10' }; // Example for hourly
+        else badge = { text: 'S', color: 'text-accent', bg: 'bg-accent/10' };
+    }
+
     return (
-        <div className="group flex items-center justify-between px-4 py-2 hover:bg-bg-hover/50 transition-colors border-l-2 border-transparent hover:border-accent cursor-pointer relative text-sm">
-            <div className="flex items-center gap-3 min-w-0">
-                <span className="text-text-secondary/40 font-mono w-6 text-right text-[10px]">{index}.</span>
-                <span className={`font-mono font-medium ${solve.penalty === 'DNF' ? 'text-red-500' : 'text-text-primary'}`}>
-                    {formatTimeDisplay(solve)}
-                </span>
-                {/* Daily Badge or Tag */}
-                {solve.daily && (
-                    <span
-                        className={`text-[9px] px-1 rounded font-bold uppercase
-                        ${solve.daily.includes('daily') ? 'bg-green-500/20 text-green-500' :
-                                solve.daily.includes('weekly') ? 'bg-blue-500/20 text-blue-500' :
-                                    'bg-accent/20 text-accent'}
-                        `}
-                    >
-                        {solve.daily.includes('daily') ? 'D' : solve.daily.includes('weekly') ? 'W' : 'S'}
+        <div
+            onClick={onToggle}
+            className={`flex flex-col border-l-2 transition-colors cursor-pointer text-sm
+                ${expanded ? 'bg-bg-hover/30 border-accent' : 'border-transparent hover:bg-bg-hover/30'}
+            `}
+        >
+            {/* Top Row: # Time Badge */}
+            <div className="flex items-center justify-between px-4 py-2">
+                <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-text-secondary/40 font-mono w-6 text-right text-[10px]">{number}</span>
+                    <span className={`font-mono font-medium ${solve.penalty === 'DNF' ? 'text-red-500' : 'text-text-primary'}`}>
+                        {formatTimeDisplay(solve)}
                     </span>
-                )}
+                    {badge && (
+                        <span className={`text-[10px] w-4 h-4 flex items-center justify-center rounded font-bold ${badge.color} ${badge.bg}`}>
+                            {badge.text}
+                        </span>
+                    )}
+                </div>
             </div>
 
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                    onClick={(e) => onPenalty(solve.id, '+2', solve.penalty, e)}
-                    className={`px-1.5 py-0.5 text-[10px] rounded hover:bg-bg-tertiary ${solve.penalty === '+2' ? 'text-orange-500 font-bold' : 'text-text-secondary'}`}
-                >
-                    +2
-                </button>
-                <button
-                    onClick={(e) => onPenalty(solve.id, 'DNF', solve.penalty, e)}
-                    className={`px-1.5 py-0.5 text-[10px] rounded hover:bg-bg-tertiary ${solve.penalty === 'DNF' ? 'text-red-500 font-bold' : 'text-text-secondary'}`}
-                >
-                    DNF
-                </button>
-                <button
-                    onClick={(e) => onCopy(solve.scramble, e)}
-                    className="p-1.5 text-text-secondary hover:text-text-primary rounded hover:bg-bg-tertiary"
-                    title="Copy Scramble"
-                >
-                    <Copy className="w-3 h-3" />
-                </button>
-                <button
-                    onClick={(e) => onDelete(solve.id, e)}
-                    className="p-1.5 text-text-secondary hover:text-red-500 rounded hover:bg-bg-tertiary"
-                    title="Delete Solve"
-                >
-                    <Trash2 className="w-3 h-3" />
-                </button>
-            </div>
+            {/* Expanded Details */}
+            {expanded && (
+                <div className="px-4 pb-3 pt-1 flex flex-col gap-2 animate-in slide-in-from-top-1 duration-200">
+                    {/* Date */}
+                    <div className="text-[10px] text-text-secondary">
+                        {new Date(solve.date).toLocaleString(undefined, {
+                            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                        })}
+                    </div>
+
+                    {/* Scramble */}
+                    <div
+                        onClick={(e) => onCopy(solve.scramble, e)}
+                        className="text-[11px] font-mono text-text-secondary/70 break-all leading-normal bg-black/20 p-2 rounded cursor-pointer hover:bg-black/30 hover:text-text-primary transition-colors"
+                        title="Click to copy"
+                    >
+                        {solve.scramble}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-between pt-1">
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={(e) => onPenalty(solve.id, '+2', solve.penalty, e)}
+                                className={`px-2 py-1 text-xs rounded border border-border/50 hover:bg-bg-tertiary transition-colors ${solve.penalty === '+2' ? 'bg-orange-500/10 text-orange-500 border-orange-500/50' : 'text-text-secondary'}`}
+                            >
+                                +2
+                            </button>
+                            <button
+                                onClick={(e) => onPenalty(solve.id, 'DNF', solve.penalty, e)}
+                                className={`px-2 py-1 text-xs rounded border border-border/50 hover:bg-bg-tertiary transition-colors ${solve.penalty === 'DNF' ? 'bg-red-500/10 text-red-500 border-red-500/50' : 'text-text-secondary'}`}
+                            >
+                                DNF
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={(e) => onDelete(solve.id, e)}
+                            className="p-1.5 text-text-secondary hover:text-red-500 rounded hover:bg-bg-tertiary transition-colors"
+                            title="Delete Solve"
+                        >
+                            <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
