@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import Topbar from './Topbar';
 import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
+import SessionsSidebar from './SessionsSidebar';
 import { useSolves } from '../contexts/SolvesContext';
 import { useConfirm } from '../contexts/ConfirmationContext';
 
@@ -190,7 +191,7 @@ export default function Layout() {
                 }
             };
 
-            if (e.key === 's') handleNav('/sessions');
+            if (e.key === 's') handleNav('/data');
             if (e.key === 'a') handleNav('/account');
             if (e.key === 'c') handleNav('/');
             if (e.key === 'd') handleNav('/daily');
@@ -256,7 +257,11 @@ export default function Layout() {
                             className="absolute top-0 left-[-3px] w-1.5 h-full cursor-col-resize hover:bg-accent/50 z-10 transition-colors delay-75"
                             onMouseDown={startResizingRight}
                         />
-                        <RightSidebar collapsed={isRightCollapsed} onToggleCollapse={toggleRightSidebar} />
+                        {location.pathname === '/data' ? (
+                            <SessionsSidebar collapsed={isRightCollapsed} onToggleCollapse={toggleRightSidebar} />
+                        ) : (
+                            <RightSidebar collapsed={isRightCollapsed} onToggleCollapse={toggleRightSidebar} />
+                        )}
                     </div>
                 )}
             </div>

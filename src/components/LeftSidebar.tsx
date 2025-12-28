@@ -1,4 +1,4 @@
-import { Box, BarChart2, Radio, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Calendar, Info, History } from 'lucide-react';
+import { Box, BarChart2, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Calendar, Info } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useSolves } from '../contexts/SolvesContext';
@@ -13,8 +13,6 @@ interface LeftSidebarProps {
 const navItems = [
     { name: 'Cube', icon: Box, path: '/' },
     { name: 'Daily', icon: Calendar, path: '/daily' },
-    { name: 'Sessions', icon: History, path: '/sessions' },
-    { name: 'Live', icon: Radio, path: '/live' },
     { name: 'Data', icon: BarChart2, path: '/data' },
     { name: 'About', icon: Info, path: '/about' },
 ];
@@ -42,7 +40,7 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
             {/* Navigation Items */}
             <ul className="flex flex-col gap-1 px-2 pt-2 flex-1">
                 {navItems.map((item) => {
-                    const isItemLocked = (!user && ['Daily', 'Sessions', 'Data'].includes(item.name));
+                    const isItemLocked = (!user && ['Daily', 'Data'].includes(item.name));
 
                     return (
                         <li key={item.name}>

@@ -16,6 +16,7 @@ export interface Solve {
     inspectionTime?: number;
     inspectionPenalty?: 'none' | '+2' | 'DNF';
     daily?: string | null; // ID of the daily scramble if applicable
+    scrambleType?: string; // e.g. '333', '444', 'clock'
 }
 
 interface Stats {
@@ -153,7 +154,8 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
                         inspectionPenalty: data.inspectionPenalty,
                         daily: data.daily,
                         sessionId: data.sessionId,
-                        userId: data.userId
+                        userId: data.userId,
+                        scrambleType: data.scrambleType || '333'
                     };
 
                     setSolves(prev => {

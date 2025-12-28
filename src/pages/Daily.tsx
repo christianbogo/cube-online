@@ -142,6 +142,9 @@ export default function Daily() {
                             Instead, your next daily attempt effectively "mines" the backlog, with a higher chance
                             of discovering recent scrambles.
                         </p>
+                        <p className="text-sm text-text-secondary leading-relaxed mt-2 text-yellow-500/80">
+                            Daily scrambles are currently only available for 3x3 puzzles.
+                        </p>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4">

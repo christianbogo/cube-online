@@ -10,8 +10,6 @@ import Daily from './pages/Daily';
 import Data from './pages/Data';
 import Account from './pages/Account';
 import About from './pages/About';
-import Live from './pages/Live';
-import Sessions from './pages/Sessions';
 
 function App() {
   return (
@@ -27,9 +25,7 @@ function App() {
                     <Route path="daily" element={<Daily />} />
                     <Route path="data" element={<Data />} />
                     <Route path="data/:type/:id" element={<Data />} />
-                    <Route path="sessions" element={<Sessions />} />
                     <Route path="about" element={<About />} />
-                    <Route path="live" element={<Live />} />
                     <Route path="account" element={<Account />} />
                   </Route>
                 </Routes>

@@ -389,8 +389,8 @@ const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onC
                     {/* Scramble */}
                     <div
                         onClick={handleCopy}
-                        className={`text-[11px] font-mono break-all leading-normal bg-black/20 p-2 rounded cursor-pointer transition-colors
-                            ${isCopied ? 'text-green-500 bg-green-500/10' : 'text-text-secondary/70 hover:bg-black/30 hover:text-text-primary'}`}
+                        className={`text-[11px] font-mono break-all leading-normal bg-black/5 dark:bg-black/20 p-2 rounded cursor-pointer transition-colors
+                            ${isCopied ? 'text-green-500 bg-green-500/10' : 'text-text-primary/80 dark:text-text-secondary/70 hover:bg-black/10 dark:hover:bg-black/30 hover:text-text-primary'}`}
                         title="Click to copy"
                     >
                         {isCopied ? 'Copied to clipboard!' : solve.scramble}
