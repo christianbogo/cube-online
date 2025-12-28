@@ -1,14 +1,18 @@
-import { Settings, Check, X, LogOut, Info, Trash2, Download, Upload, TriangleAlert } from 'lucide-react';
+import { Settings, Check, X, LogOut, Info, Trash2, Download, Upload, TriangleAlert, Star, Ban, Users } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 // import { useSolves } from '../contexts/SolvesContext'; // Unused
 import { useState, useEffect, useRef } from 'react';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export default function Account() {
     const { settings, updateSettings } = useSettings();
-    const { user, signInWithGoogle, emailSignUp, emailSignIn, logout } = useAuth();
+    const { user, signInWithGoogle, emailSignUp, emailSignIn, logout, toggleStarUser, toggleBlockUser } = useAuth();
+
+    // Social Data State
+    const [starredProfiles, setStarredProfiles] = useState<{ uid: string, username: string, color: string }[]>([]);
+    const [blockedProfiles, setBlockedProfiles] = useState<{ uid: string, username: string, color: string }[]>([]);
 
     // Profile State
     const [username, setUsername] = useState('');
@@ -38,6 +42,44 @@ export default function Account() {
             setSelectedColor(user.color || '#3b82f6');
         }
     }, [user]);
+
+    // Fetch Social Profiles
+    useEffect(() => {
+        const fetchProfiles = async () => {
+            if (!user) return;
+
+            // Fetch Starred
+            if (user.starredUsers?.length) {
+                const profiles = await Promise.all(user.starredUsers.map(async (uid) => {
+                    const snap = await getDoc(doc(db, 'users', uid));
+                    if (snap.exists()) {
+                        const d = snap.data();
+                        return { uid, username: d.username, color: d.color };
+                    }
+                    return null;
+                }));
+                setStarredProfiles(profiles.filter(p => p !== null) as any[]);
+            } else {
+                setStarredProfiles([]);
+            }
+
+            // Fetch Blocked
+            if (user.blockedUsers?.length) {
+                const profiles = await Promise.all(user.blockedUsers.map(async (uid) => {
+                    const snap = await getDoc(doc(db, 'users', uid));
+                    if (snap.exists()) {
+                        const d = snap.data();
+                        return { uid, username: d.username, color: d.color };
+                    }
+                    return null;
+                }));
+                setBlockedProfiles(profiles.filter(p => p !== null) as any[]);
+            } else {
+                setBlockedProfiles([]);
+            }
+        };
+        fetchProfiles();
+    }, [user?.starredUsers, user?.blockedUsers, user]);
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {

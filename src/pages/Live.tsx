@@ -5,7 +5,7 @@ import { useSolves, type Solve } from '../contexts/SolvesContext';
 import { useSession } from '../contexts/SessionContext';
 import { useAuth } from '../contexts/AuthContext';
 import Toast from '../components/Toast';
-import { EyeOff, Info, Minus, Plus, Search, Star, Ban } from 'lucide-react';
+import { EyeOff, Info, Minus, Plus, Search, Star, Ban, ChevronUp, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { rtdb } from '../lib/firebase';
 import { ref, onDisconnect, set, onValue, remove } from 'firebase/database';
@@ -13,13 +13,21 @@ import { formatTime } from '../utils/formatTime';
 
 type TimerState = 'IDLE' | 'INSPECTION' | 'PRIMING' | 'RUNNING' | 'SOLVED';
 
+interface SimpleSolve {
+    time: number;
+    penalty: 'none' | '+2' | 'DNF';
+    inspectionPenalty?: 'none' | '+2' | 'DNF';
+    daily: string | null;
+    timestamp: number;
+}
+
 interface LiveUser {
     uid: string;
     username: string;
     color: string;
     status: TimerState;
     lastSolveTime?: number;
-    last3Solves?: string[]; // Pre-formatted strings for simplicity
+    recentSolves?: SimpleSolve[];
     timestamp: number;
 }
 
@@ -33,6 +41,7 @@ export default function Live() {
     // Live User Data
     const [connectedUsers, setConnectedUsers] = useState<LiveUser[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const [bottomBarCollapsed, setBottomBarCollapsed] = useState(false);
 
     useEffect(() => {
         if (user && !currentSessionId) {
@@ -59,17 +68,15 @@ export default function Live() {
     const inspectionStartTimeRef = useRef<number | null>(null);
     const inspectionUsedRef = useRef<number>(0);
 
-    // Helper to format solves for broadcast
-    const formatLast3 = useCallback(() => {
-        return solves.slice(0, 3).map(s => {
-            if (s.penalty === 'DNF' || s.inspectionPenalty === 'DNF') return 'DNF';
-            let t = s.time;
-            if (s.penalty === '+2') t += 2000;
-            if (s.inspectionPenalty === '+2') t += 2000;
-            let str = formatTime(t);
-            if (s.penalty === '+2' || s.inspectionPenalty === '+2') str += '+';
-            return str;
-        });
+    // Helper to format solves for broadcast (Last 4)
+    const formatRecentSolves = useCallback((): SimpleSolve[] => {
+        return solves.slice(0, 4).map(s => ({
+            time: s.time,
+            penalty: s.penalty,
+            inspectionPenalty: s.inspectionPenalty,
+            daily: s.daily || null,
+            timestamp: new Date(s.date).getTime()
+        }));
     }, [solves]);
 
     // Firebase Presence Logic
@@ -77,6 +84,7 @@ export default function Live() {
         if (!user) return;
 
         const userPresenceRef = ref(rtdb, `presence/${user.uid}`);
+        const currentRecent = formatRecentSolves();
 
         // Set initial data and onDisconnect
         const updatePresence = () => {
@@ -86,7 +94,7 @@ export default function Live() {
                 color: user.color || '#3b82f6',
                 status: timerState,
                 lastSolveTime: solves.length > 0 ? solves[0].time : undefined,
-                last3Solves: formatLast3(),
+                recentSolves: currentRecent,
                 timestamp: Date.now()
             };
             set(userPresenceRef, data);
@@ -102,14 +110,14 @@ export default function Live() {
             color: user.color || '#3b82f6',
             status: timerState,
             lastSolveTime: solves.length > 0 ? solves[0].time : undefined,
-            last3Solves: formatLast3(),
+            recentSolves: currentRecent,
             timestamp: Date.now()
         });
 
         return () => {
             remove(userPresenceRef);
         };
-    }, [user, timerState, solves, formatLast3]);
+    }, [user, timerState, solves, formatRecentSolves]);
 
     // Listen for other users
     useEffect(() => {
@@ -328,22 +336,32 @@ export default function Live() {
     };
 
     // Filter and Sort Connected Users
-    const visibleUsers = useMemo(() => {
-        if (!user) return [];
+    const { favoriteUsers, communityUsers } = useMemo(() => {
+        if (!user) return { favoriteUsers: [], communityUsers: [] };
         const starred = user.starredUsers || [];
         const blocked = user.blockedUsers || [];
         const q = searchQuery.toLowerCase();
 
-        return connectedUsers
-            .filter(u => !blocked.includes(u.uid))
-            .filter(u => u.username.toLowerCase().includes(q))
-            .sort((a, b) => {
-                const aStarred = starred.includes(a.uid);
-                const bStarred = starred.includes(b.uid);
-                if (aStarred && !bStarred) return -1;
-                if (!aStarred && bStarred) return 1;
-                return 0; // Keep roughly insertion order or maybe timestamp sort?
-            });
+        // Base filter: Not blocked, Main User not in list (handled by connectedUsers init logic but safe to double check if needed)
+        // connectedUsers already filters out self.
+
+        const allowed = connectedUsers.filter(u => !blocked.includes(u.uid));
+
+        // Group
+        const favs = allowed.filter(u => starred.includes(u.uid));
+        const comms = allowed.filter(u => !starred.includes(u.uid));
+
+        // Filter Community by Search (Favorites always show? Or search filters both? "Search... to find users" usually implies general find)
+        // Let's filter community only by search to keep favorites accessible, or filter both if user intends to find specific person.
+        // Usually favorites are "pinned", so maybe they stay?
+        // Let's filter both for consistency if query exists.
+
+        const filterFn = (u: LiveUser) => u.username.toLowerCase().includes(q);
+
+        return {
+            favoriteUsers: favs.filter(filterFn),
+            communityUsers: comms.filter(filterFn)
+        };
     }, [connectedUsers, user, searchQuery]);
 
     const handleStar = (targetUid: string, e: React.MouseEvent) => {
@@ -359,9 +377,28 @@ export default function Live() {
     };
 
     return (
-        <div className="flex flex-col h-full relative">
+        <div className="flex flex-col h-full relative overflow-hidden">
+
+            {/* FAVORITES BAR (Top) */}
+            {favoriteUsers.length > 0 && (
+                <div className="flex-shrink-0 border-b border-border bg-background/50 backdrop-blur-sm p-4 flex gap-4 overflow-x-auto items-center h-40">
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500/20" /> {/* Subtle indicator this is Favs */}
+                    {favoriteUsers.map(u => (
+                        <UserCard
+                            key={u.uid}
+                            user={u}
+                            isStarred={true}
+                            onStar={handleStar}
+                            onBlock={handleBlock}
+                        />
+                    ))}
+                </div>
+            )}
+
+
+            {/* MAIN TIMER AREA */}
             <div
-                className="flex-1 flex flex-col items-center justify-center select-none"
+                className="flex-1 flex flex-col items-center justify-center select-none min-h-0"
                 style={{ opacity: (timerState === 'PRIMING' && primingProgress < 1) ? 0.6 : 1 }}
             >
                 {/* Scramble Toolbar & Content */}
@@ -407,6 +444,7 @@ export default function Live() {
                 )}
 
                 <div className="text-center">
+                    {/* Timer Display Logic Same as Before */}
                     {timerState === 'INSPECTION' ? (
                         <h1 className={`text-9xl font-normal font-mono ${getInspectionColor()}`}>
                             {Math.abs(inspectionTime)}
@@ -451,91 +489,153 @@ export default function Live() {
                 />
             </div>
 
-            {/* LIVE BAR */}
-            <div className="h-40 border-t border-border bg-background/50 backdrop-blur-sm flex flex-col flex-shrink-0">
-                {/* Search / Controls Row */}
-                <div className="flex items-center gap-2 px-4 pt-2 pb-1">
-                    <div className="relative w-48">
-                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary" />
+            {/* FLOATING CONTROLS FOR BOTTOM BAR */}
+            <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center pointer-events-none">
+                {/* Search Bar & Toggle - Centered above the bar */}
+                <div className="pointer-events-auto flex flex-col items-center gap-2 mb-[calc(theme(height.40)+8px)] transition-all duration-300 transform"
+                    style={{ transform: bottomBarCollapsed ? 'translateY(160px)' : 'translateY(0)' }}>
+
+                    <div className="flex items-center gap-2 bg-bg-secondary/90 backdrop-blur border border-border rounded-full p-1 pl-3 pr-2 shadow-lg">
+                        <Search className="w-3.5 h-3.5 text-text-secondary" />
                         <input
                             type="text"
                             placeholder="Find user..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full bg-surface-elevation-1 rounded pl-8 pr-2 py-1 text-xs border border-border focus:outline-none focus:border-accent text-text-primary"
+                            className="bg-transparent w-32 text-xs focus:outline-none text-text-primary placeholder:text-text-secondary/50"
                         />
+                        <div className="w-[1px] h-4 bg-border mx-1" />
+                        <button
+                            onClick={() => setBottomBarCollapsed(!bottomBarCollapsed)}
+                            className="hover:bg-bg-tertiary p-1 rounded-full text-text-secondary hover:text-text-primary transition-colors"
+                        >
+                            {bottomBarCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
                     </div>
                 </div>
+            </div>
 
-                {/* Users Scroll Row */}
-                <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar flex items-center gap-3 px-4 pb-2">
-                    {visibleUsers.length === 0 && (
-                        <div className="text-text-secondary text-sm italic w-full text-center opacity-50">
-                            {searchQuery ? 'No matching users found.' : 'No other users connected...'}
-                        </div>
-                    )}
-                    {visibleUsers.map(u => {
-                        const isStarred = user?.starredUsers?.includes(u.uid);
+            {/* COMMUNITY BAR (Bottom) */}
+            <div
+                className={`flex-shrink-0 border-t border-border bg-background/50 backdrop-blur-sm flex gap-4 overflow-x-auto items-center transition-all duration-300 ease-in-out relative z-10
+                ${bottomBarCollapsed ? 'h-0 opacity-0' : 'h-40 p-4'}`}
+            >
+                {communityUsers.length === 0 && (
+                    <div className="text-text-secondary text-sm italic w-full text-center opacity-50">
+                        {searchQuery ? 'No matching users found.' : 'No other users connected...'}
+                    </div>
+                )}
+                {communityUsers.map(u => (
+                    <UserCard
+                        key={u.uid}
+                        user={u}
+                        isStarred={false}
+                        onStar={handleStar}
+                        onBlock={handleBlock}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+
+// --- SUB COMPONENTS ---
+
+const UserCard = ({ user, isStarred, onStar, onBlock }: {
+    user: LiveUser,
+    isStarred: boolean,
+    onStar: (id: string, e: React.MouseEvent) => void,
+    onBlock: (id: string, e: React.MouseEvent) => void
+}) => {
+
+    // Determine Border Color based on Status
+    const getBorderColor = (status: TimerState) => {
+        switch (status) {
+            case 'RUNNING': return 'border-green-500';
+            case 'INSPECTION': return 'border-orange-500';
+            case 'SOLVED': return 'border-blue-500';
+            case 'PRIMING': return 'border-red-500'; // Or generic ready color?
+            default: return 'border-border'; // Idle
+        }
+    };
+
+    // Format Solves Display
+    // 0: Most Recent (Large)
+    // 1-3: Older (Small)
+    const solves = user.recentSolves || [];
+    const recent = solves[0];
+    const history = solves.slice(1, 4);
+
+    const formatTimeStr = (s: SimpleSolve) => {
+        if (s.penalty === 'DNF' || s.inspectionPenalty === 'DNF') return 'DNF';
+        let t = s.time;
+        if (s.penalty === '+2') t += 2000;
+        if (s.inspectionPenalty === '+2') t += 2000;
+        let str = formatTime(t);
+        if (s.penalty === '+2' || s.inspectionPenalty === '+2') str += '+';
+        return str;
+    };
+
+    const isDaily = (s: SimpleSolve | undefined) => !!s?.daily;
+
+    return (
+        <div className={`flex-shrink-0 w-44 h-32 bg-surface-elevation-1 rounded-xl border-2 flex flex-col relative group hover:shadow-lg transition-all
+            ${getBorderColor(user.status)}`}
+        >
+            {/* Header: Avatar + Name + Actions */}
+            <div className="flex items-center justify-between p-2 pl-3 pb-1">
+                <div className="flex items-center gap-2 overflow-hidden">
+                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: user.color }} />
+                    <span className="font-semibold text-text-primary truncate text-xs">{user.username}</span>
+                    {isStarred && <Star className="w-3 h-3 text-yellow-500 fill-yellow-500 flex-shrink-0" />}
+                </div>
+
+                {/* Actions (Visible on Hover) */}
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                        onClick={(e) => onStar(user.uid, e)}
+                        className="text-text-secondary hover:text-yellow-500 p-0.5"
+                        title={isStarred ? "Unstar" : "Star User"}
+                    >
+                        <Star className={`w-3.5 h-3.5 ${isStarred ? 'fill-yellow-500 text-yellow-500' : ''}`} />
+                    </button>
+                    <button
+                        onClick={(e) => onBlock(user.uid, e)}
+                        className="text-text-secondary hover:text-red-500 p-0.5"
+                        title="Block User"
+                    >
+                        <Ban className="w-3.5 h-3.5" />
+                    </button>
+                </div>
+            </div>
+
+            {/* Solves Area */}
+            <div className="flex-1 flex flex-col items-center justify-center p-2 pt-0 gap-1">
+
+                {/* Main (Recent) Solve */}
+                {recent ? (
+                    <div className={`text-3xl font-mono font-medium tracking-tight
+                        ${isDaily(recent) ? 'text-accent' : 'text-text-primary'}
+                        ${recent.penalty === 'DNF' ? 'text-red-500' : ''}
+                    `}>
+                        {formatTimeStr(recent)}
+                    </div>
+                ) : (
+                    <div className="text-2xl text-text-secondary/20 font-mono">--.--</div>
+                )}
+
+                {/* History (Small) */}
+                <div className="flex gap-2 mt-1">
+                    {[0, 1, 2].map(i => {
+                        const s = history[i];
+                        if (!s) return <div key={i} className="w-8 h-4 bg-black/10 rounded" />; // Placeholder
                         return (
-                            <div key={u.uid} className="flex-shrink-0 w-44 h-24 bg-surface-elevation-1 rounded-lg border border-border flex flex-col relative group hover:border-text-secondary/50 transition-colors">
-
-                                {/* Status Strip */}
-                                <div className={`absolute top-0 bottom-0 left-0 w-1 rounded-l-lg 
-                                    ${u.status === 'RUNNING' ? 'bg-green-500' :
-                                        u.status === 'INSPECTION' ? 'bg-orange-500' :
-                                            u.status === 'SOLVED' ? 'bg-blue-500' : 'bg-gray-500/50'
-                                    }`}
-                                />
-
-                                {/* Header: Avatar + Name + Actions */}
-                                <div className="flex items-center justify-between p-2 pl-3">
-                                    <div className="flex items-center gap-2 overflow-hidden">
-                                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: u.color }} />
-                                        <span className="font-semibold text-text-primary truncate text-xs">{u.username}</span>
-                                        {isStarred && <Star className="w-3 h-3 text-yellow-500 fill-yellow-500 flex-shrink-0" />}
-                                    </div>
-
-                                    {/* Actions (Visible on Hover) */}
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                            onClick={(e) => handleStar(u.uid, e)}
-                                            className="text-text-secondary hover:text-yellow-500 p-0.5"
-                                            title={isStarred ? "Unstar" : "Star User"}
-                                        >
-                                            <Star className={`w-3.5 h-3.5 ${isStarred ? 'fill-yellow-500 text-yellow-500' : ''}`} />
-                                        </button>
-                                        <button
-                                            onClick={(e) => handleBlock(u.uid, e)}
-                                            className="text-text-secondary hover:text-red-500 p-0.5"
-                                            title="Block User"
-                                        >
-                                            <Ban className="w-3.5 h-3.5" />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Content: Status & Last Solves */}
-                                <div className="px-2 pl-3 pb-2 flex flex-col justify-between flex-1">
-                                    <div className="text-[10px] text-text-secondary uppercase tracking-wider">
-                                        {u.status === 'IDLE' ? 'Idle' :
-                                            u.status === 'RUNNING' ? 'Solving...' :
-                                                u.status === 'INSPECTION' ? 'Inspecting' :
-                                                    u.status === 'SOLVED' ? 'Solved' : 'Ready'}
-                                    </div>
-
-                                    {/* Last 3 Solves */}
-                                    <div className="flex gap-1 mt-auto">
-                                        {u.last3Solves && u.last3Solves.length > 0 ? (
-                                            u.last3Solves.map((s, idx) => (
-                                                <div key={idx} className="bg-black/20 text-[10px] px-1.5 py-0.5 rounded font-mono text-text-primary/80">
-                                                    {s}
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <div className="text-[10px] text-text-secondary/30 italic">No recent solves</div>
-                                        )}
-                                    </div>
-                                </div>
+                            <div key={i} className={`text-[10px] font-mono px-1 rounded
+                                ${isDaily(s) ? 'text-accent bg-accent/10' : 'text-text-secondary bg-black/20'}
+                                ${s.penalty === 'DNF' ? 'text-red-500' : ''}
+                            `}>
+                                {formatTimeStr(s)}
                             </div>
                         );
                     })}
@@ -543,4 +643,4 @@ export default function Live() {
             </div>
         </div>
     );
-}
+};
