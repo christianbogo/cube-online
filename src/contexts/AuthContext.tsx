@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             uid: firebaseUser.uid,
                             email: firebaseUser.email,
                             username: firebaseUser.displayName || 'CubingUser',
-                            color: '#3b82f6'
+                            color: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'][Math.floor(Math.random() * 10)]
                         };
                     }
                     setUser(userData);

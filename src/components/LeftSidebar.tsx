@@ -42,7 +42,7 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
             {/* Navigation Items */}
             <ul className="flex flex-col gap-1 px-2 pt-2 flex-1">
                 {navItems.map((item) => {
-                    const isItemLocked = (item.name === 'Live') || (!user && ['Daily', 'Sessions', 'Data'].includes(item.name));
+                    const isItemLocked = (!user && ['Daily', 'Sessions', 'Data'].includes(item.name));
 
                     return (
                         <li key={item.name}>
