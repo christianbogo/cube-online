@@ -82,8 +82,10 @@ export const calculateBestSingle = (solves: Solve[]): number | null => {
     return validSingles.length > 0 ? Math.min(...validSingles) : null;
 };
 
+import { formatTime as formatTimeUtil } from './formatTime';
+
 export const formatTime = (ms: number | 'DNF' | null): string => {
     if (ms === null) return '-';
     if (ms === 'DNF') return 'DNF';
-    return (ms / 1000).toFixed(2);
+    return formatTimeUtil(ms);
 };

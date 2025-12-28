@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import Toast from '../components/Toast';
 import { EyeOff, Info, Minus, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { formatTime } from '../utils/formatTime';
 
 type TimerState = 'IDLE' | 'INSPECTION' | 'PRIMING' | 'RUNNING' | 'SOLVED';
 
@@ -319,7 +320,7 @@ export default function Cube() {
 
 
     // Helpers
-    const formatTime = (ms: number) => (ms / 1000).toFixed(2);
+    // const formatTime // Imported now
 
     const getInspectionColor = () => {
         if (inspectionTime > 7) return 'text-text-primary'; // 15-8 (Black/Default)

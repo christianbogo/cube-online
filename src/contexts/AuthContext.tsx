@@ -6,7 +6,7 @@ import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword
 } from 'firebase/auth';
-import { doc, onSnapshot, query, collection, where, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
+import { doc, onSnapshot, query, collection, where, getDocs, writeBatch, deleteDoc, updateDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../lib/firebase';
 
 interface UserData {
@@ -14,6 +14,8 @@ interface UserData {
     email: string | null;
     username: string;
     color: string;
+    starredUsers?: string[];
+    blockedUsers?: string[];
 }
 
 interface AuthContextType {
@@ -24,6 +26,8 @@ interface AuthContextType {
     emailSignIn: (email: string, pass: string) => Promise<any>;
     logout: () => Promise<void>;
     deleteUserAccount?: () => Promise<void>;
+    toggleStarUser: (targetUid: string) => Promise<void>;
+    toggleBlockUser: (targetUid: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,7 +57,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             uid: firebaseUser.uid,
                             email: firebaseUser.email,
                             username: firebaseUser.displayName || 'CubingUser',
-                            color: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'][Math.floor(Math.random() * 10)]
+                            color: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'][Math.floor(Math.random() * 10)],
+                            starredUsers: [],
+                            blockedUsers: []
                         };
                     }
                     setUser(userData);
@@ -125,8 +131,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
+    const toggleStarUser = async (targetUid: string) => {
+        if (!user) return;
+        const currentStarred = user.starredUsers || [];
+        const isStarred = currentStarred.includes(targetUid);
+        let newStarred;
+        if (isStarred) {
+            newStarred = currentStarred.filter(id => id !== targetUid);
+        } else {
+            newStarred = [...currentStarred, targetUid];
+        }
+        await updateDoc(doc(db, 'users', user.uid), { starredUsers: newStarred });
+    };
+
+    const toggleBlockUser = async (targetUid: string) => {
+        if (!user) return;
+        const currentBlocked = user.blockedUsers || [];
+        const isBlocked = currentBlocked.includes(targetUid);
+        let newBlocked;
+        if (isBlocked) {
+            newBlocked = currentBlocked.filter(id => id !== targetUid);
+        } else {
+            newBlocked = [...currentBlocked, targetUid];
+        }
+        await updateDoc(doc(db, 'users', user.uid), { blockedUsers: newBlocked });
+    };
+
     return (
-        <AuthContext.Provider value={{ user, loading, signInWithGoogle, emailSignUp, emailSignIn, logout, deleteUserAccount }}>
+        <AuthContext.Provider value={{ user, loading, signInWithGoogle, emailSignUp, emailSignIn, logout, deleteUserAccount, toggleStarUser, toggleBlockUser }}>
             {children}
         </AuthContext.Provider>
     );

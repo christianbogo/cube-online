@@ -85,14 +85,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const now = Date.now();
         const diffMinutes = (now - lastSolveTime) / (1000 * 60);
 
-        // New Day Check
-        const lastDate = new Date(lastSolveTime);
-        const currentDate = new Date(now);
-        const isDifferentDay = lastDate.getDate() !== currentDate.getDate() ||
-            lastDate.getMonth() !== currentDate.getMonth() ||
-            lastDate.getFullYear() !== currentDate.getFullYear();
+        // New Day Check - Removed strict enforcement
+        // const lastDate = new Date(lastSolveTime);
+        // const currentDate = new Date(now);
+        // const isDifferentDay = ...
 
-        if (diffMinutes > 60 || isDifferentDay) {
+        if (diffMinutes > 60) {
             return { isNewSessionNeeded: true };
         }
         return { isNewSessionNeeded: false };

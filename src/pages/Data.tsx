@@ -6,6 +6,7 @@ import { Hash, Activity, AlertTriangle } from 'lucide-react';
 import { type Solve, useSolves } from '../contexts/SolvesContext';
 import { detectOutliers } from '../utils/analysis';
 import { useAuth } from '../contexts/AuthContext';
+import { formatTime } from '../utils/formatTime';
 
 export default function Data() {
     const { solves, stats } = useSolves();
@@ -22,10 +23,10 @@ export default function Data() {
     }, [solves, user]);
 
     // Simple formatting for time
-    const formatTime = (time: number | 'DNF' | null) => {
+    const formatTimeDisplay = (time: number | 'DNF' | null) => {
         if (time === null) return '-';
         if (time === 'DNF') return 'DNF';
-        return (time / 1000).toFixed(2) + 's';
+        return formatTime(time);
     };
 
     // Detail View Logic
@@ -51,7 +52,7 @@ export default function Data() {
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <p className="text-sm text-text-secondary">Time</p>
-                            <p className="text-3xl font-mono text-accent">{formatTime((detailItem as Solve).time)}</p>
+                            <p className="text-3xl font-mono text-accent">{formatTimeDisplay((detailItem as Solve).time)}</p>
                         </div>
                         <div>
                             <p className="text-sm text-text-secondary">Date</p>
@@ -99,7 +100,7 @@ export default function Data() {
             header: 'Time',
             accessor: (s: Solve) => (
                 <span className={`font-mono font-medium ${s.penalty === 'DNF' ? 'text-red-500' : ''}`}>
-                    {formatTime(s.penalty === 'DNF' ? 'DNF' : s.time)}
+                    {formatTimeDisplay(s.penalty === 'DNF' ? 'DNF' : s.time)}
                 </span>
             )
         },
@@ -151,8 +152,8 @@ export default function Data() {
 
     const statsColumns = [
         { header: 'Type', accessor: 'type' as const },
-        { header: 'Current', accessor: (row: any) => formatTime(row.current) },
-        { header: 'Best', accessor: (row: any) => <span className="font-bold text-accent">{formatTime(row.best)}</span> },
+        { header: 'Current', accessor: (row: any) => formatTimeDisplay(row.current) },
+        { header: 'Best', accessor: (row: any) => <span className="font-bold text-accent">{formatTimeDisplay(row.best)}</span> },
     ];
 
     const solveColumnsWithDaily = useMemo(() => [
