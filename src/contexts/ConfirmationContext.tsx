@@ -41,9 +41,7 @@ export function ConfirmationProvider({ children }: { children: ReactNode }) {
                         aria-modal="true"
                     >
                         <div className="p-6 flex flex-col items-center text-center gap-4">
-                            <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center text-accent">
-                                <AlertCircle className="w-6 h-6" />
-                            </div>
+
                             <h3 className="text-lg font-semibold text-text-primary">Confirmation</h3>
                             <p className="text-sm text-text-secondary leading-relaxed">
                                 {message}

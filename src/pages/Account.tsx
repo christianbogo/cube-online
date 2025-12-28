@@ -28,23 +28,6 @@ export default function Account() {
 
     // Sync & Local Data Settings State
     const { trimSolves } = useSolves();
-    const [localLimitInput, setLocalLimitInput] = useState(settings.localDataSettings?.localLimit || 250);
-
-    useEffect(() => {
-        setLocalLimitInput(settings.localDataSettings?.localLimit || 250);
-    }, [settings.localDataSettings]);
-
-    const saveLocalLimit = () => {
-        if (localLimitInput !== settings.localDataSettings.localLimit) {
-            if (confirm(`Saving this limit will permanently delete local solves exceeding ${localLimitInput}. This cannot be undone. Are you sure?`)) {
-                updateSettings({
-                    localDataSettings: { ...settings.localDataSettings, localLimit: localLimitInput }
-                });
-                // Trigger trim immediately
-                trimSolves(localLimitInput);
-            }
-        }
-    };
 
     // Initial load
     useEffect(() => {
@@ -315,42 +298,7 @@ export default function Account() {
                         />
                     </SettingRow>
 
-                    <SettingRow label="Save All Local Solves" description="Keep entire history in browser storage.">
-                        <input
-                            type="checkbox"
-                            className="toggle-checkbox w-5 h-5 accent-accent cursor-pointer"
-                            checked={settings.localDataSettings.saveAll}
-                            onChange={(e) => updateSettings({
-                                localDataSettings: { ...settings.localDataSettings, saveAll: e.target.checked }
-                            })}
-                        />
-                    </SettingRow>
 
-                    {!settings.localDataSettings.saveAll && (
-                        <div className="animate-in fade-in slide-in-from-top-1">
-                            <SettingRow label="Local Storage Limit" description="Max number of solves to keep locally.">
-                                <div className="flex items-center gap-2">
-                                    <div className="flex items-center gap-1 font-mono text-sm">
-                                        <input
-                                            type="number"
-                                            value={localLimitInput}
-                                            onChange={(e) => setLocalLimitInput(parseInt(e.target.value) || 0)}
-                                            className="bg-transparent border-b border-border text-text-primary w-16 text-right focus:outline-none focus:border-accent"
-                                        />
-                                        <span className="text-text-secondary">solves</span>
-                                    </div>
-                                    {localLimitInput !== settings.localDataSettings.localLimit && (
-                                        <button
-                                            onClick={saveLocalLimit}
-                                            className="ml-2 text-xs bg-accent text-white px-2 py-1 rounded hover:bg-accent/90"
-                                        >
-                                            Save
-                                        </button>
-                                    )}
-                                </div>
-                            </SettingRow>
-                        </div>
-                    )}
 
                     <SettingRow label="Priming Length" description="Seconds to hold spacebar to ready (0.0 - 3.0s).">
                         <div className="flex items-center gap-1 font-mono text-sm">

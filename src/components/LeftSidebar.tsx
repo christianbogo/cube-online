@@ -1,6 +1,8 @@
 import { Box, BarChart2, Radio, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Calendar, Info, History } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useSolves } from '../contexts/SolvesContext';
+import { useConfirm } from '../contexts/ConfirmationContext';
 
 interface LeftSidebarProps {
     collapsed: boolean;
@@ -19,6 +21,20 @@ const navItems = [
 export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebarProps) {
     const { theme, setTheme } = useTheme();
 
+    const { isPrivateMode, togglePrivateMode } = useSolves();
+    const { confirm: confirmAction } = useConfirm();
+    const navigate = useNavigate();
+
+    const handleNavClick = async (e: React.MouseEvent, path: string) => {
+        if (isPrivateMode) {
+            e.preventDefault();
+            if (await confirmAction('Leave Private Mode?')) {
+                togglePrivateMode();
+                navigate(path);
+            }
+        }
+    };
+
     return (
         <nav className="h-full bg-bg-secondary flex flex-col select-none w-full transition-colors duration-200">
             {/* Navigation Items */}
@@ -27,6 +43,7 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
                     <li key={item.name}>
                         <NavLink
                             to={item.path}
+                            onClick={(e) => handleNavClick(e, item.path)}
                             className={({ isActive }) => `
                                 w-full flex items-center gap-3 p-2 rounded-md transition-colors text-left
                                 ${isActive

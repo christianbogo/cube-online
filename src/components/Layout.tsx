@@ -4,10 +4,14 @@ import Topbar from './Topbar';
 import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
 import { useSolves } from '../contexts/SolvesContext';
+import { useConfirm } from '../contexts/ConfirmationContext';
 
 export default function Layout() {
     const navigate = useNavigate();
     const location = useLocation();
+    const { isPrivateMode, togglePrivateMode } = useSolves();
+    const { confirm: confirmAction } = useConfirm();
+
     // Persistence Helpers
     const getStoredWidth = (key: string, defaultWidth: number) => {
         const stored = localStorage.getItem(key);
@@ -175,14 +179,25 @@ export default function Layout() {
                 }
             }
             // Navigation Shortcuts
-            if (e.key === 's') navigate('/sessions');
-            if (e.key === 'a') navigate('/account');
-            if (e.key === 'c') navigate('/');
-            if (e.key === 'd') navigate('/daily');
+            const handleNav = async (path: string) => {
+                if (isPrivateMode) {
+                    if (await confirmAction('Leave Private Mode?')) {
+                        togglePrivateMode();
+                        navigate(path);
+                    }
+                } else {
+                    navigate(path);
+                }
+            };
+
+            if (e.key === 's') handleNav('/sessions');
+            if (e.key === 'a') handleNav('/account');
+            if (e.key === 'c') handleNav('/');
+            if (e.key === 'd') handleNav('/daily');
         };
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-    }, [navigate, toggleRightSidebar, toggleLeftSidebar]);
+    }, [navigate, toggleRightSidebar, toggleLeftSidebar, isPrivateMode, togglePrivateMode, confirmAction]);
 
     return (
         <div className="h-full flex flex-col bg-bg-primary text-text-primary overflow-hidden">
@@ -210,9 +225,21 @@ export default function Layout() {
 
                     {/* Footer */}
                     <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8">
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 items-center">
                             <span>Online • v0.1.0</span>
                             <SyncIndicator />
+                            {isPrivateMode && (
+                                <button
+                                    onClick={async () => {
+                                        if (await confirmAction('Leave Private Mode?')) {
+                                            togglePrivateMode();
+                                        }
+                                    }}
+                                    className="ml-2 bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20 hover:bg-yellow-500/20 transition-colors uppercase tracking-wider font-bold text-[9px]"
+                                >
+                                    Exit Private Mode
+                                </button>
+                            )}
                         </div>
                         {consoleInfo && (
                             <div className="text-[10px] text-yellow-500/70 truncate max-w-xs font-mono ml-auto" title={consoleInfo}>

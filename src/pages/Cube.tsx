@@ -6,13 +6,14 @@ import { useSession } from '../contexts/SessionContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useConfirm } from '../contexts/ConfirmationContext';
 import Toast from '../components/Toast';
-import { Copy, EyeOff, Info, Minus, Plus, ChevronRight, Check, History } from 'lucide-react';
+import { EyeOff, Info, Minus, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 type TimerState = 'IDLE' | 'INSPECTION' | 'PRIMING' | 'RUNNING' | 'SOLVED';
 
 export default function Cube() {
     const { settings, updateSettings } = useSettings();
+    const { isPrivateMode } = useSolves(); // Destructure isPrivateMode
     const { addSolve, currentScramble, setCurrentScramble } = useSolves();
     const { startNewSession, currentSessionId } = useSession();
     const { user } = useAuth();
@@ -26,20 +27,24 @@ export default function Cube() {
     useEffect(() => {
         if (user && !currentSessionId) {
             startNewSession(false).then(() => {
+                // setAutoSessionToastVisible(true); // Maybe keeps this just for info? User didn't ask to remove THIS toast, just the "asking to start" popup.
+                // Actually, "popups asking to start a new session". 
+                // Let's keep the purely informational "started" toast for lazy creation if it helps, or remove it for cleanliness.
+                // I'll keep it as it's not a "popup asking" (modal/interactive).
                 setAutoSessionToastVisible(true);
                 setTimeout(() => setAutoSessionToastVisible(false), 3000);
             });
         }
 
         // Fetch loot stats
-        if (user) {
+        if (user && !isPrivateMode) { // No loot stats in private mode?
             import('../utils/dailyScramble').then(({ getUserScrambleStats }) => {
                 getUserScrambleStats(user.uid).then(stats => {
                     if (stats) setLootModifier(stats.loot_chance_modifier);
                 });
             });
         }
-    }, [user, currentSessionId, startNewSession]);
+    }, [user, currentSessionId, startNewSession, isPrivateMode]);
 
     const [scramble, setScramble] = useState<string>(currentScramble || 'Generating scramble...');
     const [timerState, setTimerState] = useState<TimerState>('IDLE');
@@ -64,8 +69,8 @@ export default function Cube() {
     // Fetch new scramble
     const generateNewScramble = useCallback(async () => {
         try {
-            // Check for special scramble first if user is logged in
-            if (user) {
+            // Check for special scramble first if user is logged in AND NOT PRIVATE
+            if (user && !isPrivateMode) {
                 //Dynamic import to avoid circular dep issues early on if any
                 const { getDailyScramble } = await import('../utils/dailyScramble');
                 const special = await getDailyScramble(user.uid);
@@ -95,7 +100,7 @@ export default function Cube() {
             setSpecialType('normal');
             setSpecialId(null);
         }
-    }, [setCurrentScramble, user]);
+    }, [setCurrentScramble, user, isPrivateMode]);
 
     useEffect(() => {
         if (!currentScramble) {
@@ -204,14 +209,14 @@ export default function Cube() {
             daily: specialType !== 'normal' ? specialId : null,
             inspectionPenalty: finalInspectionPenalty
         });
-        if (specialType !== 'normal' && user && specialId) {
+        if (specialType !== 'normal' && user && specialId && !isPrivateMode) {
             // Dynamic import
             import('../utils/dailyScramble').then(({ markScrambleComplete }) => {
                 markScrambleComplete(user.uid, specialType, specialId);
             });
         }
         generateNewScramble();
-    }, [time, scramble, addSolve, generateNewScramble, inspectionTime, specialType, user, specialId]);
+    }, [time, scramble, addSolve, generateNewScramble, inspectionTime, specialType, user, specialId, isPrivateMode]);
 
     const handleKeyDown = useCallback((e: KeyboardEvent) => {
         if (e.repeat) return;
@@ -349,8 +354,19 @@ export default function Cube() {
             {scrambleVisible ? (
                 <>
                     <div className="flex items-center gap-6 mb-4 text-text-secondary transition-opacity hover:text-text-primary">
-                        {/* SPECIAL ICON INDICATOR */}
-                        {specialType !== 'normal' && (
+                        {/* SPECIAL ICON INDICATOR - Hidden until solved or revealed */}
+                        {specialType !== 'normal' && timerState !== 'SOLVED' && (
+                            // Requirement: "Remove showing if the displayed scramble is a special scramble, it should only be revealed to the user after they complete the scramble."
+                            // So hide this block entirely unless SOLVED?
+                            // But maybe keep a mystery icon?
+                            // "it should only be revealed to the user after they complete the scramble."
+                            // This implies they shouldn't know it's special.
+                            // So I'll hide it.
+                            null
+                        )}
+
+                        {/* If solved, show it! */}
+                        {specialType !== 'normal' && timerState === 'SOLVED' && (
                             <div className="flex items-center justify-center animate-in zoom-in spin-in-12 duration-500">
                                 <div
                                     className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold capitalize text-white shadow-lg
@@ -384,39 +400,19 @@ export default function Cube() {
                                 <Plus className="w-5 h-5" />
                             </button>
                         </div>
-
-                        <button
-                            onClick={async () => {
-                                if (await confirmAction("Start a new session? This will reset the current solve count.")) {
-                                    await startNewSession(false);
-                                }
-                            }}
-                            className="hover:text-accent transition-colors"
-                            title="New Session"
-                        >
-                            <History className="w-5 h-5" />
-                        </button>
-
-                        <button onClick={handleCopyScramble} className="hover:text-accent transition-colors" title="Copy Scramble">
-                            {isCopied ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
-                        </button>
-
-                        <button onClick={handleNextScramble} className="hover:text-text-primary transition-transform duration-500 ease-in-out" style={{ transform: `rotate(${scrambleRotation}deg)` }} title="Next Scramble">
-                            <ChevronRight className="w-6 h-6" />
-                        </button>
                     </div>
 
                     <div className="mb-10 text-center max-w-2xl min-h-[4rem] flex flex-col items-center justify-center">
-                        {/* Loot Chance Display */}
-                        {user && (
-                            <div className="text-center text-xs text-text-secondary mb-2 animate-in fade-in slide-in-from-top-2 duration-500">
-                                Loot Chance: <span className="text-accent font-medium">{((0.60 + lootModifier) * 100).toFixed(0)}%</span>
-                                {lootModifier > 0 && <span className="ml-1 text-green-500 font-bold">(+{(lootModifier * 100).toFixed(0)}%)</span>}
-                            </div>
-                        )}
-                        <p className="font-mono text-text-secondary leading-relaxed text-center transition-all" style={{ fontSize: `${settings.scrambleSize}rem` }}>
+                        {/* Loot Chance Display - REMOVED */}
+                        <p
+                            onClick={handleCopyScramble}
+                            className="font-mono text-text-secondary leading-relaxed text-center transition-all cursor-pointer hover:text-text-primary active:scale-95"
+                            style={{ fontSize: `${settings.scrambleSize}rem` }}
+                            title="Click to copy"
+                        >
                             {scramble}
                         </p>
+                        {isCopied && <div className="text-xs text-green-500 mt-2 font-medium animate-in fade-in slide-in-from-top-1">Copied!</div>}
                     </div>
                 </>
             ) : (
@@ -468,9 +464,6 @@ export default function Cube() {
                 )}
             </div>
 
-            {/* Session Prompt Toast */}
-            <SessionToast />
-
             {/* Auto-Created Session Toast */}
             <Toast
                 visible={autoSessionToastVisible}
@@ -479,34 +472,4 @@ export default function Cube() {
             />
         </div>
     );
-}
-
-function SessionToast() {
-    const { isSessionPromptVisible, setSessionPromptVisible, startNewSession } = useSession();
-
-    return (
-        <Toast
-            visible={isSessionPromptVisible}
-            message="It's been a while. Start a new session?"
-            onClose={() => setSessionPromptVisible(false)}
-            actions={[
-                {
-                    label: "Resume Previous",
-                    onClick: () => {
-                        startNewSession(true);
-                        setSessionPromptVisible(false);
-                    },
-                    variant: 'secondary'
-                },
-                {
-                    label: "Start Fresh",
-                    onClick: async () => {
-                        await startNewSession(false);
-                        setSessionPromptVisible(false);
-                    },
-                    variant: 'primary'
-                }
-            ]}
-        />
-    )
 }

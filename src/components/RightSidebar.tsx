@@ -2,188 +2,258 @@ import { useSolves, type Solve } from '../contexts/SolvesContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSession } from '../contexts/SessionContext';
 import { useConfirm } from '../contexts/ConfirmationContext';
-import { Trash2, ChevronRight, ChevronLeft, Menu, Lock } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { Trash2, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
+import { useState, useMemo } from 'react';
 import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage } from '../utils/calculations';
-import { deleteDoc, doc, collection, query, where, orderBy, getDocs } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 
 interface RightSidebarProps {
     onToggleCollapse?: () => void;
     collapsed?: boolean;
 }
 
-type View = 'list' | 'stats' | 'session_viewer';
-
 type StatsMode = 'best' | 'session';
 
 export default function RightSidebar({ onToggleCollapse, collapsed }: RightSidebarProps) {
-    const { solves: allSolves, stats: globalStats, updateSolve, deleteSolve, clearSolves } = useSolves();
+    const { solves: allSolves, updateSolve, deleteSolve, isPrivateMode } = useSolves();
     const { user } = useAuth();
-    const { currentSessionId, startNewSession, viewedSessionId, setViewedSessionId } = useSession();
+    const { currentSessionId, startNewSession } = useSession();
     const { confirm: confirmAction } = useConfirm();
 
-    // Filter solves to ONLY user's cloud solves (as per request)
-    // Though SolvesContext adds userId locally too, this ensures we match the signed in user.
-    const solves = useMemo(() => {
-        if (!user) return allSolves;
-        return allSolves.filter(s => s.userId === user.uid);
-    }, [allSolves, user]);
+    // -- Derived State --
+    // "Local Experience" (Private Mode or Signed Out) vs "Cloud Experience" (Signed In & Online)
+    const isLocalExperience = !user || isPrivateMode;
 
-    const [view, setView] = useState<View>(() => {
-        const stored = localStorage.getItem('cutter-cubing-sidebar-view') as View;
-        return stored || 'list';
-    });
-
-    const [statsMode, setStatsMode] = useState<StatsMode>('best'); // Restored toggle state
-
-    const [expandedSolveId, setExpandedSolveId] = useState<string | null>(null);
-    const [showNav, setShowNav] = useState(false);
-
-    useEffect(() => {
-        if (!user && view === 'stats') {
-            setView('list');
-        } else if (user && !localStorage.getItem('cutter-cubing-sidebar-view')) {
-            setView('stats');
+    // Filter Solves
+    const displaySolves = useMemo(() => {
+        if (isLocalExperience) {
+            return allSolves;
+        } else {
+            return allSolves.filter(s => s.userId === user?.uid);
         }
+    }, [allSolves, isLocalExperience, user]);
 
-        // Auto-switch to session viewer if viewedSessionId is set externally (e.g. from Sessions page)
-        if (viewedSessionId && view !== 'session_viewer') {
-            setView('session_viewer');
-            setShowNav(false);
-        }
-    }, [user, view, viewedSessionId]);
+    // -- Pagination --
+    const [pageLimit, setPageLimit] = useState(100);
+    const paginatedSolves = useMemo(() => {
+        return displaySolves.slice(0, pageLimit);
+    }, [displaySolves, pageLimit]);
 
-    useEffect(() => {
-        localStorage.setItem('cutter-cubing-sidebar-view', view);
-    }, [view]);
+    const hasMore = displaySolves.length > pageLimit;
 
-    // Session Logic
+    const handleLoadMore = () => {
+        setPageLimit(prev => prev + 100);
+    };
+
+    // -- Stats Calculation --
+    const [statsMode, setStatsMode] = useState<StatsMode>('session');
+
     const currentSessionSolves = useMemo(() => {
         if (!currentSessionId) return [];
-        return solves.filter(s => s.sessionId === currentSessionId);
-    }, [solves, currentSessionId]);
+        return displaySolves.filter(s => s.sessionId === currentSessionId);
+    }, [displaySolves, currentSessionId]);
 
-    const sessionStartTime = useMemo(() => {
-        if (currentSessionSolves.length > 0) {
-            const sorted = [...currentSessionSolves].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-            return new Date(sorted[0].date);
-        }
-        return new Date();
-    }, [currentSessionSolves]);
+    const stats = useMemo(() => {
+        const activeSolves = currentSessionSolves;
+        const totalSolves = displaySolves; // For "Best"
 
-    const sessionStats = useMemo(() => {
+        const cs = (size: number) => calculateAverage(activeSolves, size);
+        const bs = (size: number) => calculateBestAverage(totalSolves, size);
+
         return {
-            single: calculateBestSingle(currentSessionSolves),
-            ao5: calculateBestAverage(currentSessionSolves, 5),
-            ao12: calculateBestAverage(currentSessionSolves, 12),
-            ao100: calculateBestAverage(currentSessionSolves, 100),
-        };
-    }, [currentSessionSolves]);
-
-    // Current Stats for active session (not best)
-    const currentSessionStats = useMemo(() => {
-        return {
-            single: calculateAverage(currentSessionSolves, 1),
-            ao5: calculateAverage(currentSessionSolves, 5),
-            ao12: calculateAverage(currentSessionSolves, 12),
-            ao100: calculateAverage(currentSessionSolves, 100),
-        };
-    }, [currentSessionSolves]);
-
-    // Session Viewer Logic
-    const [viewerSessionsList, setViewerSessionsList] = useState<{ id: string, startedAt: string, solveCount: number }[]>([]);
-    const [viewerShowList, setViewerShowList] = useState(false);
-
-    useEffect(() => {
-        const fetchSessions = async () => {
-            if (view !== 'session_viewer' || !user) return;
-            try {
-                const q = query(
-                    collection(db, 'sessions'),
-                    where('userId', '==', user.uid),
-                    orderBy('startedAt', 'desc')
-                );
-                const snapshot = await getDocs(q);
-                setViewerSessionsList(snapshot.docs.map(d => ({
-                    id: d.id,
-                    startedAt: d.data().startedAt,
-                    solveCount: d.data().solveCount
-                })));
-            } catch (e) {
-                console.error("Error fetching sessions list", e);
+            current: {
+                single: calculateAverage(activeSolves, 1),
+                ao5: cs(5),
+                ao12: cs(12),
+                ao100: cs(100),
+                ao1000: totalSolves.length >= 1000 ? cs(1000) : null
+            },
+            best: {
+                single: calculateBestSingle(totalSolves),
+                ao5: bs(5),
+                ao12: bs(12),
+                ao100: bs(100),
+                ao1000: totalSolves.length >= 1000 ? bs(1000) : null
             }
         };
-        fetchSessions();
-    }, [view, user]);
+    }, [currentSessionSolves, displaySolves]);
 
-    // Viewed Session Stats
-    const viewedSessionSolves = useMemo(() => {
-        if (!viewedSessionId) return [];
-        return solves.filter(s => s.sessionId === viewedSessionId);
-    }, [solves, viewedSessionId]);
-
-    const viewedSessionStats = useMemo(() => {
-        return {
-            single: calculateBestSingle(viewedSessionSolves),
-            ao5: calculateBestAverage(viewedSessionSolves, 5),
-            ao12: calculateBestAverage(viewedSessionSolves, 12),
-            ao100: calculateBestAverage(viewedSessionSolves, 100),
-        };
-    }, [viewedSessionSolves]);
-
-    const viewedSessionStartTime = useMemo(() => {
-        if (viewedSessionSolves.length > 0) {
-            const sorted = [...viewedSessionSolves].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-            return new Date(sorted[0].date);
-        }
-        return null;
-    }, [viewedSessionSolves]);
-
-    const displayedSolves = view === 'stats' ? currentSessionSolves : (view === 'session_viewer' ? viewedSessionSolves : solves);
+    // -- UI Helpers --
+    const [expandedSolveId, setExpandedSolveId] = useState<string | null>(null);
 
     const toggleExpand = (id: string) => {
         setExpandedSolveId(prev => (prev === id ? null : id));
     };
 
-    const handleSolveClick = (id: string) => {
-        if (collapsed && onToggleCollapse) {
-            onToggleCollapse();
-            setExpandedSolveId(id);
-        } else {
-            toggleExpand(id);
+    const handleDeleteSolve = async (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (await confirmAction('Delete this solve?')) {
+            deleteSolve(id);
         }
     };
 
-    const handleDeleteSession = async () => {
-        if (!currentSessionId || !user) return;
-        if (await confirmAction("Are you sure you want to delete this session? This action cannot be undone.")) {
-            try {
-                // Delete session doc
-                await deleteDoc(doc(db, 'sessions', currentSessionId));
-                // We do NOT delete the solves here automatically as context doesn't support batch delete yet?
-                // Actually, existing functionality implies session deletion usually keeps solves or handles it elsewhere?
-                // Wait, in Sessions.tsx delete does NOT delete solves.
-                // But usually user expects "Delete Session" to clear it.
-                // For now, let's just delete the session doc and start new.
-                // Solves might remain as orphans or 'no session'.
-                // Ideally we should delete them too.
-                // Or maybe just unlink them.
-                // Given constraints, I'll stick to just deleting session doc + start new.
-                await startNewSession(false);
-            } catch (e) {
-                console.error("Error deleting session", e);
-                alert("Failed to delete session.");
-            }
+    const handlePenalty = (id: string, type: '+2' | 'DNF', currentPenalty: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        let newPenalty: 'none' | '+2' | 'DNF' = 'none';
+        if (currentPenalty !== type) {
+            newPenalty = type;
         }
+        updateSolve(id, { penalty: newPenalty });
     };
 
-    const handleNewSession = async () => {
-        if (await confirmAction("Start a new session?")) {
-            await startNewSession(false);
-        }
+    const copyScramble = (scramble: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(scramble);
     };
 
+    if (collapsed) {
+        return (
+            <div className="h-full flex flex-col items-center py-4 bg-bg-secondary border-l border-border transition-all duration-300 w-[50px]">
+                <button
+                    onClick={onToggleCollapse}
+                    className="mt-auto p-2 text-text-secondary hover:text-text-primary rounded-full hover:bg-bg-hover transition-colors"
+                >
+                    <ChevronLeft className="w-5 h-5" />
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-text-secondary text-sm overflow-hidden min-w-0 border-l border-border font-sans relative">
+
+            {/* Header Area (Stats) */}
+            <div className="flex flex-col border-b border-border bg-bg-secondary sticky top-0 z-10">
+                {/* Stats Table */}
+                <div className="grid grid-cols-3 gap-y-1 gap-x-2 text-center text-xs p-2">
+                    <div className="col-span-1"></div>
+                    <div className="col-span-1 font-semibold text-accent border-b border-transparent pb-1">Current</div>
+
+                    {/* Toggle Header */}
+                    <div
+                        className="col-span-1 font-semibold text-text-primary border-b border-border/50 pb-1 cursor-pointer hover:bg-white/5 transition-colors select-none rounded-t flex items-center justify-center gap-1"
+                        onClick={() => setStatsMode(prev => prev === 'best' ? 'session' : 'best')}
+                    >
+                        {statsMode === 'best' ? 'Best' : 'Session'}
+                    </div>
+
+                    <StatItem label="Single" current={stats.current.single} best={stats.best.single} show={true} statsMode={statsMode} />
+                    <StatItem label="mo3" current={null} best={null} show={false} statsMode={statsMode} />
+                    <StatItem label="ao5" current={stats.current.ao5} best={stats.best.ao5} show={true} statsMode={statsMode} />
+                    <StatItem label="ao12" current={stats.current.ao12} best={stats.best.ao12} show={true} statsMode={statsMode} />
+                    <StatItem label="ao100" current={stats.current.ao100} best={stats.best.ao100} show={true} statsMode={statsMode} />
+                </div>
+            </div>
+
+            {/* Solve List */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <div className="flex flex-col">
+                    {paginatedSolves.map((solve, index) => {
+                        const prevSolve = paginatedSolves[index + 1];
+                        const showDivider = prevSolve && (
+                            (new Date(solve.date).getTime() - new Date(prevSolve.date).getTime() > 1000 * 60 * 60) || // 60 min gap
+                            (solve.sessionId !== prevSolve.sessionId)
+                        );
+
+                        let sessionIndex = allSolves.length - index;
+                        if (solve.sessionId) {
+                            const solvesInSession = allSolves.filter(s => s.sessionId === solve.sessionId);
+                            const indexInSession = solvesInSession.findIndex(s => s.id === solve.id);
+                            if (indexInSession !== -1) {
+                                sessionIndex = solvesInSession.length - indexInSession;
+                            }
+                        }
+
+                        return (
+                            <div key={solve.id}>
+                                {showDivider && (
+                                    <div className="py-2 flex items-center justify-center relative">
+                                        <div className="text-[10px] bg-transparent text-text-secondary/40 font-mono z-10 px-2">
+                                            {new Date(prevSolve.date).toLocaleString(undefined, {
+                                                month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                                            })}
+                                        </div>
+                                        <div className="w-full h-px border-t border-dashed border-border/30 absolute z-[-1]" />
+                                    </div>
+                                )}
+                                <SolveItem
+                                    solve={solve}
+                                    index={sessionIndex}
+                                    onDelete={handleDeleteSolve}
+                                    onPenalty={handlePenalty}
+                                    onCopy={copyScramble}
+                                />
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {hasMore && (
+                    <button
+                        onClick={handleLoadMore}
+                        className="w-full p-4 text-xs text-text-secondary hover:text-text-primary transition-colors border-t border-border/50"
+                    >
+                        Load 100 More
+                    </button>
+                )}
+
+                {/* Empty State */}
+                {displaySolves.length === 0 && (
+                    <div className="flex flex-col items-center justify-center p-8 text-text-secondary/50 gap-2 h-full">
+                        <div className="w-12 h-12 rounded-full bg-bg-tertiary flex items-center justify-center mb-2">
+                            <ChevronRight className="w-6 h-6 opacity-20" />
+                        </div>
+                        <span className="text-sm">No solves yet</span>
+                        {!user && !isPrivateMode && <span className="text-xs opacity-50">Sign in to sync.</span>}
+                    </div>
+                )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 border-t border-border bg-bg-secondary flex justify-between items-center text-xs">
+                <button
+                    onClick={onToggleCollapse}
+                    className="p-2 text-text-secondary hover:text-text-primary rounded-md hover:bg-bg-hover transition-colors"
+                    title="Collapse sidebar"
+                >
+                    <ChevronRight className="w-4 h-4" />
+                </button>
+
+                {isPrivateMode && (
+                    <div className="flex items-center gap-2 text-text-secondary px-3 py-1.5 bg-bg-tertiary rounded-md border border-border/50">
+                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                        Private Session
+                    </div>
+                )}
+            </div>
+
+        </aside>
+    );
+}
+
+// -- Sub-Components --
+
+const StatItem = ({ label, current, best, show, statsMode }: { label: string, current: any, best: any, show: boolean, statsMode: StatsMode }) => {
+    if (!show) return null;
+    return (
+        <>
+            <div className="text-left pl-1 font-medium text-text-secondary py-1">{label}</div>
+            <div className="font-mono text-text-primary py-1">{formatTime(current)}</div>
+            <div className={`font-mono py-1 ${statsMode === 'session' ? 'text-accent' : 'text-text-primary'}`}>
+                {formatTime(statsMode === 'session' ? current : best)}
+            </div>
+        </>
+    );
+};
+
+interface SolveItemProps {
+    solve: Solve;
+    index: number;
+    onDelete: (id: string, e: React.MouseEvent) => void;
+    onPenalty: (id: string, type: '+2' | 'DNF', currentPenalty: string, e: React.MouseEvent) => void;
+    onCopy: (scramble: string, e: React.MouseEvent) => void;
+}
+
+const SolveItem = ({ solve, index, onDelete, onPenalty, onCopy }: SolveItemProps) => {
     const formatTimeDisplay = (solve: Solve) => {
         if (solve.penalty === 'DNF' || solve.inspectionPenalty === 'DNF') return 'DNF';
         let tVal = solve.time;
@@ -198,387 +268,55 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
         return tStr;
     };
 
-    const formatDate = (iso: string) => {
-        return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' });
-    };
-
-    const formatStatValue = (val: number | 'DNF' | null) => {
-        return formatTime(val);
-    };
-
-    const SolvesList = ({ data }: { data: Solve[] }) => (
-        <>
-            {data.length === 0 ? (
-                <div className="p-4 text-center text-text-secondary/50 italic">
-                    {view === 'stats' ? 'No solves in this session.' : 'No solves. Get solving!'}
-                </div>
-            ) : (
-                <div className="space-y-1">
-                    {data.map((solve, index) => {
-                        const isDnf = solve.penalty === 'DNF' || solve.inspectionPenalty === 'DNF';
-                        const wasLateStart = solve.inspectionTime !== undefined && solve.inspectionTime <= 0;
-                        const defaultLatePenalty = (solve.inspectionTime !== undefined && solve.inspectionTime < -2) ? 'DNF' : '+2';
-                        const displayIndex = data.length - index;
-
-                        return (
-                            <div
-                                key={solve.id}
-                                className={`rounded-md transition-all border ${expandedSolveId === solve.id ? 'bg-bg-primary border-border ring-1 ring-border shadow-sm' : 'hover:bg-bg-primary border-transparent hover:border-border'}`}
-                            >
-                                <div
-                                    onClick={() => toggleExpand(solve.id)}
-                                    className="px-3 py-2 cursor-pointer flex justify-between items-center group"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-xs font-mono text-text-secondary/30 w-6 text-right">
-                                            {displayIndex}
-                                        </span>
-                                        <span className={`font-mono text-lg font-medium ${isDnf ? 'text-red-400' : 'text-text-primary'}`}>
-                                            {formatTimeDisplay(solve)}
-                                        </span>
-                                    </div>
-                                    <span className="text-xs text-text-secondary opacity-0 group-hover:opacity-100 transition-opacity">
-                                        {expandedSolveId === solve.id ? 'Hide' : 'Edit'}
-                                    </span>
-                                </div>
-
-                                {expandedSolveId === solve.id && (
-                                    <div className="px-3 pb-3 pt-0 border-t border-border/50 mt-1">
-                                        <div
-                                            onClick={() => navigator.clipboard.writeText(solve.scramble)}
-                                            className="mt-2 text-xs font-mono text-text-secondary break-words bg-bg-secondary/50 p-2 rounded leading-relaxed cursor-pointer hover:text-text-primary transition-colors hover:bg-bg-primary/50"
-                                            title="Click to copy scramble"
-                                        >
-                                            {solve.scramble}
-                                        </div>
-                                        <div className="mt-2 text-[10px] text-text-secondary/50 flex justify-end">
-                                            {formatDate(solve.date)}
-                                        </div>
-                                        <div className="mt-3 flex gap-2 justify-between items-end flex-wrap">
-                                            <div>
-                                                {wasLateStart && (
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            updateSolve(solve.id, {
-                                                                inspectionPenalty: solve.inspectionPenalty === 'none' ? defaultLatePenalty : 'none'
-                                                            });
-                                                        }}
-                                                        className={`px-2 py-1 rounded text-xs border ${solve.inspectionPenalty !== 'none'
-                                                            ? (solve.inspectionPenalty === 'DNF' ? 'bg-red-500/20 text-red-500 border-red-500/50' : 'bg-orange-500/20 text-orange-500 border-orange-500/50')
-                                                            : 'bg-bg-secondary border-border text-text-secondary/50 hover:border-text-secondary'
-                                                            }`}
-                                                    >
-                                                        Late
-                                                    </button>
-                                                )}
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => {
-                                                        updateSolve(solve.id, { penalty: solve.penalty === '+2' ? 'none' : '+2' });
-                                                        setExpandedSolveId(null);
-                                                    }}
-                                                    className={`px-2 py-1 rounded text-xs border ${solve.penalty === '+2' ? 'bg-accent/20 text-accent border-accent/50' : 'bg-bg-secondary border-border hover:border-accent/50'}`}
-                                                >
-                                                    +2
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        updateSolve(solve.id, { penalty: solve.penalty === 'DNF' ? 'none' : 'DNF' });
-                                                        setExpandedSolveId(null);
-                                                    }}
-                                                    className={`px-2 py-1 rounded text-xs border ${solve.penalty === 'DNF' ? 'bg-red-500/20 text-red-500 border-red-500/50' : 'bg-bg-secondary border-border hover:border-red-500/50'}`}
-                                                >
-                                                    DNF
-                                                </button>
-                                                <button
-                                                    onClick={() => deleteSolve(solve.id)}
-                                                    className="px-2 py-1 rounded text-xs border border-red-500/20 text-red-500 hover:bg-red-500/10 transition-colors"
-                                                    title="Delete"
-                                                >
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
-        </>
-    );
-
-    if (collapsed) {
-        return (
-            <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-text-secondary text-sm overflow-hidden items-center pt-2 border-l border-border min-w-[50px]">
-                <div className="flex-1 overflow-y-auto custom-scrollbar w-full flex flex-col items-center gap-1 p-1">
-                    {solves.map((solve) => (
-                        <div
-                            key={solve.id}
-                            onClick={() => handleSolveClick(solve.id)}
-                            className={`w-3 h-3 rounded-sm cursor-pointer hover:bg-fg-primary transition-colors ${(solve.penalty === 'DNF' || solve.inspectionPenalty === 'DNF') ? 'bg-red-400/50' : 'bg-text-secondary/30'}`}
-                            title={formatTimeDisplay(solve)}
-                        />
-                    ))}
-                </div>
-                <div className="p-2 border-t border-border w-full flex justify-center">
-                    {onToggleCollapse && (
-                        <button onClick={onToggleCollapse} className="p-1 hover:bg-bg-primary rounded text-text-secondary hover:text-text-primary transition-colors">
-                            <ChevronLeft className="w-4 h-4" />
-                        </button>
-                    )}
-                </div>
-            </aside>
-        );
-    }
-
     return (
-        <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-text-secondary text-sm overflow-hidden min-w-0 border-l border-border font-sans relative">
-
-            <div className="px-4 py-3 border-b border-border bg-bg-secondary/50 backdrop-blur-sm sticky top-0 z-10 flex items-center justify-between h-[57px]">
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => setShowNav(!showNav)}
-                        className={`p-1 transition-colors rounded ${showNav ? 'bg-bg-primary text-text-primary' : 'hover:text-text-primary hover:bg-bg-primary text-text-secondary'}`}
+        <div className="group flex items-center justify-between px-4 py-2 hover:bg-bg-hover/50 transition-colors border-l-2 border-transparent hover:border-accent cursor-pointer relative text-sm">
+            <div className="flex items-center gap-3 min-w-0">
+                <span className="text-text-secondary/40 font-mono w-6 text-right text-[10px]">{index}.</span>
+                <span className={`font-mono font-medium ${solve.penalty === 'DNF' ? 'text-red-500' : 'text-text-primary'}`}>
+                    {formatTimeDisplay(solve)}
+                </span>
+                {/* Daily Badge or Tag */}
+                {solve.daily && (
+                    <span
+                        className={`text-[9px] px-1 rounded font-bold uppercase
+                        ${solve.daily.includes('daily') ? 'bg-green-500/20 text-green-500' :
+                                solve.daily.includes('weekly') ? 'bg-blue-500/20 text-blue-500' :
+                                    'bg-accent/20 text-accent'}
+                        `}
                     >
-                        <Menu className="w-4 h-4" />
-                    </button>
-                    <h3 className="font-semibold text-text-primary whitespace-nowrap">
-                        {showNav ? 'Menu' : (view === 'stats' ? 'Statistics' : (view === 'session_viewer' ? 'Session Viewer' : 'Local Solves'))}
-                    </h3>
-                </div>
-            </div>
-
-            {showNav ? (
-                <div className="flex-1 flex flex-col p-2 gap-1 animate-in slide-in-from-left-4 duration-200">
-                    <button
-                        onClick={() => { setView('list'); setShowNav(false); }}
-                        className={`text-left px-3 py-3 rounded-md transition-colors text-sm font-medium ${view === 'list' ? 'bg-bg-primary text-text-primary border border-border' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'}`}
-                    >
-                        Local Solves
-                    </button>
-
-                    <div className="relative group">
-                        <button
-                            disabled={!user}
-                            onClick={() => { if (user) { setView('stats'); setShowNav(false); } }}
-                            className={`w-full text-left px-3 py-3 rounded-md transition-colors text-sm font-medium flex justify-between items-center ${!user ? 'opacity-50 cursor-not-allowed' :
-                                view === 'stats' ? 'bg-bg-primary text-text-primary border border-border' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
-                                }`}
-                        >
-                            Statistics
-                            {!user && <Lock className="w-3 h-3" />}
-                        </button>
-                        {!user && (
-                            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 w-40 p-2 bg-bg-primary border border-border rounded shadow-xl text-xs text-text-secondary z-50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                Sign in to access statistics & sessions.
-                            </div>
-                        )}
-                    </div>
-                </div>
-            ) : view === 'session_viewer' ? (
-                // Session Viewer Layout
-                <div className="flex-1 flex flex-col h-full overflow-hidden">
-                    {/* Sub-Nav for Session Selection */}
-                    <div className="flex items-center gap-2 p-2 border-b border-border bg-bg-secondary/30">
-                        <button
-                            onClick={() => setViewerShowList(!viewerShowList)}
-                            className={`p-1.5 rounded transition-colors ${viewerShowList ? 'bg-accent text-bg-primary' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary'}`}
-                            title="Select Session"
-                        >
-                            <Menu className="w-3.5 h-3.5" />
-                        </button>
-                        <div className="flex-1 text-xs text-text-secondary truncate font-mono">
-                            {viewedSessionId ? (viewedSessionStartTime ? viewedSessionStartTime.toLocaleDateString() : 'Empty Session') : 'Select a Session'}
-                        </div>
-                    </div>
-
-                    <div className="flex-1 relative overflow-hidden flex flex-col">
-                        {viewerShowList ? (
-                            <div className="absolute inset-0 z-20 bg-bg-secondary flex flex-col overflow-y-auto custom-scrollbar p-2 gap-1 animate-in slide-in-from-left-2 duration-200">
-                                {viewerSessionsList.length === 0 ? <div className="text-secondary text-center p-4">Loading sessions...</div> :
-                                    viewerSessionsList.map(s => (
-                                        <button
-                                            key={s.id}
-                                            onClick={() => { setViewedSessionId(s.id); setViewerShowList(false); }}
-                                            className={`text-left p-2 rounded text-xs flex justify-between items-center ${viewedSessionId === s.id ? 'bg-accent text-bg-primary' : 'text-text-secondary hover:bg-bg-primary hover:text-text-primary'}`}
-                                        >
-                                            <span>{new Date(s.startedAt).toLocaleDateString()} <span className="opacity-50 text-[10px]">{new Date(s.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></span>
-                                            <span className="font-mono font-bold opacity-70">{s.solveCount}</span>
-                                        </button>
-                                    ))
-                                }
-                            </div>
-                        ) : (
-                            <div className="flex-1 flex flex-col overflow-hidden">
-                                {/* Stats for Viewed Session */}
-                                {viewedSessionId && (
-                                    <div className="flex flex-col gap-2 p-2 mb-2 animate-in fade-in duration-300 shrink-0">
-                                        <div className="grid grid-cols-2 gap-y-1 gap-x-2 text-center text-xs">
-                                            <div className="col-span-1"></div>
-                                            <div className="col-span-1 font-semibold text-accent border-b border-transparent pb-1">Stats</div>
-
-                                            <div className="text-left pl-1 font-medium text-text-secondary py-1">Single</div>
-                                            <div className="font-mono text-accent py-1">{formatStatValue(viewedSessionStats.single)}</div>
-
-                                            <div className="text-left pl-1 font-medium text-text-secondary py-1 bg-bg-primary/30 rounded-l">Ao5</div>
-                                            <div className="font-mono text-accent py-1 bg-bg-primary/30 rounded-r">{formatStatValue(viewedSessionStats.ao5)}</div>
-
-                                            <div className="text-left pl-1 font-medium text-text-secondary py-1">Ao12</div>
-                                            <div className="font-mono text-accent py-1">{formatStatValue(viewedSessionStats.ao12)}</div>
-
-                                            <div className="text-left pl-1 font-medium text-text-secondary py-1 bg-bg-primary/30 rounded-l">Ao100</div>
-                                            <div className="font-mono text-accent py-1 bg-bg-primary/30 rounded-r">{formatStatValue(viewedSessionStats.ao100)}</div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
-                                    <SolvesList data={displayedSolves} />
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            ) : (
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-2 relative flex flex-col">
-
-                    {view === 'stats' && (
-                        <div className="flex flex-col gap-2 p-2 mb-2 animate-in fade-in duration-300">
-
-                            {/* Stats Grid */}
-                            <div className="grid grid-cols-3 gap-y-1 gap-x-2 text-center text-xs">
-                                <div className="col-span-1"></div>
-                                <div className="col-span-1 font-semibold text-accent border-b border-transparent pb-1">Current</div>
-
-                                {/* Toggle Header */}
-                                <div
-                                    className="col-span-1 font-semibold text-text-primary border-b border-border/50 pb-1 cursor-pointer hover:bg-white/5 transition-colors select-none rounded-t"
-                                    onClick={() => setStatsMode(prev => prev === 'best' ? 'session' : 'best')}
-                                    title={`Switch to ${statsMode === 'best' ? 'Session' : 'Global'} Best`}
-                                >
-                                    {statsMode === 'best' ? 'Best' : 'Session'}
-                                </div>
-
-                                <div className="text-left pl-1 font-medium text-text-secondary py-1">Single</div>
-                                <div className="font-mono text-text-primary py-1">{formatStatValue(currentSessionStats.single)}</div>
-                                <div className={`font-mono py-1 ${statsMode === 'session' ? 'text-accent' : 'text-text-primary'}`}>
-                                    {formatStatValue(statsMode === 'session' ? sessionStats.single : globalStats.best.single)}
-                                </div>
-
-                                <div className="text-left pl-1 font-medium text-text-secondary py-1 bg-bg-primary/30 rounded-l">Ao5</div>
-                                <div className="font-mono text-text-primary py-1 bg-bg-primary/30">{formatStatValue(currentSessionStats.ao5)}</div>
-                                <div className={`font-mono py-1 bg-bg-primary/30 rounded-r ${statsMode === 'session' ? 'text-accent' : 'text-text-primary'}`}>
-                                    {formatStatValue(statsMode === 'session' ? sessionStats.ao5 : globalStats.best.ao5)}
-                                </div>
-
-                                <div className="text-left pl-1 font-medium text-text-secondary py-1">Ao12</div>
-                                <div className="font-mono text-text-primary py-1">{formatStatValue(currentSessionStats.ao12)}</div>
-                                <div className={`font-mono py-1 ${statsMode === 'session' ? 'text-accent' : 'text-text-primary'}`}>
-                                    {formatStatValue(statsMode === 'session' ? sessionStats.ao12 : globalStats.best.ao12)}
-                                </div>
-
-                                <div className="text-left pl-1 font-medium text-text-secondary py-1 bg-bg-primary/30 rounded-l">Ao100</div>
-                                <div className="font-mono text-text-primary py-1 bg-bg-primary/30">{formatStatValue(currentSessionStats.ao100)}</div>
-                                <div className={`font-mono py-1 bg-bg-primary/30 rounded-r ${statsMode === 'session' ? 'text-accent' : 'text-text-primary'}`}>
-                                    {formatStatValue(statsMode === 'session' ? sessionStats.ao100 : globalStats.best.ao100)}
-                                </div>
-                            </div>
-                            <div className="border-t border-border/50 mt-1 mb-0.5" />
-
-                            {/* Session Info (Tight spacing) */}
-                            <div className="text-center text-xs text-text-secondary w-full mb-0.5 mt-0.5">
-                                <span className="font-mono opacity-70">
-                                    {sessionStartTime.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, {sessionStartTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase()}
-                                </span>
-                            </div>
-                        </div>
-                    )}
-
-                    <SolvesList data={displayedSolves} />
-                </div>
-            )}
-
-            {/* Footer */}
-            <div className="p-2 border-t border-border flex flex-col gap-2 bg-bg-secondary">
-                {/* Footer Content depends on tab */}
-                {view === 'list' ? (
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={async () => { if (await confirmAction('Clear all non-best solves from local history?')) clearSolves(true); }}
-                            className="flex-1 p-2 rounded-md hover:bg-bg-primary text-text-secondary hover:text-text-primary transition-colors text-xs font-medium"
-                            title="Clear Safe (Keeps Bests)"
-                        >
-                            Clear Safe
-                        </button>
-                        <button
-                            onClick={async () => { if (await confirmAction('PERMANENTLY clear ALL local solves? This cannot be undone.')) clearSolves(false); }}
-                            className="flex-1 p-2 rounded-md hover:bg-red-500/10 text-text-secondary hover:text-red-500 transition-colors text-xs font-medium"
-                            title="Clear All Solves"
-                        >
-                            Clear All
-                        </button>
-                    </div>
-                ) : view === 'session_viewer' ? (
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => { setView('stats'); setViewedSessionId(null); }}
-                            className="w-full p-2 rounded-md hover:bg-bg-primary text-text-secondary hover:text-text-primary transition-colors text-xs font-medium"
-                            title="Back to Statistics"
-                        >
-                            Back to Current Session
-                        </button>
-                        {viewedSessionId && (
-                            <button
-                                onClick={async () => {
-                                    if (viewedSessionId && user && await confirmAction("Are you sure you want to delete this session?")) {
-                                        await deleteDoc(doc(db, 'sessions', viewedSessionId));
-                                        await startNewSession(false); // Just to refresh state if needed, though mostly just need to clear viewed.
-                                        setViewedSessionId(null);
-                                        // Trigger refresh of list? 
-                                        // The list should update on next fetch.
-                                        // Simple hack: setView('stats') to exit.
-                                        setView('stats');
-                                    }
-                                }}
-                                className="p-2 rounded-md hover:bg-red-500/10 text-red-500/70 hover:text-red-500 transition-colors text-xs font-medium"
-                                title="Delete This Session"
-                            >
-                                <Trash2 className="w-4 h-4" />
-                            </button>
-                        )}
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={handleNewSession}
-                            className="flex-1 p-2 rounded-md hover:bg-bg-primary text-text-secondary hover:text-text-primary transition-colors text-xs font-medium"
-                            title="Start New Session"
-                        >
-                            New Session
-                        </button>
-                        <button
-                            onClick={handleDeleteSession}
-                            className="flex-1 p-2 rounded-md hover:bg-red-500/10 text-text-secondary hover:text-red-500 transition-colors text-xs font-medium"
-                            title="Delete Current Session"
-                        >
-                            Delete Session
-                        </button>
-                    </div>
-                )}
-                {onToggleCollapse && (
-                    <button
-                        onClick={onToggleCollapse}
-                        className="w-full flex items-center justify-center p-2 rounded-md hover:bg-bg-hover transition-colors text-text-secondary hover:text-text-primary"
-                        title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-                    >
-                        {collapsed ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-                    </button>
+                        {solve.daily.includes('daily') ? 'D' : solve.daily.includes('weekly') ? 'W' : 'S'}
+                    </span>
                 )}
             </div>
-        </aside>
+
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                    onClick={(e) => onPenalty(solve.id, '+2', solve.penalty, e)}
+                    className={`px-1.5 py-0.5 text-[10px] rounded hover:bg-bg-tertiary ${solve.penalty === '+2' ? 'text-orange-500 font-bold' : 'text-text-secondary'}`}
+                >
+                    +2
+                </button>
+                <button
+                    onClick={(e) => onPenalty(solve.id, 'DNF', solve.penalty, e)}
+                    className={`px-1.5 py-0.5 text-[10px] rounded hover:bg-bg-tertiary ${solve.penalty === 'DNF' ? 'text-red-500 font-bold' : 'text-text-secondary'}`}
+                >
+                    DNF
+                </button>
+                <button
+                    onClick={(e) => onCopy(solve.scramble, e)}
+                    className="p-1.5 text-text-secondary hover:text-text-primary rounded hover:bg-bg-tertiary"
+                    title="Copy Scramble"
+                >
+                    <Copy className="w-3 h-3" />
+                </button>
+                <button
+                    onClick={(e) => onDelete(solve.id, e)}
+                    className="p-1.5 text-text-secondary hover:text-red-500 rounded hover:bg-bg-tertiary"
+                    title="Delete Solve"
+                >
+                    <Trash2 className="w-3 h-3" />
+                </button>
+            </div>
+        </div>
     );
-}
+};

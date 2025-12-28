@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useState, useMemo, type ReactNode } from 'react';
-import { useSettings } from './SettingsContext';
 import { calculateAverage, calculateBestAverage } from '../utils/calculations';
 import { useAuth } from './AuthContext';
 import { useSession } from './SessionContext';
@@ -47,30 +46,45 @@ interface SolvesContextType {
     currentScramble: string | null;
     setCurrentScramble: (scramble: string) => void;
     syncStatus: SyncStatus;
+    isPrivateMode: boolean;
+    togglePrivateMode: () => void;
 }
 
 const SolvesContext = createContext<SolvesContextType | undefined>(undefined);
 
 export function SolvesProvider({ children }: { children: ReactNode }) {
-    const { settings } = useSettings();
+    // const { settings } = useSettings(); // Unused
     const { user } = useAuth();
-    const { currentSessionId, checkSessionStatus, setSessionPromptVisible, updateSessionActivity, setCurrentSessionId } = useSession();
+    const { currentSessionId, checkSessionStatus, updateSessionActivity, setCurrentSessionId, startNewSession } = useSession();
+
+    const [isPrivateMode, setIsPrivateMode] = useState(false);
+    const [privateSolves, setPrivateSolves] = useState<Solve[]>([]); // New local-only solves for Private Mode
+
+    const togglePrivateMode = () => {
+        setIsPrivateMode(prev => !prev);
+    };
 
     const [solves, setSolves] = useState<Solve[]>(() => {
         const stored = localStorage.getItem('cutter-cubing-solves');
         return stored ? JSON.parse(stored) : [];
     });
 
-    // Check for session gap on initial load or focused
+    // Check for session gap on initial load or focused // (Only for main solves)
     useEffect(() => {
-        if (solves.length > 0) {
-            const lastSolve = solves[0];
-            const { isNewSessionNeeded } = checkSessionStatus(new Date(lastSolve.date).getTime());
-            if (isNewSessionNeeded) {
-                setSessionPromptVisible(true);
-            }
+        // Silent Gap Check logic moved to addSolve mostly, but user might want a visual prompt on load?
+        // Requirement said "Remove the popups".
+        // So we do nothing here or just let visual divider handle it.
+        // We can keep this empty or remove the effect if strictly no popup.
+        // I'll leave it as no-op or remove it if unused. 
+        // Logic below:
+        if (!isPrivateMode && solves.length > 0) {
+            // const lastSolve = solves[0];
+            // const { isNewSessionNeeded } = checkSessionStatus(new Date(lastSolve.date).getTime());
+            // if (isNewSessionNeeded) {
+            //    setSessionPromptVisible(true); // REMOVED
+            // }
         }
-    }, []); // Only on mount
+    }, [isPrivateMode]);
 
     const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
 
@@ -80,7 +94,7 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
 
     // Cloud Sync Logic
     useEffect(() => {
-        if (!user) {
+        if (!user || isPrivateMode) {
             setSyncStatus('idle');
             return;
         }
@@ -123,24 +137,19 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
         });
 
         return () => unsubscribe();
-    }, [user]);
+    }, [user, isPrivateMode]);
 
     const syncToCloud = async (solve: Solve, action: 'add' | 'update' | 'delete') => {
-        if (!user) return;
+        if (!user || isPrivateMode) return;
+        if (action === 'add') {
+            console.log('Uploading Solve:', solve);
+        }
         setSyncStatus('syncing');
 
         try {
             if (action === 'delete') {
                 await deleteDoc(doc(db, 'solves', solve.id));
             } else {
-                // If backup strategy is bests/last100, we might strictly only want to sync those.
-                // But for now syncing all to Firestore is simpler, then we can filter in query or cloud functions if needed.
-                // Given requirement: "Last 100 solves + Bests" for some modes.
-                // Assuming efficient enough to just write all for now unless restricted.
-                // If mode is 'local-only', do NOT write.
-                // Syncing all solves by default now (unlimited sync)
-                // if (settings.dataBackup === 'local-only') { setSyncStatus('idle'); return; }
-
                 await setDoc(doc(db, 'solves', solve.id), {
                     ...solve,
                     userId: user.uid,
@@ -155,9 +164,11 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    // Statistics Calculation (Unchanged)
+    // Statistics Calculation
+    const activeSolves = isPrivateMode ? privateSolves : solves; // Switch data source based on mode
+
     const stats: Stats = useMemo(() => {
-        if (solves.length === 0) {
+        if (activeSolves.length === 0) {
             return {
                 current: { single: null, ao5: null, ao12: null, ao100: null },
                 best: { single: null, ao5: null, ao12: null, ao100: null }
@@ -165,22 +176,27 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
         }
 
         const current = {
-            single: calculateAverage(solves, 1),
-            ao5: calculateAverage(solves, 5),
-            ao12: calculateAverage(solves, 12),
-            ao100: calculateAverage(solves, 100),
+            single: calculateAverage(activeSolves, 1),
+            ao5: calculateAverage(activeSolves, 5),
+            ao12: calculateAverage(activeSolves, 12),
+            ao100: calculateAverage(activeSolves, 100),
         };
 
-        // For "Best" stats, we strictly check cloud/official solves if user is signed in.
-        // This excludes guest/local solves.
-        const bestSolves = user ? solves.filter(s => s.userId === user.uid) : solves;
+        // For "Best" stats:
+        // If Private Mode: Best stats should only look at this private session (same as current if session is fresh). 
+        // Requirement: "only allowing the stats table to look at the solves in this new private session and not be able to compare this numbers to the accounts best."
+        // So for Private Mode, 'best' is effectively session best of current private session.
+        // For Normal Mode: Best stats check cloud/official solves if signed in, or just local.
+
+        let bestSolves = activeSolves;
+        if (!isPrivateMode && user) {
+            bestSolves = solves.filter(s => s.userId === user.uid);
+        }
 
         const getBestAverage = (size: number) => {
             return calculateBestAverage(bestSolves, size);
         };
 
-        // Note: calculateBestSingle is also available in utils/calculations now, or we can use local logic.
-        // The local logic below for single needs to be updated to use bestSolves.
         const validSingles = bestSolves
             .map(s => {
                 if (s.penalty === 'DNF' || s.inspectionPenalty === 'DNF') return Infinity;
@@ -202,23 +218,53 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
                 ao100: getBestAverage(100),
             }
         };
-    }, [solves, user]);
+    }, [activeSolves, solves, user, isPrivateMode]);
 
     const trimSolves = (limit: number) => {
-        setSolves(prev => {
-            if (prev.length > limit) {
-                // TODO: If Cloud Sync is active, should we delete remote too if they are outside limit?
-                // Requirements say: "always cloud sync the last 100 solves" for some modes.
-                return prev.slice(0, limit);
-            }
-            return prev;
-        });
+        // Only trim main solves for now, or both? 
+        // Private solves are ephemeral/session based usually? 
+        // But "locally saved solves should be in their own local session" implies persistence?
+        // Actually usually private/incognito implies NO persistence. 
+        // But "saved should be in their own local session" might mean temporary persistence.
+        // Let's assume trimming applies to whatever is active if we wanted, but the limit is global setting.
+        // For safe side, only trim main list.
+        if (!isPrivateMode) {
+            setSolves(prev => {
+                if (prev.length > limit) {
+                    return prev.slice(0, limit);
+                }
+                return prev;
+            });
+        }
     };
 
     const addSolve = async (solve: Solve) => {
         let activeSessionId = currentSessionId;
+        // In Private Mode, we should effectively have a 'private_session' ID or similar.
+        // Requirements: "solves saved should be in their own local session... removed from right bar"
+        // Let's just generate a 'private_session_[timestamp]' on mode entry? 
+        // Or just let them pile up in `privateSolves` with a generic ID?
+        // Since we switch `activeSolves` source, simple array append works.
+        // We can assign a fake sessionId for stats calculation consistency.
 
-        // Lazy Session Creation: if no active session (and user logged in), create one now.
+        if (isPrivateMode) {
+            const privateSolve = { ...solve, sessionId: 'private_session' };
+            setPrivateSolves(prev => [privateSolve, ...prev]);
+            return;
+        }
+
+        // Check for session break requirement (Main Mode)
+        if (user && solves.length > 0) {
+            const lastSolve = solves[0];
+            const { isNewSessionNeeded } = checkSessionStatus(new Date(lastSolve.date).getTime());
+            if (isNewSessionNeeded) {
+                console.log("Auto-starting new session due to gap/stats.");
+                await startNewSession(false);
+                activeSessionId = null; // Force lazy creation below
+            }
+        }
+
+        // Lazy Session Creation (Main Mode)
         if (!activeSessionId && user) {
             try {
                 const docRef = await addDoc(collection(db, 'sessions'), {
@@ -242,32 +288,13 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
             sessionId: activeSessionId || undefined
         };
 
-        // Check for session gap
-        if (solves.length > 0) {
-            const { isNewSessionNeeded } = checkSessionStatus(new Date(solve.date).getTime());
-            if (isNewSessionNeeded) {
-                setSessionPromptVisible(true);
-            }
-        }
-
-        // Increment Session Count if active
-        // Only if we aren't creating a NEW session via the Prompt right away?
-        // Actually, if we just added a solve, we technically extended the CURRENT session (even if old).
-        // Unless user clicks "Start Fresh". But that happens async via Toast.
-        // For now, increment current. If user starts fresh, this solve remains in old session (correct).
-        // If user resumes, count is correct.
+        // Increment Session Count (Main Mode)
         if (activeSessionId && user) {
             updateSessionActivity(true, activeSessionId);
         }
 
         setSolves(prev => {
             const newSolves = [solveWithSession, ...prev];
-            if (!settings.localDataSettings.saveAll) {
-                const limit = settings.localDataSettings.localLimit || settings.localDataSettings.saveLastX;
-                if (newSolves.length > limit) {
-                    return newSolves.slice(0, limit);
-                }
-            }
             return newSolves;
         });
 
@@ -276,6 +303,10 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
     };
 
     const updateSolve = async (id: string, updates: Partial<Solve>) => {
+        if (isPrivateMode) {
+            setPrivateSolves(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+            return;
+        }
         setSolves(prev => prev.map(s => {
             if (s.id === id) {
                 const updated = { ...s, ...updates };
@@ -287,6 +318,10 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
     };
 
     const deleteSolve = async (id: string) => {
+        if (isPrivateMode) {
+            setPrivateSolves(prev => prev.filter(s => s.id !== id));
+            return;
+        }
         const solve = solves.find(s => s.id === id);
         setSolves(prev => prev.filter(s => s.id !== id));
         if (solve) {
@@ -295,14 +330,15 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
     };
 
     const clearSolves = (keepBest: boolean) => {
-        if (!keepBest) {
-            setSolves([]);
-            // TODO: Delete all from cloud? Dangerous.
+        if (isPrivateMode) {
+            setPrivateSolves([]);
             return;
         }
-        // ... (Keep best logic largely local handling for now unless we need bulk delete)
-        // For simplicity, we just clear local view logic as before.
-        // If we want to purge references, we'd need to batch delete.
+        if (!keepBest) {
+            setSolves([]);
+            return;
+        }
+        // ...
     };
 
     const [currentScramble, setCurrentScrambleState] = useState<string | null>(() => {
@@ -315,7 +351,7 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
     };
 
     return (
-        <SolvesContext.Provider value={{ solves, stats, currentScramble, setCurrentScramble, addSolve, updateSolve, deleteSolve, clearSolves, trimSolves, syncStatus }}>
+        <SolvesContext.Provider value={{ solves: activeSolves, stats, currentScramble, setCurrentScramble, addSolve, updateSolve, deleteSolve, clearSolves, trimSolves, syncStatus, isPrivateMode, togglePrivateMode }}>
             {children}
         </SolvesContext.Provider>
     );
