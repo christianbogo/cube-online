@@ -34,11 +34,11 @@ export default function Cube() {
 
     // Scramble Type State
     const [scrambleType, setScrambleType] = useState<string>(() => {
-        return localStorage.getItem('cutter-cubing-scramble-type') || '333';
+        return localStorage.getItem('cube-online-scramble-type') || '333';
     });
 
     useEffect(() => {
-        localStorage.setItem('cutter-cubing-scramble-type', scrambleType);
+        localStorage.setItem('cube-online-scramble-type', scrambleType);
     }, [scrambleType]);
 
     // Live Mode State
@@ -512,7 +512,15 @@ export default function Cube() {
 
                             {/* Live Toggle */}
                             <button
-                                onClick={() => setIsLiveMode(!isLiveMode)}
+                                onClick={() => {
+                                    if (!isLiveMode) {
+                                        if (user && !user.emailVerified) {
+                                            alert("Please verify your email to access Live Mode.");
+                                            return;
+                                        }
+                                    }
+                                    setIsLiveMode(!isLiveMode);
+                                }}
                                 className={`flex items-center gap-1 transition-colors ${isLiveMode ? 'text-red-500 hover:text-red-400' : 'hover:text-accent'}`}
                                 title={isLiveMode ? "Disable Live Mode" : "Enable Live Mode"}
                             >

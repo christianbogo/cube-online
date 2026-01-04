@@ -1,19 +1,20 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import {
     onAuthStateChanged,
-    signInWithPopup,
     signOut as firebaseSignOut,
     createUserWithEmailAndPassword,
-    signInWithEmailAndPassword
+    signInWithEmailAndPassword,
+    sendEmailVerification
 } from 'firebase/auth';
 import { doc, onSnapshot, query, collection, where, getDocs, writeBatch, deleteDoc, updateDoc } from 'firebase/firestore';
-import { auth, googleProvider, db } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
 
 interface UserData {
     uid: string;
     email: string | null;
     username: string;
     color: string;
+    emailVerified: boolean;
     starredUsers?: string[];
     blockedUsers?: string[];
 }
@@ -21,9 +22,9 @@ interface UserData {
 interface AuthContextType {
     user: UserData | null;
     loading: boolean;
-    signInWithGoogle: () => Promise<void>;
     emailSignUp: (email: string, pass: string) => Promise<any>;
     emailSignIn: (email: string, pass: string) => Promise<any>;
+    resendVerificationEmail: () => Promise<void>;
     logout: () => Promise<void>;
     deleteUserAccount?: () => Promise<void>;
     toggleStarUser: (targetUid: string) => Promise<void>;
@@ -50,12 +51,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         userData = {
                             uid: firebaseUser.uid,
                             email: firebaseUser.email,
+                            emailVerified: firebaseUser.emailVerified,
                             ...docSnap.data() as { username: string; color: string }
                         };
                     } else {
                         userData = {
                             uid: firebaseUser.uid,
                             email: firebaseUser.email,
+                            emailVerified: firebaseUser.emailVerified,
                             username: firebaseUser.displayName || 'CubingUser',
                             color: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'][Math.floor(Math.random() * 10)],
                             starredUsers: [],
@@ -79,20 +82,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => unsubscribe();
     }, []);
 
-    const signInWithGoogle = async () => {
-        try {
-            await signInWithPopup(auth, googleProvider);
-        } catch (error) {
-            console.error(error);
-        }
-    };
-
-    const emailSignUp = (email: string, pass: string) => {
-        return createUserWithEmailAndPassword(auth, email, pass);
+    const emailSignUp = async (email: string, pass: string) => {
+        const result = await createUserWithEmailAndPassword(auth, email, pass);
+        // Send verification email on sign up
+        await sendEmailVerification(result.user);
+        return result;
     };
 
     const emailSignIn = (email: string, pass: string) => {
         return signInWithEmailAndPassword(auth, email, pass);
+    };
+
+    const resendVerificationEmail = async () => {
+        if (auth.currentUser && !auth.currentUser.emailVerified) {
+            await sendEmailVerification(auth.currentUser);
+        }
     };
 
     const logout = async () => {
@@ -158,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, signInWithGoogle, emailSignUp, emailSignIn, logout, deleteUserAccount, toggleStarUser, toggleBlockUser }}>
+        <AuthContext.Provider value={{ user, loading, emailSignUp, emailSignIn, resendVerificationEmail, logout, deleteUserAccount, toggleStarUser, toggleBlockUser }}>
             {children}
         </AuthContext.Provider>
     );
