@@ -3,15 +3,14 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import Topbar from './Topbar';
 import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
-import SessionsSidebar from './SessionsSidebar';
+import DataSidebar from './DataSidebar';
 import { useSolves } from '../contexts/SolvesContext';
-import { useConfirm } from '../contexts/ConfirmationContext';
 
 export default function Layout() {
     const navigate = useNavigate();
     const location = useLocation();
-    const { isPrivateMode, togglePrivateMode } = useSolves();
-    const { confirm: confirmAction } = useConfirm();
+    const { isPrivateMode, togglePrivateMode, syncStatus } = useSolves();
+    // const { confirm: confirmAction } = useConfirm(); // Unused in this version
 
     // Persistence Helpers
     const getStoredWidth = (key: string, defaultWidth: number) => {
@@ -27,6 +26,9 @@ export default function Layout() {
     // Data Sidebar State
     const [dataWidth, setDataWidth] = useState(() => getStoredWidth('sidebar_data_width', 300));
     const [isResizingData, setIsResizingData] = useState(false);
+
+    // Toggle States
+    const [dataCollapsed, setDataCollapsed] = useState(false);
 
     // Persistence Effects
     useEffect(() => localStorage.setItem('sidebar_left_width', leftWidth.toString()), [leftWidth]);
@@ -86,33 +88,17 @@ export default function Layout() {
     // Global Keyboard Shortcuts
     useEffect(() => {
         const handleGlobalKeyDown = (e: KeyboardEvent) => {
-            // Sidebar Toggles (Tab / Shift+Tab)
             if (e.key === 'Tab') {
-                // On /account, allow default Tab behavior for form navigation
-                if (location.pathname === '/account') {
-                    return;
-                }
-
+                if (location.pathname === '/account') return;
                 e.preventDefault();
-                // Tab: Right Sidebar
-                if (!e.shiftKey) {
-                    toggleRightSidebar();
-                }
-                // Shift+Tab: Left Sidebar
-                else {
-                    toggleLeftSidebar();
-                }
+                if (!e.shiftKey) toggleRightSidebar();
+                else toggleLeftSidebar();
                 return;
             }
 
-            if (e.key === 'Escape') {
-                navigate('/');
-            }
-            if (e.key === '?') {
-                navigate('/keybinds');
-            }
+            if (e.key === 'Escape') navigate('/');
+            if (e.key === '?') navigate('/keybinds');
 
-            // Global Spacebar Focus Prevention for Buttons
             if (e.code === 'Space') {
                 const target = e.target as HTMLElement;
                 if (target.tagName === 'BUTTON') {
@@ -120,10 +106,16 @@ export default function Layout() {
                     target.blur();
                 }
             }
+
+            // Shortcuts
+            if (e.key === 's') { if (!isPrivateMode) navigate('/data'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/data'); } }
+            if (e.key === 'a') { if (!isPrivateMode) navigate('/account'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/account'); } }
+            if (e.key === 'c') { if (!isPrivateMode) navigate('/'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/'); } }
+            if (e.key === 'd') { if (!isPrivateMode) navigate('/daily'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/daily'); } }
         };
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-    }, [navigate, toggleLeftSidebar, toggleRightSidebar]);
+    }, [navigate, toggleLeftSidebar, toggleRightSidebar, location.pathname, isPrivateMode, togglePrivateMode]); // Removed confirmAction dep as it's not used in simple implementation or causing issues
 
     const startResizingLeft = useCallback(() => setIsResizingLeft(true), []);
     const startResizingRight = useCallback(() => setIsResizingRight(true), []);
@@ -143,54 +135,36 @@ export default function Layout() {
 
             if (isResizingLeft) {
                 let newWidth = e.clientX - containerRect.left;
-
                 if (newWidth < MIN_EXPANDED_WIDTH) {
-                    if (newWidth < (MIN_EXPANDED_WIDTH + COLLAPSED_WIDTH) / 2) {
-                        newWidth = COLLAPSED_WIDTH;
-                    } else {
-                        newWidth = MIN_EXPANDED_WIDTH;
-                    }
+                    if (newWidth < (MIN_EXPANDED_WIDTH + COLLAPSED_WIDTH) / 2) newWidth = COLLAPSED_WIDTH;
+                    else newWidth = MIN_EXPANDED_WIDTH;
                 }
                 if (newWidth > MAX_WIDTH) newWidth = MAX_WIDTH;
                 setLeftWidth(newWidth);
-                if (newWidth >= MIN_EXPANDED_WIDTH) {
-                    setLastOpenLeftWidth(newWidth);
-                }
+                if (newWidth >= MIN_EXPANDED_WIDTH) setLastOpenLeftWidth(newWidth);
             }
 
             if (isResizingRight) {
                 let newWidth = containerRect.right - e.clientX;
-
                 if (newWidth < MIN_EXPANDED_WIDTH) {
-                    if (newWidth < (MIN_EXPANDED_WIDTH + RIGHT_COLLAPSED_WIDTH) / 2) {
-                        newWidth = RIGHT_COLLAPSED_WIDTH;
-                    } else {
-                        newWidth = MIN_EXPANDED_WIDTH;
-                    }
+                    if (newWidth < (MIN_EXPANDED_WIDTH + RIGHT_COLLAPSED_WIDTH) / 2) newWidth = RIGHT_COLLAPSED_WIDTH;
+                    else newWidth = MIN_EXPANDED_WIDTH;
                 }
                 if (newWidth > MAX_WIDTH) newWidth = MAX_WIDTH;
-
                 setRightWidth(newWidth);
-                if (newWidth >= MIN_EXPANDED_WIDTH) {
-                    setLastOpenRightWidth(newWidth);
-                }
+                if (newWidth >= MIN_EXPANDED_WIDTH) setLastOpenRightWidth(newWidth);
             }
 
             if (isResizingData) {
-                // Resizing the middle sidebar (Data Sidebar)
-                // It's positioned after Left Sidebar.
-                // Mouse calc: clientX - LeftSidebarWidth = DataSidebarWidth
-                // But LeftSidebarWidth is dynamic.
-                // Simpler: clientX - (layoutRef.current.getBoundingClientRect().left + leftWidth)
                 const offset = layoutRef.current.getBoundingClientRect().left + leftWidth;
                 let newWidth = e.clientX - offset;
-
-                if (newWidth < 200) newWidth = 200; // Min width for data sidebar
+                if (newWidth < 200) newWidth = 200;
                 if (newWidth > 500) newWidth = 500;
                 setDataWidth(newWidth);
+                document.body.style.cursor = 'col-resize';
             }
         },
-        [isResizingLeft, isResizingRight, isResizingData, setLastOpenLeftWidth, setLastOpenRightWidth, leftWidth]
+        [isResizingLeft, isResizingRight, isResizingData, leftWidth]
     );
 
     useEffect(() => {
@@ -213,76 +187,23 @@ export default function Layout() {
         };
     }, [isResizingLeft, isResizingRight, isResizingData, resize, stopResizing]);
 
-    // Global Shortcuts
-    useEffect(() => {
-        const handleGlobalKeyDown = (e: KeyboardEvent) => {
-            // Ignore if input/textarea is focused
-            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement).isContentEditable) {
-                return;
-            }
-
-            if (e.key === 'Escape') {
-                navigate('/');
-            }
-            if (e.key === 'Tab') {
-                e.preventDefault();
-                toggleRightSidebar();
-            }
-            if (e.key === 'Shift') {
-                if (!e.repeat) {
-                    toggleLeftSidebar();
-                }
-            }
-            // Navigation Shortcuts
-            const handleNav = async (path: string) => {
-                if (isPrivateMode) {
-                    if (await confirmAction('Leave Private Mode?')) {
-                        togglePrivateMode();
-                        navigate(path);
-                    }
-                } else {
-                    navigate(path);
-                }
-            };
-
-            if (e.key === 's') handleNav('/data');
-            if (e.key === 'a') handleNav('/account');
-            if (e.key === 'c') handleNav('/');
-            if (e.key === 'd') handleNav('/daily');
-        };
-        window.addEventListener('keydown', handleGlobalKeyDown);
-        return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-    }, [navigate, toggleRightSidebar, toggleLeftSidebar, isPrivateMode, togglePrivateMode, confirmAction]);
-
     return (
-        <div className="h-full flex flex-col bg-bg-primary text-text-primary overflow-hidden">
+        <div className="h-screen w-screen bg-bg-primary text-text-primary flex flex-col overflow-hidden font-sans">
             <Topbar />
-
-            <div
-                ref={layoutRef}
-                className="flex-1 flex overflow-hidden relative"
-            >
+            <div ref={layoutRef} className="flex-1 flex overflow-hidden relative">
                 {/* Left Sidebar */}
                 <div style={{ width: leftWidth }} className="flex-shrink-0 relative flex flex-col border-r border-border backdrop-blur-sm will-change-[width] z-30">
                     <LeftSidebar collapsed={isLeftCollapsed} onToggleCollapse={toggleLeftSidebar} />
-                    {/* Drag Handle */}
-                    <div
-                        className="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-10 group flex justify-center"
-                        onMouseDown={startResizingLeft}
-                    >
+                    <div className="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-10 group flex justify-center" onMouseDown={startResizingLeft}>
                         <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
                     </div>
                 </div>
 
-                {/* Middle Sidebar (Sessions) - Data Page Only */}
+                {/* Data Sidebar */}
                 {location.pathname.startsWith('/data') && (
                     <div style={{ width: dataWidth }} className="flex-shrink-0 relative flex flex-col border-r border-border backdrop-blur-sm bg-bg-secondary will-change-[width] z-20">
-                        <SessionsSidebar collapsed={false} onToggleCollapse={() => { }} />
-                        {/* Drag Handle */}
-                        <div
-                            className="absolute top-0 right-[-5px] w-2.5 h-full cursor-col-resize z-50 group flex justify-center"
-                            onMouseDown={startResizingData}
-                        >
+                        <DataSidebar onToggleCollapse={() => setDataCollapsed(!dataCollapsed)} collapsed={dataCollapsed} />
+                        <div className="absolute top-0 right-[-5px] w-2.5 h-full cursor-col-resize z-50 group flex justify-center" onMouseDown={startResizingData}>
                             <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
                         </div>
                     </div>
@@ -293,40 +214,24 @@ export default function Layout() {
                     <div className="flex-1 p-6 overflow-y-auto custom-scrollbar w-full">
                         <Outlet />
                     </div>
-
-                    {/* Footer */}
-                    <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8">
+                    <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8 shrink-0">
                         <div className="flex gap-2 items-center">
                             <span>Online • v0.1.0</span>
-                            <SyncIndicator />
+                            <SyncIndicator status={syncStatus} />
                             {isPrivateMode && (
-                                <button
-                                    onClick={async () => {
-                                        if (await confirmAction('Leave Private Mode?')) {
-                                            togglePrivateMode();
-                                        }
-                                    }}
-                                    className="ml-2 bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20 hover:bg-yellow-500/20 transition-colors uppercase tracking-wider font-bold text-[9px]"
-                                >
+                                <button onClick={() => { if (confirm('Leave private mode?')) togglePrivateMode(); }} className="ml-2 bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20 uppercase font-bold text-[9px]">
                                     Exit Private Mode
                                 </button>
                             )}
                         </div>
-                        {consoleInfo && (
-                            <div className="text-[10px] text-yellow-500/70 truncate max-w-xs font-mono ml-auto" title={consoleInfo}>
-                                ⚠️ {consoleInfo}
-                            </div>
-                        )}
+                        {consoleInfo && <div className="text-[10px] text-yellow-500/70 truncate max-w-xs font-mono ml-auto" title={consoleInfo}>⚠️ {consoleInfo}</div>}
                     </footer>
                 </main>
 
-                {/* Right Sidebar - Hidden on Account Page */}
+                {/* Right Sidebar */}
                 {location.pathname !== '/account' && location.pathname !== '/data' && (
-                    <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col backdrop-blur-sm will-change-[width]">
-                        <div
-                            className="absolute top-0 left-[-3px] w-1.5 h-full cursor-col-resize z-10 group flex justify-center"
-                            onMouseDown={startResizingRight}
-                        >
+                    <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col backdrop-blur-sm will-change-[width] border-l border-border z-20">
+                        <div className="absolute top-0 left-[-5px] w-2.5 h-full cursor-col-resize z-50 group flex justify-center" onMouseDown={startResizingRight}>
                             <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
                         </div>
                         <RightSidebar collapsed={isRightCollapsed} onToggleCollapse={toggleRightSidebar} />
@@ -337,14 +242,11 @@ export default function Layout() {
     );
 }
 
-function SyncIndicator() {
-    const { syncStatus } = useSolves();
-
-    if (syncStatus === 'idle') return null;
-
+function SyncIndicator({ status }: { status: string }) {
+    if (status === 'idle') return null;
     return (
-        <span className={`transition-opacity duration-500 ${syncStatus === 'syncing' ? 'opacity-100' : 'opacity-50'} text-[10px] uppercase tracking-wider font-semibold text-text-secondary/50 flex items-center gap-1`}>
-            {syncStatus === 'syncing' ? 'Syncing...' : syncStatus === 'synced' ? 'Synced' : 'Sync Error'}
+        <span className={`transition-opacity duration-500 ${status === 'syncing' ? 'opacity-100' : 'opacity-50'} text-[10px] uppercase tracking-wider font-semibold text-text-secondary/50 flex items-center gap-1`}>
+            {status === 'syncing' ? 'Syncing...' : status === 'synced' ? 'Synced' : 'Sync Error'}
         </span>
     );
 }

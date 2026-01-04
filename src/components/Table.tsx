@@ -2,16 +2,17 @@ import React from 'react';
 
 interface Column<T> {
     header: React.ReactNode;
-    accessor: keyof T | ((item: T) => React.ReactNode);
+    accessor: keyof T | ((item: T, index: number) => React.ReactNode);
     className?: string;
 }
 
 interface TableProps<T> {
     data: T[];
     columns: Column<T>[];
+    onRowClick?: (item: T) => void;
 }
 
-export default function Table<T extends { id: string | number }>({ data, columns }: TableProps<T>) {
+export default function Table<T extends { id: string | number }>({ data, columns, onRowClick }: TableProps<T>) {
     return (
         <div className="w-full overflow-x-auto border border-border rounded-lg">
             <table className="w-full text-left text-sm border-collapse">
@@ -29,11 +30,15 @@ export default function Table<T extends { id: string | number }>({ data, columns
                 </thead>
                 <tbody className="divide-y divide-border">
                     {data.map((row, index) => (
-                        <tr key={row.id || index} className="hover:bg-bg-hover/50 transition-colors">
+                        <tr
+                            key={row.id || index}
+                            className={`hover:bg-bg-hover/50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
+                            onClick={() => onRowClick?.(row)}
+                        >
                             {columns.map((col, colIndex) => (
                                 <td key={colIndex} className={`p-3 text-text-primary ${col.className || ''}`}>
                                     {typeof col.accessor === 'function'
-                                        ? col.accessor(row)
+                                        ? col.accessor(row, index)
                                         : (row[col.accessor] as React.ReactNode)}
                                 </td>
                             ))}

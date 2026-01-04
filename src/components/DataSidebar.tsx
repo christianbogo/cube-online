@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useSolves } from '../contexts/SolvesContext';
+import { useSolves, type Solve } from '../contexts/SolvesContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { calculateBestAverage, calculateBestSingle, formatTime } from '../utils/calculations';
+import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage, standardDeviation } from '../utils/calculations';
 import { ChevronDown, Calendar, Clock, Layers, Archive, CalendarDays, CalendarRange } from 'lucide-react';
 import { startOfYear, startOfMonth, startOfWeek, startOfDay, format } from 'date-fns';
+import { useSearchParams } from 'react-router-dom';
 
 type GroupingType = 'all' | 'years' | 'months' | 'weeks' | 'days' | 'sessions';
 type StatColumn = 'count' | 'single' | 'ao5' | 'ao12' | 'ao100' | 'time';
@@ -41,32 +42,59 @@ const SCRAMBLE_TYPES = [
     { label: 'Sq-1', value: 'sq1' },
 ];
 
-export default function SessionsSidebar({ onToggleCollapse: _onToggleCollapse, collapsed: _collapsed }: { onToggleCollapse: () => void, collapsed: boolean }) {
+export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, collapsed: _collapsed }: { onToggleCollapse: () => void, collapsed: boolean }) {
     const { user } = useAuth();
-    const { solves } = useSolves(); // Assuming this contains all relevant solves
+    const { solves } = useSolves();
     const { settings, updateSettings } = useSettings();
+    const [searchParams, setSearchParams] = useSearchParams();
 
+    // -- State --
     const [grouping, setGrouping] = useState<GroupingType>(() => {
-        return (localStorage.getItem('sidebar_grouping') as GroupingType) || 'sessions';
+        return (searchParams.get('grouping') as GroupingType) || (localStorage.getItem('sidebar_grouping') as GroupingType) || 'sessions';
     });
     const [statColumn, setStatColumn] = useState<StatColumn>(() => {
         return (localStorage.getItem('sidebar_stat_column') as StatColumn) || 'count';
     });
-    const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
+    // Derived Selection from URL
+    const selectedKeys = useMemo(() => {
+        const sel = searchParams.get('selected');
+        return sel ? new Set(sel.split(',')) : new Set<string>();
+    }, [searchParams]);
+
+    // -- Effects --
+    // Sync Grouping to URL and LocalStorage
     useEffect(() => {
         localStorage.setItem('sidebar_grouping', grouping);
-    }, [grouping]);
+
+        // Update URL if needed (preserve selection if valid?)
+        // Actually, changing grouping usually invalidates selection keys (different format)
+        // So we might want to clear selection on grouping change unless we are careful.
+        // For now, let's just update the param.
+
+        const newParams = new URLSearchParams(searchParams);
+        if (newParams.get('grouping') !== grouping) {
+            newParams.set('grouping', grouping);
+            newParams.delete('selected'); // Clear selection on group change
+            setSearchParams(newParams, { replace: true });
+        }
+    }, [grouping, setSearchParams, searchParams]);
 
     useEffect(() => {
         localStorage.setItem('sidebar_stat_column', statColumn);
     }, [statColumn]);
 
+
     // 1. Filter Solves by Event (and User)
     const filteredSolves = useMemo(() => {
-        if (!user) return [];
-        return solves
-            .filter(s => s.userId === user.uid && (s.scrambleType || '333') === settings.scrambleType)
+        // If not logged in, we still show local solves which are in context
+        // But context might have mixed types.
+        let base = solves;
+        if (user) {
+            base = solves.filter(s => s.userId === user.uid);
+        }
+        return base
+            .filter(s => (s.scrambleType || '333') === settings.scrambleType)
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [solves, user, settings.scrambleType]);
 
@@ -83,7 +111,7 @@ export default function SessionsSidebar({ onToggleCollapse: _onToggleCollapse, c
             }];
         }
 
-        const groups = new Map<string, { key: string, label: string, solves: any[], date: Date }>();
+        const groups = new Map<string, { key: string, label: string, solves: Solve[], date: Date }>();
 
         filteredSolves.forEach(solve => {
             const date = new Date(solve.date);
@@ -140,9 +168,7 @@ export default function SessionsSidebar({ onToggleCollapse: _onToggleCollapse, c
 
     }, [filteredSolves, grouping]);
 
-    // 3. Enrich Items with Stats (Memoized per item to avoid recalc? Or just in render map)
-    // Doing it inside render for simplicity or a second pass.
-    // Let's do a map for clean render.
+    // 3. Enrich Items with Stats
     const displayItems = useMemo(() => {
         return groupedItems.map(item => {
             const count = item.solves.length;
@@ -168,8 +194,80 @@ export default function SessionsSidebar({ onToggleCollapse: _onToggleCollapse, c
         return `${secs}s`;
     };
 
+    // -- Selection Handler --
+    const handleSelect = (key: string) => {
+        const newSet = new Set(selectedKeys);
+        if (newSet.has(key)) newSet.delete(key);
+        else newSet.add(key);
+
+        const newParams = new URLSearchParams(searchParams);
+        if (newSet.size === 0) {
+            newParams.delete('selected');
+        } else {
+            newParams.set('selected', Array.from(newSet).join(','));
+        }
+        setSearchParams(newParams);
+    };
+
+    // -- Footer Stats Calculation --
+    const selectedStats = useMemo(() => {
+        let targetSolves: Solve[] = [];
+
+        if (selectedKeys.size === 0) {
+            // Assume ALL solves for event
+            targetSolves = filteredSolves;
+        } else {
+            // Filter based on selection
+            // We need to map back from keys to solves.
+            // Efficient way: iterate groupedItems which has keys and solves.
+            groupedItems.forEach(g => {
+                if (selectedKeys.has(g.key)) {
+                    targetSolves.push(...g.solves);
+                }
+            });
+        }
+
+        if (targetSolves.length === 0) return null;
+
+        const count = targetSolves.length;
+        const mean = calculateAverage(targetSolves, targetSolves.length); // Mean of all? Usually mean is average of all times excluding DNFs
+        const stdDev = standardDeviation(targetSolves);
+
+        // Single
+        const bestSingle = calculateBestSingle(targetSolves);
+
+        // Averages
+        const bestAo5 = calculateBestAverage(targetSolves, 5);
+        const bestAo12 = calculateBestAverage(targetSolves, 12);
+        const bestAo100 = calculateBestAverage(targetSolves, 100);
+        const bestAo1000 = targetSolves.length >= 1000 ? calculateBestAverage(targetSolves, 1000) : null;
+        const bestAo10000 = targetSolves.length >= 10000 ? calculateBestAverage(targetSolves, 10000) : null;
+
+        const totalTime = targetSolves.reduce((acc, s) => {
+            if (s.penalty === 'DNF') return acc;
+            let t = s.time;
+            if (s.penalty === '+2') t += 2000;
+            return acc + t;
+        }, 0);
+
+        return {
+            count,
+            mean,
+            stdDev,
+            bestSingle,
+            bestAo5,
+            bestAo12,
+            bestAo100,
+            bestAo1000,
+            bestAo10000,
+            totalTime
+        };
+
+    }, [selectedKeys, groupedItems, filteredSolves]);
+
+
     return (
-        <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-sm overflow-hidden min-w-0 font-sans">
+        <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-sm overflow-hidden min-w-0 font-sans border-r border-border">
             {/* Header Area */}
             <div className="flex flex-col border-b border-border/50 bg-bg-secondary/50 backdrop-blur-sm sticky top-0 z-10 text-text-primary">
 
@@ -211,11 +309,11 @@ export default function SessionsSidebar({ onToggleCollapse: _onToggleCollapse, c
                 </div>
 
                 {/* Dropdown for Stat Column */}
-                <div className="relative group min-w-[60px] text-right">
+                <div className="relative group min-w-[120px] text-right">
                     <select
                         value={statColumn}
                         onChange={(e) => setStatColumn(e.target.value as StatColumn)}
-                        className="appearance-none bg-transparent hover:text-accent cursor-pointer focus:outline-none text-right w-full pr-3"
+                        className="appearance-none bg-transparent hover:text-accent cursor-pointer focus:outline-none text-right w-full pr-3 uppercase"
                     >
                         {COLUMN_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                     </select>
@@ -233,12 +331,7 @@ export default function SessionsSidebar({ onToggleCollapse: _onToggleCollapse, c
                         return (
                             <div
                                 key={item.key}
-                                onClick={() => {
-                                    const newSet = new Set(selectedKeys);
-                                    if (newSet.has(item.key)) newSet.delete(item.key);
-                                    else newSet.add(item.key);
-                                    setSelectedKeys(newSet);
-                                }}
+                                onClick={() => handleSelect(item.key)}
                                 className={`grid grid-cols-[1fr_auto] gap-2 px-4 py-3 border-b border-border/10 hover:bg-bg-hover transition-colors cursor-pointer items-center
                                     ${isSelected ? 'bg-accent/10 border-l-2 border-l-accent pl-[14px]' : 'border-l-2 border-l-transparent'}
                                 `}
@@ -265,8 +358,69 @@ export default function SessionsSidebar({ onToggleCollapse: _onToggleCollapse, c
                 )}
             </div>
 
-            <div className="p-2 border-t border-border/50 flex justify-end">
+            {/* Footer Stats Table */}
+            <div className="border-t border-border bg-bg-secondary p-3 flex flex-col gap-2">
+                <div className="text-[10px] uppercase font-bold text-text-secondary mb-1">
+                    {selectedKeys.size > 0 ? `Selected (${selectedKeys.size})` : 'All Solves'}
+                </div>
+
+                {selectedStats ? (
+                    <div className="flex flex-col gap-1 text-xs px-1">
+                        {/* Summary */}
+                        <div className="flex justify-between items-center">
+                            <span className="text-text-secondary">Solves</span>
+                            <span className="font-mono text-text-primary">{selectedStats.count}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-text-secondary">Time</span>
+                            <span className="font-mono text-text-primary">{formatDuration(selectedStats.totalTime)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-text-secondary">Mean</span>
+                            <span className="font-mono text-text-primary">{formatTime(selectedStats.mean)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-text-secondary">Std Dev</span>
+                            <span className="font-mono text-text-primary">{formatTime(selectedStats.stdDev)}</span>
+                        </div>
+
+                        <div className="h-[1px] bg-border/50 my-1" />
+
+                        {/* Bests */}
+                        <div className="flex justify-between items-center">
+                            <span className="text-text-secondary">Best</span>
+                            <span className="font-mono text-text-primary font-bold">{formatTime(selectedStats.bestSingle)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-text-secondary">Ao5</span>
+                            <span className="font-mono text-text-primary font-bold">{formatTime(selectedStats.bestAo5)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-text-secondary">Ao12</span>
+                            <span className="font-mono text-text-primary font-bold">{formatTime(selectedStats.bestAo12)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-text-secondary">Ao100</span>
+                            <span className="font-mono text-text-primary font-bold">{formatTime(selectedStats.bestAo100)}</span>
+                        </div>
+                        {selectedStats.bestAo1000 && (
+                            <div className="flex justify-between items-center">
+                                <span className="text-text-secondary">Ao1000</span>
+                                <span className="font-mono text-text-primary font-bold">{formatTime(selectedStats.bestAo1000)}</span>
+                            </div>
+                        )}
+                        {selectedStats.bestAo10000 && (
+                            <div className="flex justify-between items-center">
+                                <span className="text-text-secondary">Ao10000</span>
+                                <span className="font-mono text-text-primary font-bold">{formatTime(selectedStats.bestAo10000)}</span>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="text-center text-text-secondary/50 italic py-2">No data</div>
+                )}
             </div>
         </aside>
     );
 }
+

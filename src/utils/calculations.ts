@@ -89,3 +89,20 @@ export const formatTime = (ms: number | 'DNF' | null): string => {
     if (ms === 'DNF') return 'DNF';
     return formatTimeUtil(ms);
 };
+
+export const standardDeviation = (solves: Solve[]): number => {
+    const validTimes = solves
+        .filter(s => s.penalty !== 'DNF' && s.inspectionPenalty !== 'DNF')
+        .map(s => {
+            let t = s.time;
+            if (s.penalty === '+2') t += 2000;
+            if (s.inspectionPenalty === '+2') t += 2000;
+            return t;
+        });
+
+    if (validTimes.length === 0) return 0;
+
+    const mean = validTimes.reduce((acc, t) => acc + t, 0) / validTimes.length;
+    const variance = validTimes.reduce((acc, t) => acc + Math.pow(t - mean, 2), 0) / validTimes.length;
+    return Math.sqrt(variance);
+};
