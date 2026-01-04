@@ -52,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            console.log("AuthContext: onAuthStateChanged", firebaseUser?.uid);
             if (firebaseUser) {
                 // Query "users" collection where "uid" field (Auth UID) matches
                 // We do not know the document ID (Short ID) yet.
@@ -59,23 +60,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                 // We need a real-time listener on the query to get the doc ID
                 const unsubscribeQuery = onSnapshot(q, (snapshot) => {
-                    if (!snapshot.empty) {
-                        const userDoc = snapshot.docs[0];
-                        const data = userDoc.data();
+                    console.log("AuthContext: Snapshot received", { empty: snapshot.empty, size: snapshot.size });
 
-                        // Use the Firestore Document ID as the User's UID for the app
+                    if (!snapshot.empty) {
+                        // Priority: Find a doc with a Short ID (length <= 8 to be safe, usually 6)
+                        // This avoids picking up legacy docs keyed by the long Auth UID.
+                        let userDoc = snapshot.docs.find(d => d.id.length <= 10);
+
+                        // Fallback: If no short ID doc found, take the first one (legacy behavior)
+                        if (!userDoc) {
+                            console.warn("AuthContext: No Short ID doc found. Using first available doc.");
+                            userDoc = snapshot.docs[0];
+                        }
+
+                        console.log("AuthContext: Selected User Doc", { id: userDoc.id, data: userDoc.data() });
+
+                        const data = userDoc.data();
                         const shortId = userDoc.id;
 
                         const userData: UserData = {
-                            uid: shortId, // <--- Key Change: This is now the Short ID
+                            uid: shortId,
                             email: firebaseUser.email,
                             emailVerified: firebaseUser.emailVerified,
                             ...data as { username: string; color: string; starredUsers?: string[]; blockedUsers?: string[] }
                         };
+                        console.log("AuthContext: Setting User", userData);
                         setUser(userData);
                         localStorage.setItem('cached_user_profile', JSON.stringify(userData));
                         setLoading(false);
                     } else {
+                        console.warn("AuthContext: User authenticated but NO profile doc found.");
                         // User authenticated but no profile yet? 
                         // Should handle creation elsewhere or wait for it.
                         // For legacy support or race conditions, we might just wait.
@@ -88,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                 return () => unsubscribeQuery();
             } else {
+                console.log("AuthContext: User signed out.");
                 setUser(null);
                 localStorage.removeItem('cached_user_profile');
                 setLoading(false);
@@ -122,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 // Create the user profile
                 await setDoc(docRef, {
                     uid: result.user.uid, // Store the Auth UID for lookups
+                    email: email, // Store email
                     username: 'CubingUser',
                     color: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'][Math.floor(Math.random() * 10)],
                     starredUsers: [],

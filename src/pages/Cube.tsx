@@ -536,7 +536,7 @@ export default function Cube() {
                         <div className="mb-10 text-center max-w-2xl min-h-[4rem] flex flex-col items-center justify-center">
                             <p
                                 onClick={handleCopyScramble}
-                                className="font-mono text-text-secondary leading-relaxed text-center transition-all cursor-pointer hover:text-text-primary active:scale-95"
+                                className="font-mono text-text-secondary leading-relaxed text-center cursor-pointer hover:text-text-primary active:scale-95"
                                 style={{
                                     fontSize: `${settings.scrambleSize * getScrambleSizeMultiplier()}rem`,
                                     color: isCopied ? '#22c55e' : undefined

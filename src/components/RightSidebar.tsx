@@ -46,7 +46,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
         } else {
             return allSolves.filter(s => s.userId === user?.uid && (s.scrambleType || '333') === settings.scrambleType);
         }
-    }, [allSolves, isLocalExperience, user]);
+    }, [allSolves, isLocalExperience, user, settings.scrambleType]);
 
     // -- Pagination --
     const [pageLimit, setPageLimit] = useState(100);

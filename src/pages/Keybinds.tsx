@@ -4,6 +4,8 @@ export default function Keybinds() {
     const keybinds = [
         { key: 'Space', action: 'Start/Stop Timer', icon: <Activity className="w-4 h-4" /> },
         { key: 'Esc', action: 'Home / Reset', icon: <Home className="w-4 h-4" /> },
+        { key: 'Tab', action: 'Toggle Right Sidebar', icon: <Database className="w-4 h-4" /> },
+        { key: 'Shift', action: 'Toggle Left Sidebar', icon: <Database className="w-4 h-4" /> },
         { key: 's', action: 'Go to Data', icon: <Database className="w-4 h-4" /> },
         { key: 'd', action: 'Go to Daily', icon: <Keyboard className="w-4 h-4" /> },
         { key: 'a', action: 'Go to Account', icon: <User className="w-4 h-4" /> },

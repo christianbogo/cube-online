@@ -7,9 +7,11 @@ service cloud.firestore {
     }
 
     // User profiles and subcollections
-    match /users/{userId}/{document=**} {
+    // User profiles
+    match /users/{documentId} {
       allow read: if request.auth != null;
-      allow write: if isOwner(userId);
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
     
     // Solves

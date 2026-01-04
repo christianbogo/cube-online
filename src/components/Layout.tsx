@@ -58,28 +58,7 @@ export default function Layout() {
         };
     }, []);
 
-    // Global ESC Shortcut
-    useEffect(() => {
-        const handleGlobalKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                navigate('/');
-            }
-            if (e.key === '?') {
-                navigate('/keybinds');
-            }
 
-            // Global Spacebar Focus Prevention for Buttons
-            if (e.code === 'Space') {
-                const target = e.target as HTMLElement;
-                if (target.tagName === 'BUTTON') {
-                    e.preventDefault();
-                    target.blur();
-                }
-            }
-        };
-        window.addEventListener('keydown', handleGlobalKeyDown);
-        return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-    }, [navigate]);
 
     const toggleLeftSidebar = useCallback(() => {
         if (isLeftCollapsed) {
@@ -98,6 +77,48 @@ export default function Layout() {
             setRightWidth(RIGHT_COLLAPSED_WIDTH);
         }
     }, [isRightCollapsed, rightWidth, lastOpenRightWidth]);
+
+    // Global Keyboard Shortcuts
+    useEffect(() => {
+        const handleGlobalKeyDown = (e: KeyboardEvent) => {
+            // Sidebar Toggles (Tab / Shift+Tab)
+            if (e.key === 'Tab') {
+                // On /account, allow default Tab behavior for form navigation
+                if (location.pathname === '/account') {
+                    return;
+                }
+
+                e.preventDefault();
+                // Tab: Right Sidebar
+                if (!e.shiftKey) {
+                    toggleRightSidebar();
+                }
+                // Shift+Tab: Left Sidebar
+                else {
+                    toggleLeftSidebar();
+                }
+                return;
+            }
+
+            if (e.key === 'Escape') {
+                navigate('/');
+            }
+            if (e.key === '?') {
+                navigate('/keybinds');
+            }
+
+            // Global Spacebar Focus Prevention for Buttons
+            if (e.code === 'Space') {
+                const target = e.target as HTMLElement;
+                if (target.tagName === 'BUTTON') {
+                    e.preventDefault();
+                    target.blur();
+                }
+            }
+        };
+        window.addEventListener('keydown', handleGlobalKeyDown);
+        return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    }, [navigate, toggleLeftSidebar, toggleRightSidebar]);
 
     const startResizingLeft = useCallback(() => setIsResizingLeft(true), []);
     const startResizingRight = useCallback(() => setIsResizingRight(true), []);

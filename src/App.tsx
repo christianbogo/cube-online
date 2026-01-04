@@ -11,6 +11,16 @@ import Data from './pages/Data';
 import Account from './pages/Account';
 import About from './pages/About';
 import Keybinds from './pages/Keybinds';
+import { useAuth } from './contexts/AuthContext';
+import { Navigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
+
+const ProtectedRoute = ({ children }: { children: ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) return null; // Or a spinner
+  if (!user) return <Navigate to="/" replace />;
+  return children;
+};
 
 function App() {
   return (
@@ -23,9 +33,9 @@ function App() {
                 <Routes>
                   <Route path="/" element={<Layout />}>
                     <Route index element={<Cube />} />
-                    <Route path="daily" element={<Daily />} />
-                    <Route path="data" element={<Data />} />
-                    <Route path="data/:type/:id" element={<Data />} />
+                    <Route path="daily" element={<ProtectedRoute><Daily /></ProtectedRoute>} />
+                    <Route path="data" element={<ProtectedRoute><Data /></ProtectedRoute>} />
+                    <Route path="data/:type/:id" element={<ProtectedRoute><Data /></ProtectedRoute>} />
                     <Route path="about" element={<About />} />
                     <Route path="account" element={<Account />} />
                     <Route path="keybinds" element={<Keybinds />} />

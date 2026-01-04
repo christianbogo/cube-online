@@ -1,4 +1,4 @@
-import { Box, BarChart2, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Calendar, Info } from 'lucide-react';
+import { Box, BarChart2, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Calendar, Info, Keyboard } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useSolves } from '../contexts/SolvesContext';
@@ -15,6 +15,7 @@ const navItems = [
     { name: 'Daily', icon: Calendar, path: '/daily' },
     { name: 'Data', icon: BarChart2, path: '/data' },
     { name: 'About', icon: Info, path: '/about' },
+    { name: 'Binds', icon: Keyboard, path: '/keybinds' },
 ];
 
 export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebarProps) {

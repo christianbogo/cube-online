@@ -28,14 +28,11 @@ export default function Account() {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [authError, setAuthError] = useState('');
     const [isSignUpMode, setIsSignUpMode] = useState(false);
-
-    // Sync & Local Data Settings State
-    // Sync & Local Data Settings State
-    // const { solves, clearSolves } = useSolves(); // Unused
-
+    const [authLoading, setAuthLoading] = useState(false);
 
     // Initial load
     useEffect(() => {
+        console.log("Account: user state changed", user);
         if (user) {
             setUsername(user.username || 'CubingUser');
             setSelectedColor(user.color || '#3b82f6');
@@ -116,9 +113,7 @@ export default function Account() {
         }
 
         // 2. Profanity Check
-        // Dynamic import to avoid bundle issues if needed, or just standard import usage
         import('leo-profanity').then(filter => {
-            // Check if clean
             if (filter.check(cleaned)) {
                 alert("Username contains inappropriate language.");
                 return;
@@ -136,6 +131,7 @@ export default function Account() {
 
     const handleAuthAction = async () => {
         setAuthError('');
+        setAuthLoading(true);
         try {
             if (isSignUpMode) {
                 if (password !== confirmPassword) {
@@ -148,6 +144,8 @@ export default function Account() {
             }
         } catch (e: any) {
             setAuthError(e.message || 'Authentication failed');
+        } finally {
+            setAuthLoading(false);
         }
     };
 
@@ -171,8 +169,6 @@ export default function Account() {
             {children}
         </div>
     );
-
-
 
     return (
         <div className="w-full max-w-3xl flex flex-col items-start text-left p-4 sm:p-0 pb-20">
@@ -280,9 +276,14 @@ export default function Account() {
                                 </button>
                             </div>
 
+                        </div>
+
+                        <form onSubmit={(e) => { e.preventDefault(); console.log("Form submitted"); handleAuthAction(); }} className="flex flex-col gap-4 w-full">
                             <input
                                 type="email"
                                 placeholder="Email"
+                                name="email" // added name
+                                autoComplete="email" // added autocomplete
                                 value={email}
                                 onChange={e => setEmail(e.target.value)}
                                 className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
@@ -290,6 +291,8 @@ export default function Account() {
                             <input
                                 type="password"
                                 placeholder="Password"
+                                name="password" // added name
+                                autoComplete={isSignUpMode ? "new-password" : "current-password"} // added autocomplete
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
                                 className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
@@ -298,6 +301,8 @@ export default function Account() {
                                 <input
                                     type="password"
                                     placeholder="Confirm Password"
+                                    name="confirmPassword" // added name
+                                    autoComplete="new-password" // added autocomplete
                                     value={confirmPassword}
                                     onChange={e => setConfirmPassword(e.target.value)}
                                     className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
@@ -306,24 +311,22 @@ export default function Account() {
 
                             {authError && <p className="text-red-500 text-sm">{authError}</p>}
 
-                            <div className="flex gap-3 pt-2">
-                                <button
-                                    onClick={handleAuthAction}
-                                    className="bg-accent text-white px-6 py-2 rounded-md hover:bg-accent/90 font-medium w-full"
-                                >
-                                    {isSignUpMode ? 'Sign Up' : 'Sign In'}
-                                </button>
-                            </div>
-                        </div>
+                            <button
+                                type="submit"
+                                disabled={authLoading}
+                                onClick={() => console.log("Sign In Clicked", { authLoading })}
+                                className="bg-accent text-white px-6 py-2 rounded-md hover:bg-accent/90 font-medium w-full transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {authLoading ? 'Loading...' : (isSignUpMode ? 'Sign Up' : 'Sign In')}
+                            </button>
+                        </form>
+                    </div>
 
-                        <div className="text-sm text-text-secondary mt-4">
-                            Local solves are wiped on sign in/out. Sign in to sync unlimited solves.
-                        </div>
+                    <div className="text-sm text-text-secondary mt-4">
+                        Local solves are wiped on sign in/out. Sign in to sync unlimited solves.
                     </div>
                 </div>
             )}
-
-
 
             {/* Device Settings (Vertical List) */}
             <div className="w-full mb-12">
@@ -349,8 +352,6 @@ export default function Account() {
                             onChange={(e) => updateSettings({ showLiveTimer: e.target.checked })}
                         />
                     </SettingRow>
-
-
 
                     <SettingRow label="Priming Length" description="Seconds to hold spacebar to ready (0.0 - 3.0s).">
                         <div className="flex items-center gap-1 font-mono text-sm">
@@ -379,112 +380,116 @@ export default function Account() {
             </div>
 
             {/* Social Settings */}
-            {user && (
-                <div className="w-full mb-12">
-                    <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
-                        <Users className="w-5 h-5 text-zinc-400" /> Social
-                    </h3>
+            {
+                user && (
+                    <div className="w-full mb-12">
+                        <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
+                            <Users className="w-5 h-5 text-zinc-400" /> Social
+                        </h3>
 
-                    {!user.emailVerified ? (
-                        <div className="pl-4 border-l border-border/50 ml-2">
-                            <p className="text-sm text-text-secondary">
-                                Please verify your email to access social features (Friending & Blocking).
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="flex flex-col gap-6 pl-4 border-l border-border/50 ml-2">
-                            {/* Favorites */}
-                            <div>
-                                <h4 className="text-sm font-semibold text-text-primary mb-2 flex items-center gap-2">
-                                    <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" /> Favorites
-                                </h4>
-                                {starredProfiles.length === 0 ? (
-                                    <p className="text-xs text-text-secondary italic">No favorite users yet.</p>
-                                ) : (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                        {starredProfiles.map(p => (
-                                            <div key={p.uid} className="flex items-center justify-between p-2 bg-surface-elevation-1 rounded border border-border group">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-6 h-6 rounded-full" style={{ backgroundColor: p.color }} />
-                                                    <span className="text-sm font-medium text-text-primary truncate">{p.username}</span>
-                                                </div>
-                                                <button
-                                                    onClick={() => toggleStarUser(p.uid)}
-                                                    className="text-text-secondary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
-                                                    title="Unfavorite"
-                                                >
-                                                    <X className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                        {!user.emailVerified ? (
+                            <div className="pl-4 border-l border-border/50 ml-2">
+                                <p className="text-sm text-text-secondary">
+                                    Please verify your email to access social features (Friending & Blocking).
+                                </p>
                             </div>
+                        ) : (
+                            <div className="flex flex-col gap-6 pl-4 border-l border-border/50 ml-2">
+                                {/* Favorites */}
+                                <div>
+                                    <h4 className="text-sm font-semibold text-text-primary mb-2 flex items-center gap-2">
+                                        <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" /> Favorites
+                                    </h4>
+                                    {starredProfiles.length === 0 ? (
+                                        <p className="text-xs text-text-secondary italic">No favorite users yet.</p>
+                                    ) : (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {starredProfiles.map(p => (
+                                                <div key={p.uid} className="flex items-center justify-between p-2 bg-surface-elevation-1 rounded border border-border group">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-6 h-6 rounded-full" style={{ backgroundColor: p.color }} />
+                                                        <span className="text-sm font-medium text-text-primary truncate">{p.username}</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => toggleStarUser(p.uid)}
+                                                        className="text-text-secondary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                                                        title="Unfavorite"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
 
-                            {/* Blocked */}
-                            <div>
-                                <h4 className="text-sm font-semibold text-text-primary mb-2 flex items-center gap-2">
-                                    <Ban className="w-4 h-4 text-red-500" /> Blocked Users
-                                </h4>
-                                {blockedProfiles.length === 0 ? (
-                                    <p className="text-xs text-text-secondary italic">No blocked users.</p>
-                                ) : (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                        {blockedProfiles.map(p => (
-                                            <div key={p.uid} className="flex items-center justify-between p-2 bg-surface-elevation-1 rounded border border-border group">
-                                                <div className="flex items-center gap-2 opacity-50">
-                                                    <div className="w-6 h-6 rounded-full" style={{ backgroundColor: p.color }} />
-                                                    <span className="text-sm font-medium text-text-primary truncate">{p.username}</span>
+                                {/* Blocked */}
+                                <div>
+                                    <h4 className="text-sm font-semibold text-text-primary mb-2 flex items-center gap-2">
+                                        <Ban className="w-4 h-4 text-red-500" /> Blocked Users
+                                    </h4>
+                                    {blockedProfiles.length === 0 ? (
+                                        <p className="text-xs text-text-secondary italic">No blocked users.</p>
+                                    ) : (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {blockedProfiles.map(p => (
+                                                <div key={p.uid} className="flex items-center justify-between p-2 bg-surface-elevation-1 rounded border border-border group">
+                                                    <div className="flex items-center gap-2 opacity-50">
+                                                        <div className="w-6 h-6 rounded-full" style={{ backgroundColor: p.color }} />
+                                                        <span className="text-sm font-medium text-text-primary truncate">{p.username}</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => toggleBlockUser(p.uid)}
+                                                        className="text-text-secondary hover:text-green-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                                                        title="Unblock"
+                                                    >
+                                                        <Check className="w-4 h-4" />
+                                                    </button>
                                                 </div>
-                                                <button
-                                                    onClick={() => toggleBlockUser(p.uid)}
-                                                    className="text-text-secondary hover:text-green-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
-                                                    title="Unblock"
-                                                >
-                                                    <Check className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    )}
-                </div>
-            )}
+                        )}
+                    </div>
+                )
+            }
 
             {/* "Dangerous Buttons" Footer */}
-            {user && (
-                <div className="w-full pt-8 border-t border-border mt-8">
-                    <h3 className="text-sm font-semibold text-red-500 mb-4 flex items-center gap-2">
-                        <TriangleAlert className="w-4 h-4" /> Dangerous Zone
-                    </h3>
+            {
+                user && (
+                    <div className="w-full pt-8 border-t border-border mt-8">
+                        <h3 className="text-sm font-semibold text-red-500 mb-4 flex items-center gap-2">
+                            <TriangleAlert className="w-4 h-4" /> Dangerous Zone
+                        </h3>
 
-                    <div className="flex flex-col items-start gap-2">
-                        <button
-                            onClick={logout}
-                            className="text-xs text-text-secondary hover:text-text-primary transition-colors flex items-center gap-2 px-2 py-1 hover:bg-bg-secondary rounded"
-                        >
-                            <LogOut className="w-3 h-3" /> Sign Out
-                        </button>
+                        <div className="flex flex-col items-start gap-2">
+                            <button
+                                onClick={logout}
+                                className="text-xs text-text-secondary hover:text-text-primary transition-colors flex items-center gap-2 px-2 py-1 hover:bg-bg-secondary rounded"
+                            >
+                                <LogOut className="w-3 h-3" /> Sign Out
+                            </button>
 
-                        <button disabled className="text-xs text-text-secondary/50 cursor-not-allowed flex items-center gap-2 px-2 py-1 rounded">
-                            <Download className="w-3 h-3" /> Download Data (Locked)
-                        </button>
+                            <button disabled className="text-xs text-text-secondary/50 cursor-not-allowed flex items-center gap-2 px-2 py-1 rounded">
+                                <Download className="w-3 h-3" /> Download Data (Locked)
+                            </button>
 
-                        <button disabled className="text-xs text-text-secondary/50 cursor-not-allowed flex items-center gap-2 px-2 py-1 rounded">
-                            <Upload className="w-3 h-3" /> Upload Data (Locked)
-                        </button>
+                            <button disabled className="text-xs text-text-secondary/50 cursor-not-allowed flex items-center gap-2 px-2 py-1 rounded">
+                                <Upload className="w-3 h-3" /> Upload Data (Locked)
+                            </button>
 
-                        <button
-                            onClick={() => alert("Delete account functionality coming soon.")}
-                            className="text-xs text-red-500/80 hover:text-red-500 transition-colors flex items-center gap-2 px-2 py-1 hover:bg-red-500/10 rounded"
-                        >
-                            <Trash2 className="w-3 h-3" /> Delete Account
-                        </button>
+                            <button
+                                onClick={() => alert("Delete account functionality coming soon.")}
+                                className="text-xs text-red-500/80 hover:text-red-500 transition-colors flex items-center gap-2 px-2 py-1 hover:bg-red-500/10 rounded"
+                            >
+                                <Trash2 className="w-3 h-3" /> Delete Account
+                            </button>
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }
