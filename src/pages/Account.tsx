@@ -254,7 +254,7 @@ export default function Account() {
                 // Sign In / Sign Up UI
                 <div className="mb-12 w-full animate-in fade-in duration-500">
                     <div className="flex items-center gap-2 mb-6">
-                        <div className="w-8 h-8 rounded-md bg-zinc-700 dark:bg-zinc-200 shadow-sm" />
+                        <img src="/logo.svg" alt="Logo" className="w-8 h-8" />
                         <h1 className="text-3xl font-bold text-text-primary">Sign In</h1>
                     </div>
 

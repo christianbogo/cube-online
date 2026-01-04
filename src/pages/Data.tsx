@@ -4,12 +4,14 @@ import Tabs from '../components/Tabs';
 import Table from '../components/Table';
 import { Hash, Activity, AlertTriangle } from 'lucide-react';
 import { type Solve, useSolves } from '../contexts/SolvesContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { detectOutliers } from '../utils/analysis';
 import { useAuth } from '../contexts/AuthContext';
 import { formatTime } from '../utils/formatTime';
 
 export default function Data() {
     const { solves, stats } = useSolves();
+    const { settings } = useSettings();
     const { user } = useAuth();
     const navigate = useNavigate();
     const { type, id } = useParams();
@@ -19,8 +21,8 @@ export default function Data() {
     // Actually, when signed in, we only want to see solves that are synced/owned.
     const userSolves = useMemo(() => {
         if (!user) return [];
-        return solves.filter(s => s.userId === user.uid);
-    }, [solves, user]);
+        return solves.filter(s => s.userId === user.uid && (s.scrambleType || '333') === settings.scrambleType);
+    }, [solves, user, settings.scrambleType]);
 
     // Simple formatting for time
     const formatTimeDisplay = (time: number | 'DNF' | null) => {

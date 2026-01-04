@@ -1,160 +1,163 @@
-import { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, getDocs, orderBy, doc, writeBatch } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useSession } from '../contexts/SessionContext';
 import { useSolves } from '../contexts/SolvesContext';
-import { useConfirm } from '../contexts/ConfirmationContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { calculateBestAverage, calculateBestSingle, formatTime } from '../utils/calculations';
-import { Trash2, ChevronLeft, ChevronRight, ChevronDown, CheckSquare, Square, Calendar } from 'lucide-react';
+import { ChevronDown, Calendar, Clock, Layers, Archive, CalendarDays, CalendarRange } from 'lucide-react';
+import { startOfYear, startOfMonth, startOfWeek, startOfDay, format } from 'date-fns';
 
-interface SessionDoc {
-    id: string;
-    startedAt: string;
-    lastActiveAt: string;
-    solveCount: number;
-}
+type GroupingType = 'all' | 'years' | 'months' | 'weeks' | 'days' | 'sessions';
+type StatColumn = 'count' | 'single' | 'ao5' | 'ao12' | 'ao100' | 'time';
 
-interface EnrichedSession extends SessionDoc {
-    stats: {
-        bestSingle: number | null;
-        bestAo5: number | 'DNF' | null;
-        bestAo12: number | 'DNF' | null;
-        bestAo100: number | 'DNF' | null;
-    };
-    durations: {
-        sessionDuration: number;
-        totalSolveTime: number;
-    };
-    dailyString: string; // '4m2d...'
-    scrambleType: string;
-}
-
-type StatColumn = 'daily' | 'single' | 'ao5' | 'ao12' | 'ao100' | 'scramble' | 'duration';
+const GROUPING_OPTIONS: { value: GroupingType; label: string; icon: any }[] = [
+    { value: 'all', label: 'All-Time', icon: Archive },
+    { value: 'years', label: 'Years', icon: CalendarRange },
+    { value: 'months', label: 'Months', icon: CalendarDays },
+    { value: 'weeks', label: 'Weeks', icon: Calendar },
+    { value: 'days', label: 'Days', icon: Clock },
+    { value: 'sessions', label: 'Sessions', icon: Layers },
+];
 
 const COLUMN_OPTIONS: { value: StatColumn; label: string }[] = [
-    { value: 'daily', label: 'Daily' },
+    { value: 'count', label: 'Solves' },
     { value: 'single', label: 'Best' },
     { value: 'ao5', label: 'Ao5' },
     { value: 'ao12', label: 'Ao12' },
     { value: 'ao100', label: 'Ao100' },
-    { value: 'scramble', label: 'Scramble' },
-    { value: 'duration', label: 'Time' }, // Duration
+    { value: 'time', label: 'Time' },
 ];
 
-export default function SessionsSidebar({ onToggleCollapse, collapsed }: { onToggleCollapse: () => void, collapsed: boolean }) {
+const SCRAMBLE_TYPES = [
+    { label: '3x3', value: '333' },
+    { label: '2x2', value: '222' },
+    { label: '4x4', value: '444' },
+    { label: '5x5', value: '555' },
+    { label: '6x6', value: '666' },
+    { label: '7x7', value: '777' },
+    { label: 'Clock', value: 'clock' },
+    { label: 'Mega', value: 'minx' },
+    { label: 'Pyra', value: 'pyram' },
+    { label: 'Skewb', value: 'skewb' },
+    { label: 'Sq-1', value: 'sq1' },
+];
+
+export default function SessionsSidebar({ onToggleCollapse: _onToggleCollapse, collapsed: _collapsed }: { onToggleCollapse: () => void, collapsed: boolean }) {
     const { user } = useAuth();
-    const { currentSessionId, setCurrentSessionId } = useSession(); // We might use this to highlight active?
-    const { solves } = useSolves(); // Need all solves to calculate stats
-    const { confirm: confirmAction } = useConfirm();
+    const { solves } = useSolves(); // Assuming this contains all relevant solves
+    const { settings, updateSettings } = useSettings();
 
-    const [sessions, setSessions] = useState<SessionDoc[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    const [statColumn, setStatColumn] = useState<StatColumn>('daily');
-
-    // Fetch Sessions
-    const fetchSessions = async () => {
-        if (!user) return;
-        setLoading(true);
-        try {
-            // "Double check the session logic, it seems to be missing some of my earlier sessions."
-            // Ensure we are not limiting too aggressively.
-            const q = query(
-                collection(db, 'sessions'),
-                where('userId', '==', user.uid),
-                orderBy('startedAt', 'desc')
-            );
-            const snapshot = await getDocs(q);
-            const fetched = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            } as SessionDoc));
-            setSessions(fetched);
-        } catch (e) {
-            console.error("Error fetching sessions", e);
-        } finally {
-            setLoading(false);
-        }
-    };
+    const [grouping, setGrouping] = useState<GroupingType>(() => {
+        return (localStorage.getItem('sidebar_grouping') as GroupingType) || 'sessions';
+    });
+    const [statColumn, setStatColumn] = useState<StatColumn>(() => {
+        return (localStorage.getItem('sidebar_stat_column') as StatColumn) || 'count';
+    });
+    const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
     useEffect(() => {
-        fetchSessions();
-    }, [user]);
+        localStorage.setItem('sidebar_grouping', grouping);
+    }, [grouping]);
 
-    // Enrich Sessions
-    const enrichedSessions = useMemo(() => {
-        return sessions.map((session): EnrichedSession => {
-            const sessionSolves = solves.filter(s => s.sessionId === session.id);
+    useEffect(() => {
+        localStorage.setItem('sidebar_stat_column', statColumn);
+    }, [statColumn]);
 
-            // Calculate Stats
-            const bestSingle = calculateBestSingle(sessionSolves);
-            const bestAo5 = calculateBestAverage(sessionSolves, 5);
-            const bestAo12 = calculateBestAverage(sessionSolves, 12);
-            const bestAo100 = calculateBestAverage(sessionSolves, 100);
+    // 1. Filter Solves by Event (and User)
+    const filteredSolves = useMemo(() => {
+        if (!user) return [];
+        return solves
+            .filter(s => s.userId === user.uid && (s.scrambleType || '333') === settings.scrambleType)
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [solves, user, settings.scrambleType]);
 
-            // Times
-            const start = new Date(session.startedAt).getTime();
-            const end = new Date(session.lastActiveAt).getTime();
-            const sessionDuration = Math.max(0, end - start);
-            const totalSolveTime = sessionSolves.reduce((acc, s) => acc + s.time, 0);
+    // 2. Group Solves
+    const groupedItems = useMemo(() => {
+        if (filteredSolves.length === 0) return [];
 
-            // Daily String Calculation
-            let y = 0, m = 0, w = 0, d = 0, h = 0;
-            sessionSolves.forEach(s => {
-                if (s.daily) {
-                    const id = s.daily.toLowerCase();
-                    if (id.startsWith('y-') || id.includes('project')) y++;
-                    else if (id.startsWith('m-') || id.includes('monthly')) m++;
-                    else if (id.startsWith('w-') || id.includes('weekly')) w++;
-                    else if (id.startsWith('d-') || id.includes('daily')) d++;
-                    else if (id.startsWith('h-') || id.includes('hour')) h++;
-                }
-            });
-            let dailyParts = [];
-            if (y > 0) dailyParts.push(`${y}y`);
-            if (m > 0) dailyParts.push(`${m}m`);
-            if (w > 0) dailyParts.push(`${w}w`);
-            if (d > 0) dailyParts.push(`${d}d`);
-            if (h > 0) dailyParts.push(`${h}h`);
-            const dailyString = dailyParts.join('') || '-';
+        if (grouping === 'all') {
+            return [{
+                key: 'all',
+                label: 'All Time',
+                solves: filteredSolves,
+                date: new Date()
+            }];
+        }
 
-            // Scramble Type (take majority or first)
-            const scrambleType = sessionSolves[0]?.scrambleType || '333';
+        const groups = new Map<string, { key: string, label: string, solves: any[], date: Date }>();
+
+        filteredSolves.forEach(solve => {
+            const date = new Date(solve.date);
+            let key = '';
+            let label = '';
+            let orderDate = date;
+
+            switch (grouping) {
+                case 'years':
+                    key = format(startOfYear(date), 'yyyy');
+                    label = key;
+                    orderDate = startOfYear(date);
+                    break;
+                case 'months':
+                    key = format(startOfMonth(date), 'yyyy-MM');
+                    label = format(date, 'MMM yyyy');
+                    orderDate = startOfMonth(date);
+                    break;
+                case 'weeks':
+                    const weekStart = startOfWeek(date, { weekStartsOn: 1 });
+                    key = format(weekStart, 'yyyy-Iw');
+                    label = `Week of ${format(weekStart, 'MMM d')}`;
+                    orderDate = weekStart;
+                    break;
+                case 'days':
+                    key = format(startOfDay(date), 'yyyy-MM-dd');
+                    label = format(date, 'MMM d, yyyy');
+                    orderDate = startOfDay(date);
+                    break;
+                case 'sessions':
+                    key = solve.sessionId || 'unknown';
+                    label = 'Session'; // Will be refined
+                    orderDate = date; // Approximate by last solve
+                    break;
+            }
+
+            if (!groups.has(key)) {
+                groups.set(key, { key, label, solves: [], date: orderDate });
+            }
+            groups.get(key)!.solves.push(solve);
+        });
+
+        // Refine Labels for Sessions (Use Date/Time of first solve in group)
+        if (grouping === 'sessions') {
+            return Array.from(groups.values()).map(g => {
+                const lastSolve = g.solves[0]; // Newest
+                // Basic label: Date + Time
+                const dateStr = format(new Date(lastSolve.date), 'MMM d, HH:mm');
+                return { ...g, label: dateStr, date: new Date(lastSolve.date) };
+            }).sort((a, b) => b.date.getTime() - a.date.getTime());
+        }
+
+        return Array.from(groups.values()).sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    }, [filteredSolves, grouping]);
+
+    // 3. Enrich Items with Stats (Memoized per item to avoid recalc? Or just in render map)
+    // Doing it inside render for simplicity or a second pass.
+    // Let's do a map for clean render.
+    const displayItems = useMemo(() => {
+        return groupedItems.map(item => {
+            const count = item.solves.length;
+            const bestSingle = calculateBestSingle(item.solves);
+            const bestAo5 = calculateBestAverage(item.solves, 5);
+            const bestAo12 = calculateBestAverage(item.solves, 12);
+            const bestAo100 = calculateBestAverage(item.solves, 100);
+            const totalTime = item.solves.reduce((acc: number, s: any) => acc + (typeof s.time === 'number' ? s.time : 0), 0);
 
             return {
-                ...session,
-                stats: { bestSingle, bestAo5, bestAo12, bestAo100 },
-                durations: { sessionDuration, totalSolveTime },
-                dailyString,
-                scrambleType
+                ...item,
+                stats: { count, bestSingle, bestAo5, bestAo12, bestAo100, totalTime }
             };
         });
-    }, [sessions, solves]);
-
-
-    const handleDeleteSelected = async () => {
-        if (!await confirmAction(`Delete ${selectedIds.size} sessions?`)) return;
-        try {
-            const batch = writeBatch(db);
-            selectedIds.forEach(id => {
-                batch.delete(doc(db, 'sessions', id));
-            });
-            await batch.commit();
-            setSelectedIds(new Set());
-            fetchSessions();
-        } catch (e) {
-            console.error("Error deleting", e);
-        }
-    };
-
-    const toggleSelection = (id: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        const newSet = new Set(selectedIds);
-        if (newSet.has(id)) newSet.delete(id);
-        else newSet.add(id);
-        setSelectedIds(newSet);
-    };
+    }, [groupedItems]);
 
     const formatDuration = (ms: number) => {
         const secs = Math.floor(ms / 1000);
@@ -163,38 +166,51 @@ export default function SessionsSidebar({ onToggleCollapse, collapsed }: { onTog
         if (hrs > 0) return `${hrs}h ${mins % 60}m`;
         if (mins > 0) return `${mins}m`;
         return `${secs}s`;
-    }
-
-    if (collapsed) {
-        return (
-            <aside className="h-full bg-bg-secondary w-[50px] flex flex-col border-l border-border transition-all duration-300 items-center justify-between py-4">
-                <div />
-                <button onClick={onToggleCollapse} className="p-2 hover:bg-bg-hover rounded text-text-secondary"><ChevronLeft /></button>
-            </aside>
-        )
-    }
+    };
 
     return (
-        <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-sm overflow-hidden min-w-0 border-l border-border font-sans">
-            {/* Header */}
-            <div className="flex items-center justify-between p-3 border-b border-border/50 bg-bg-secondary/50 backdrop-blur-sm sticky top-0 z-10">
-                <span className="font-semibold text-text-primary flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-accent" /> Sessions
-                </span>
-                <div className="flex items-center gap-1">
-                    {selectedIds.size > 0 && (
-                        <button onClick={handleDeleteSelected} className="p-1 hover:bg-red-500/10 text-red-500 rounded"><Trash2 className="w-4 h-4" /></button>
-                    )}
+        <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-sm overflow-hidden min-w-0 font-sans">
+            {/* Header Area */}
+            <div className="flex flex-col border-b border-border/50 bg-bg-secondary/50 backdrop-blur-sm sticky top-0 z-10 text-text-primary">
+
+                {/* Event Selector */}
+                <div className="p-2 border-b border-border/50 flex justify-center relative group">
+                    <select
+                        value={settings.scrambleType}
+                        onChange={(e) => updateSettings({ scrambleType: e.target.value })}
+                        className="appearance-none bg-transparent font-bold hover:text-accent focus:outline-none cursor-pointer text-center text-sm w-full z-10"
+                    >
+                        {SCRAMBLE_TYPES.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                    </select>
+                    <ChevronDown className="w-3 h-3 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
+                </div>
+
+                {/* Grouping Selector */}
+                <div className="p-2 border-b border-border/50 flex justify-center relative group">
+                    <select
+                        value={grouping}
+                        onChange={(e) => setGrouping(e.target.value as GroupingType)}
+                        className="appearance-none bg-transparent font-bold hover:text-accent focus:outline-none cursor-pointer text-center text-sm w-full z-10"
+                    >
+                        {GROUPING_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                            </option>
+                        ))}
+                    </select>
+                    <ChevronDown className="w-3 h-3 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
                 </div>
             </div>
 
             {/* List Header */}
-            <div className="grid grid-cols-[auto_1fr_auto_auto] gap-2 px-4 py-2 text-xs font-bold text-text-secondary border-b border-border/20 uppercase tracking-wider items-center">
-                <div className="w-4"></div>
-                <div className="cursor-pointer hover:text-text-primary">Start</div>
-                <div className="cursor-div hover:text-text-primary text-center">Solves</div>
+            <div className="grid grid-cols-[1fr_auto] gap-2 px-4 py-2 text-xs font-bold text-text-secondary border-b border-border/20 uppercase tracking-wider items-center">
+                <div className="cursor-pointer hover:text-text-primary">
+                    {grouping === 'all' ? 'Period' : grouping === 'sessions' ? 'Date' : grouping.slice(0, -1)}
+                </div>
 
-                {/* Dropdown for 3rd Column */}
+                {/* Dropdown for Stat Column */}
                 <div className="relative group min-w-[60px] text-right">
                     <select
                         value={statColumn}
@@ -207,57 +223,49 @@ export default function SessionsSidebar({ onToggleCollapse, collapsed }: { onTog
                 </div>
             </div>
 
-            {/* List */}
+            {/* List Content */}
             <div className="flex-1 overflow-y-auto custom-scrollbar relative">
-                {loading && <div className="p-4 text-center text-xs text-text-secondary">Loading...</div>}
-                {!loading && enrichedSessions.map(session => (
-                    <div
-                        key={session.id}
-                        className={`grid grid-cols-[auto_1fr_auto_auto] gap-2 px-4 py-3 border-b border-border/10 hover:bg-bg-hover/50 transition-colors cursor-pointer group
-                            ${currentSessionId === session.id ? 'bg-accent/5 border-l-2 border-l-accent' : 'border-l-2 border-l-transparent'}
-                            ${selectedIds.has(session.id) ? 'bg-accent/10' : ''}
-                        `}
-                        onClick={() => setCurrentSessionId(session.id)}
-                    >
-                        {/* Checkbox */}
-                        <div onClick={(e) => toggleSelection(session.id, e)} className="flex items-center justify-center w-4 text-text-secondary hover:text-accent">
-                            {selectedIds.has(session.id) ? <CheckSquare className="w-4 h-4 text-accent" /> : <Square className="w-4 h-4 opacity-20 group-hover:opacity-100" />}
-                        </div>
+                {displayItems.length === 0 ? (
+                    <div className="p-8 text-center text-text-secondary italic text-xs">No data found.</div>
+                ) : (
+                    displayItems.map(item => {
+                        const isSelected = selectedKeys.has(item.key);
+                        return (
+                            <div
+                                key={item.key}
+                                onClick={() => {
+                                    const newSet = new Set(selectedKeys);
+                                    if (newSet.has(item.key)) newSet.delete(item.key);
+                                    else newSet.add(item.key);
+                                    setSelectedKeys(newSet);
+                                }}
+                                className={`grid grid-cols-[1fr_auto] gap-2 px-4 py-3 border-b border-border/10 hover:bg-bg-hover transition-colors cursor-pointer items-center
+                                    ${isSelected ? 'bg-accent/10 border-l-2 border-l-accent pl-[14px]' : 'border-l-2 border-l-transparent'}
+                                `}
+                            >
+                                {/* Label */}
+                                <div className="min-w-0">
+                                    <span className={`font-medium truncate ${isSelected ? 'text-accent' : 'text-text-primary'}`}>
+                                        {item.label}
+                                    </span>
+                                </div>
 
-                        {/* Start Date */}
-                        <div className="flex flex-col min-w-0">
-                            <span className="font-medium text-text-primary truncate">
-                                {new Date(session.startedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                            </span>
-                            <span className="text-[10px] text-text-secondary truncate">
-                                {new Date(session.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase()}
-                            </span>
-                        </div>
-
-                        {/* Solves */}
-                        <div className="flex items-center justify-center font-mono text-text-primary">
-                            {session.solveCount}
-                        </div>
-
-                        {/* Dynamic Stat */}
-                        <div className="flex items-center justify-end font-mono text-sm text-text-primary min-w-[60px]">
-                            {statColumn === 'daily' && <span className="text-xs text-text-secondary">{session.dailyString}</span>}
-                            {statColumn === 'single' && <span>{formatTime(session.stats.bestSingle)}</span>}
-                            {statColumn === 'ao5' && <span>{formatTime(session.stats.bestAo5)}</span>}
-                            {statColumn === 'ao12' && <span>{formatTime(session.stats.bestAo12)}</span>}
-                            {statColumn === 'ao100' && <span>{formatTime(session.stats.bestAo100)}</span>}
-                            {statColumn === 'scramble' && <span className="text-xs uppercase bg-bg-tertiary px-1.5 py-0.5 rounded text-text-secondary">{session.scrambleType}</span>}
-                            {statColumn === 'duration' && <span className="text-xs text-text-secondary">{formatDuration(session.durations.sessionDuration)}</span>}
-                        </div>
-                    </div>
-                ))}
+                                {/* Stat */}
+                                <div className="flex items-center justify-end font-mono text-sm text-text-primary min-w-[60px]">
+                                    {statColumn === 'count' && <span>{item.stats.count}</span>}
+                                    {statColumn === 'single' && <span>{formatTime(item.stats.bestSingle)}</span>}
+                                    {statColumn === 'ao5' && <span>{formatTime(item.stats.bestAo5)}</span>}
+                                    {statColumn === 'ao12' && <span>{formatTime(item.stats.bestAo12)}</span>}
+                                    {statColumn === 'ao100' && <span>{formatTime(item.stats.bestAo100)}</span>}
+                                    {statColumn === 'time' && <span className="text-xs text-text-secondary">{formatDuration(item.stats.totalTime)}</span>}
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
             </div>
 
-            {/* Footer with Chevron */}
             <div className="p-2 border-t border-border/50 flex justify-end">
-                <button onClick={onToggleCollapse} className="p-2 hover:bg-bg-hover rounded text-text-secondary">
-                    <ChevronRight className="w-5 h-5" />
-                </button>
             </div>
         </aside>
     );

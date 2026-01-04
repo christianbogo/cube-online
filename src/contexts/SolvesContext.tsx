@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useMemo, useRef, type ReactNode } from 'react';
 import { calculateAverage, calculateBestAverage } from '../utils/calculations';
+import { unmarkScrambleComplete } from '../utils/dailyScramble'; // Import unmarkScrambleComplete
 import { useAuth } from './AuthContext';
 import { useSession } from './SessionContext';
 import { doc, setDoc, deleteDoc, collection, query, where, onSnapshot, serverTimestamp, addDoc } from 'firebase/firestore';
@@ -392,6 +393,14 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
         setSolves(prev => prev.filter(s => s.id !== id));
         if (solve) {
             await syncToCloud(solve, 'delete');
+            // If it was a daily solve, update stats
+            if (solve.daily && user) {
+                const idParts = solve.daily.split('-');
+                if (idParts.length >= 2) {
+                    const typeLetter = idParts[0];
+                    await unmarkScrambleComplete(user.uid, typeLetter, solve.daily);
+                }
+            }
         }
     };
 

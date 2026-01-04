@@ -1,4 +1,4 @@
-import { doc, getDoc, updateDoc, setDoc, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, setDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export interface UserScrambleStats {
@@ -175,6 +175,20 @@ export async function markScrambleComplete(userId: string, type: string, id: str
     if (type === 'w') updates.completed_weeks = arrayUnion(id);
     if (type === 'd') updates.completed_days = arrayUnion(id);
     if (type === 'h') updates.completed_hours = arrayUnion(id);
+
+    await updateDoc(userStatsRef, updates);
+}
+
+export async function unmarkScrambleComplete(userId: string, type: string, id: string) {
+    if (!userId || !type || !id) return;
+    const userStatsRef = doc(db, 'users', userId, 'private', 'scrambleStats');
+
+    const updates: any = {};
+    if (type === 'y') updates.completed_years = arrayRemove(id);
+    if (type === 'm') updates.completed_months = arrayRemove(id);
+    if (type === 'w') updates.completed_weeks = arrayRemove(id);
+    if (type === 'd') updates.completed_days = arrayRemove(id);
+    if (type === 'h') updates.completed_hours = arrayRemove(id);
 
     await updateDoc(userStatsRef, updates);
 }

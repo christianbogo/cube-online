@@ -24,11 +24,16 @@ export default function Layout() {
     const [rightWidth, setRightWidth] = useState(() => getStoredWidth('sidebar_right_width', 240));
     const [lastOpenRightWidth, setLastOpenRightWidth] = useState(() => getStoredWidth('sidebar_right_last_width', 240));
 
+    // Data Sidebar State
+    const [dataWidth, setDataWidth] = useState(() => getStoredWidth('sidebar_data_width', 300));
+    const [isResizingData, setIsResizingData] = useState(false);
+
     // Persistence Effects
     useEffect(() => localStorage.setItem('sidebar_left_width', leftWidth.toString()), [leftWidth]);
     useEffect(() => localStorage.setItem('sidebar_left_last_width', lastOpenLeftWidth.toString()), [lastOpenLeftWidth]);
     useEffect(() => localStorage.setItem('sidebar_right_width', rightWidth.toString()), [rightWidth]);
     useEffect(() => localStorage.setItem('sidebar_right_last_width', lastOpenRightWidth.toString()), [lastOpenRightWidth]);
+    useEffect(() => localStorage.setItem('sidebar_data_width', dataWidth.toString()), [dataWidth]);
     const [isResizingLeft, setIsResizingLeft] = useState(false);
     const [isResizingRight, setIsResizingRight] = useState(false);
     const [consoleInfo, setConsoleInfo] = useState<string | null>(null); // For footer
@@ -122,14 +127,16 @@ export default function Layout() {
 
     const startResizingLeft = useCallback(() => setIsResizingLeft(true), []);
     const startResizingRight = useCallback(() => setIsResizingRight(true), []);
+    const startResizingData = useCallback(() => setIsResizingData(true), []);
     const stopResizing = useCallback(() => {
         setIsResizingLeft(false);
         setIsResizingRight(false);
+        setIsResizingData(false);
     }, []);
 
     const resize = useCallback(
         (e: MouseEvent) => {
-            if (!isResizingLeft && !isResizingRight) return;
+            if (!isResizingLeft && !isResizingRight && !isResizingData) return;
             if (!layoutRef.current) return;
 
             const containerRect = layoutRef.current.getBoundingClientRect();
@@ -168,12 +175,26 @@ export default function Layout() {
                     setLastOpenRightWidth(newWidth);
                 }
             }
+
+            if (isResizingData) {
+                // Resizing the middle sidebar (Data Sidebar)
+                // It's positioned after Left Sidebar.
+                // Mouse calc: clientX - LeftSidebarWidth = DataSidebarWidth
+                // But LeftSidebarWidth is dynamic.
+                // Simpler: clientX - (layoutRef.current.getBoundingClientRect().left + leftWidth)
+                const offset = layoutRef.current.getBoundingClientRect().left + leftWidth;
+                let newWidth = e.clientX - offset;
+
+                if (newWidth < 200) newWidth = 200; // Min width for data sidebar
+                if (newWidth > 500) newWidth = 500;
+                setDataWidth(newWidth);
+            }
         },
-        [isResizingLeft, isResizingRight, setLastOpenLeftWidth, setLastOpenRightWidth]
+        [isResizingLeft, isResizingRight, isResizingData, setLastOpenLeftWidth, setLastOpenRightWidth, leftWidth]
     );
 
     useEffect(() => {
-        if (isResizingLeft || isResizingRight) {
+        if (isResizingLeft || isResizingRight || isResizingData) {
             window.addEventListener('mousemove', resize);
             window.addEventListener('mouseup', stopResizing);
             document.body.style.userSelect = 'none';
@@ -190,7 +211,7 @@ export default function Layout() {
             document.body.style.userSelect = '';
             document.body.style.cursor = '';
         };
-    }, [isResizingLeft, isResizingRight, resize, stopResizing]);
+    }, [isResizingLeft, isResizingRight, isResizingData, resize, stopResizing]);
 
     // Global Shortcuts
     useEffect(() => {
@@ -242,14 +263,30 @@ export default function Layout() {
                 className="flex-1 flex overflow-hidden relative"
             >
                 {/* Left Sidebar */}
-                <div style={{ width: leftWidth }} className="flex-shrink-0 relative flex flex-col border-r border-border backdrop-blur-sm will-change-[width]">
+                <div style={{ width: leftWidth }} className="flex-shrink-0 relative flex flex-col border-r border-border backdrop-blur-sm will-change-[width] z-30">
                     <LeftSidebar collapsed={isLeftCollapsed} onToggleCollapse={toggleLeftSidebar} />
                     {/* Drag Handle */}
                     <div
-                        className="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize hover:bg-accent/50 z-10 transition-colors delay-75"
+                        className="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-10 group flex justify-center"
                         onMouseDown={startResizingLeft}
-                    />
+                    >
+                        <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
+                    </div>
                 </div>
+
+                {/* Middle Sidebar (Sessions) - Data Page Only */}
+                {location.pathname.startsWith('/data') && (
+                    <div style={{ width: dataWidth }} className="flex-shrink-0 relative flex flex-col border-r border-border backdrop-blur-sm bg-bg-secondary will-change-[width] z-20">
+                        <SessionsSidebar collapsed={false} onToggleCollapse={() => { }} />
+                        {/* Drag Handle */}
+                        <div
+                            className="absolute top-0 right-[-5px] w-2.5 h-full cursor-col-resize z-50 group flex justify-center"
+                            onMouseDown={startResizingData}
+                        >
+                            <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
+                        </div>
+                    </div>
+                )}
 
                 {/* Main Content */}
                 <main className="flex-1 flex flex-col relative bg-bg-primary min-w-0">
@@ -284,17 +321,15 @@ export default function Layout() {
                 </main>
 
                 {/* Right Sidebar - Hidden on Account Page */}
-                {location.pathname !== '/account' && (
+                {location.pathname !== '/account' && location.pathname !== '/data' && (
                     <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col backdrop-blur-sm will-change-[width]">
                         <div
-                            className="absolute top-0 left-[-3px] w-1.5 h-full cursor-col-resize hover:bg-accent/50 z-10 transition-colors delay-75"
+                            className="absolute top-0 left-[-3px] w-1.5 h-full cursor-col-resize z-10 group flex justify-center"
                             onMouseDown={startResizingRight}
-                        />
-                        {location.pathname === '/data' ? (
-                            <SessionsSidebar collapsed={isRightCollapsed} onToggleCollapse={toggleRightSidebar} />
-                        ) : (
-                            <RightSidebar collapsed={isRightCollapsed} onToggleCollapse={toggleRightSidebar} />
-                        )}
+                        >
+                            <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
+                        </div>
+                        <RightSidebar collapsed={isRightCollapsed} onToggleCollapse={toggleRightSidebar} />
                     </div>
                 )}
             </div>

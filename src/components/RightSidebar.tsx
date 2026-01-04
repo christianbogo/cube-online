@@ -1,9 +1,9 @@
 import { useSolves, type Solve } from '../contexts/SolvesContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSession } from '../contexts/SessionContext';
-import { useConfirm } from '../contexts/ConfirmationContext';
+// import { useConfirm } from '../contexts/ConfirmationContext'; // Removed unused
 import { useSettings } from '../contexts/SettingsContext';
-import { Trash2, ChevronLeft, ChevronRight, EyeOff } from 'lucide-react';
+import { Trash2, ChevronLeft, ChevronRight, EyeOff, ChevronDown } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage } from '../utils/calculations';
 
@@ -32,7 +32,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
     const { solves: allSolves, updateSolve, deleteSolve, isPrivateMode, togglePrivateMode } = useSolves();
     const { user } = useAuth();
     const { currentSessionId } = useSession();
-    const { confirm: confirmAction } = useConfirm();
+    // const { confirm: confirmAction } = useConfirm(); // Removed unused
     const { settings, updateSettings } = useSettings(); // Use global settings
 
     // -- Derived State --
@@ -112,9 +112,8 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
 
     const handleDeleteSolve = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (await confirmAction('Delete this solve?')) {
-            deleteSolve(id);
-        }
+        // Removed confirmation as requested
+        deleteSolve(id);
     };
 
     const handlePenalty = (id: string, type: '+2' | 'DNF', currentPenalty: string, e: React.MouseEvent) => {
@@ -191,12 +190,12 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
             <div className="flex flex-col border-b border-border bg-bg-secondary sticky top-0 z-10">
 
                 {/* Event Selector - Moved Here */}
-                <div className="p-2 border-b border-border/50 flex justify-center">
+                <div className="p-2 border-b border-border/50 flex justify-center relative group">
                     <select
                         value={settings.scrambleType}
                         onChange={(e) => updateSettings({ scrambleType: e.target.value })}
                         className="appearance-none bg-transparent font-medium border-none hover:text-accent
-                                focus:outline-none cursor-pointer text-center text-sm w-full"
+                                focus:outline-none cursor-pointer text-center text-sm w-full z-10"
                     >
                         {SCRAMBLE_TYPES.map(opt => (
                             <option key={opt.value} value={opt.value} className="bg-bg-secondary text-text-primary">
@@ -204,6 +203,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                             </option>
                         ))}
                     </select>
+                    <ChevronDown className="w-3 h-3 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
                 </div>
 
                 {/* Stats Table */}
@@ -360,7 +360,17 @@ const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onC
         let tVal = solve.time;
         if (solve.penalty === '+2') tVal += 2000;
         if (solve.inspectionPenalty === '+2') tVal += 2000;
-        let tStr = (tVal / 1000).toFixed(2);
+
+        let tStr = '';
+        const totalSeconds = tVal / 1000;
+        if (totalSeconds < 60) {
+            tStr = tVal === 0 ? '0.00' : (tVal / 1000).toFixed(2);
+        } else {
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = (totalSeconds % 60).toFixed(2);
+            tStr = `${minutes}:${seconds.padStart(5, '0')}`;
+        }
+
         let plusCount = 0;
         if (solve.penalty === '+2') plusCount++;
         if (solve.inspectionPenalty === '+2') plusCount++;
