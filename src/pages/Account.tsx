@@ -23,7 +23,6 @@ export default function Account() {
     const colorPickerRef = useRef<HTMLDivElement>(null);
 
     // Auth State
-    const [showEmailForm, setShowEmailForm] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -107,10 +106,26 @@ export default function Account() {
     };
 
     const handleNameSubmit = () => {
-        if (tempName.trim()) {
-            saveProfileUpdate(tempName.trim(), undefined);
+        const cleaned = tempName.trim();
+        if (!cleaned) return;
+
+        // 1. Format Check: a-z, 0-9, _
+        if (!/^[a-zA-Z0-9_]+$/.test(cleaned)) {
+            alert("Username can only contain letters, numbers, and underscores.");
+            return;
         }
-        setIsEditingName(false);
+
+        // 2. Profanity Check
+        // Dynamic import to avoid bundle issues if needed, or just standard import usage
+        import('leo-profanity').then(filter => {
+            // Check if clean
+            if (filter.check(cleaned)) {
+                alert("Username contains inappropriate language.");
+                return;
+            }
+            saveProfileUpdate(cleaned, undefined);
+            setIsEditingName(false);
+        });
     };
 
     const handleColorSelect = (c: string) => {
@@ -240,80 +255,70 @@ export default function Account() {
                     </div>
                 </div>
             ) : (
-                // Sign In / Sign Up UI remains largely the same, just keeping it clean
-                <div className="mb-12 w-full">
-                    <h2 className="text-3xl font-bold text-text-primary mb-6">Account</h2>
-                    <div className="flex flex-col gap-6 max-w-md bg-bg-secondary/30 p-6 rounded-xl border border-border/50">
-                        {!showEmailForm ? (
-                            <div className="flex flex-col gap-3">
-                                {/* Google Sign In Removed */}
+                // Sign In / Sign Up UI
+                <div className="mb-12 w-full animate-in fade-in duration-500">
+                    <div className="flex items-center gap-2 mb-6">
+                        <div className="w-8 h-8 rounded-md bg-zinc-700 dark:bg-zinc-200 shadow-sm" />
+                        <h1 className="text-3xl font-bold text-text-primary">Sign In</h1>
+                    </div>
+
+                    <div className="flex flex-col gap-6 max-w-md">
+                        {/* Form - Always Visible, No Card Styling (Floating) */}
+                        <div className="space-y-4 w-full">
+                            <div className="flex gap-4 border-b border-border mb-4">
                                 <button
-                                    onClick={() => { setShowEmailForm(true); setIsSignUpMode(false); }}
-                                    className="bg-bg-primary text-text-primary border border-border px-5 py-3 rounded-md hover:bg-bg-hover transition-colors font-medium w-full"
+                                    className={`pb-2 text-sm font-medium px-2 ${!isSignUpMode ? 'border-b-2 border-accent text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
+                                    onClick={() => { setIsSignUpMode(false); setAuthError(''); }}
                                 >
-                                    Continue with Email
+                                    Sign In
+                                </button>
+                                <button
+                                    className={`pb-2 text-sm font-medium px-2 ${isSignUpMode ? 'border-b-2 border-accent text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
+                                    onClick={() => { setIsSignUpMode(true); setAuthError(''); }}
+                                >
+                                    Create Account
                                 </button>
                             </div>
-                        ) : (
-                            <div className="space-y-4 w-full">
-                                <div className="flex gap-4 border-b border-border mb-4">
-                                    <button
-                                        className={`pb-2 text-sm font-medium px-2 ${!isSignUpMode ? 'border-b-2 border-accent text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
-                                        onClick={() => { setIsSignUpMode(false); setAuthError(''); }}
-                                    >
-                                        Sign In
-                                    </button>
-                                    <button
-                                        className={`pb-2 text-sm font-medium px-2 ${isSignUpMode ? 'border-b-2 border-accent text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
-                                        onClick={() => { setIsSignUpMode(true); setAuthError(''); }}
-                                    >
-                                        Create Account
-                                    </button>
-                                </div>
 
-                                <input
-                                    type="email"
-                                    placeholder="Email"
-                                    value={email}
-                                    onChange={e => setEmail(e.target.value)}
-                                    className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
-                                />
+                            <input
+                                type="email"
+                                placeholder="Email"
+                                value={email}
+                                onChange={e => setEmail(e.target.value)}
+                                className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
+                            />
+                            <input
+                                type="password"
+                                placeholder="Password"
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
+                            />
+                            {isSignUpMode && (
                                 <input
                                     type="password"
-                                    placeholder="Password"
-                                    value={password}
-                                    onChange={e => setPassword(e.target.value)}
+                                    placeholder="Confirm Password"
+                                    value={confirmPassword}
+                                    onChange={e => setConfirmPassword(e.target.value)}
                                     className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
                                 />
-                                {isSignUpMode && (
-                                    <input
-                                        type="password"
-                                        placeholder="Confirm Password"
-                                        value={confirmPassword}
-                                        onChange={e => setConfirmPassword(e.target.value)}
-                                        className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
-                                    />
-                                )}
+                            )}
 
-                                {authError && <p className="text-red-500 text-sm">{authError}</p>}
+                            {authError && <p className="text-red-500 text-sm">{authError}</p>}
 
-                                <div className="flex gap-3 pt-2">
-                                    <button
-                                        onClick={handleAuthAction}
-                                        className="bg-accent text-white px-6 py-2 rounded-md hover:bg-accent/90 font-medium"
-                                    >
-                                        {isSignUpMode ? 'Sign Up' : 'Sign In'}
-                                    </button>
-                                    <button
-                                        onClick={() => setShowEmailForm(false)}
-                                        className="text-text-secondary hover:text-text-primary text-sm px-4"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    onClick={handleAuthAction}
+                                    className="bg-accent text-white px-6 py-2 rounded-md hover:bg-accent/90 font-medium w-full"
+                                >
+                                    {isSignUpMode ? 'Sign Up' : 'Sign In'}
+                                </button>
                             </div>
-                        )}
-                        Local solves are wiped on sign in/out. Sign in to sync unlimited solves.
+                        </div>
+
+                        <div className="text-sm text-text-secondary mt-4">
+                            Local solves are wiped on sign in/out. Sign in to sync unlimited solves.
+                        </div>
                     </div>
                 </div>
             )}

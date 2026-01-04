@@ -4,27 +4,12 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useSolves, type Solve } from '../contexts/SolvesContext';
 import { useSession } from '../contexts/SessionContext';
 import { useAuth } from '../contexts/AuthContext';
-import { EyeOff, Info, Minus, Plus, ChevronDown, Radio, Search, ChevronUp } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { EyeOff, Minus, Plus, Radio, Search, ChevronUp, ChevronDown } from 'lucide-react';
 import { formatTime } from '../utils/formatTime';
 import { rtdb } from '../lib/firebase';
 import { ref, onDisconnect, set, onValue, remove } from 'firebase/database';
 import type { LiveUser, SimpleSolve, TimerState } from '../types/liveTypes';
 import { UserCard } from '../components/UserCard';
-
-const SCRAMBLE_TYPES = [
-    { label: '3x3', value: '333' },
-    { label: '2x2', value: '222' },
-    { label: '4x4', value: '444' },
-    { label: '5x5', value: '555' },
-    { label: '6x6', value: '666' },
-    { label: '7x7', value: '777' },
-    { label: 'Clock', value: 'clock' },
-    { label: 'Mega', value: 'minx' },
-    { label: 'Pyra', value: 'pyram' },
-    { label: 'Skewb', value: 'skewb' },
-    { label: 'Sq-1', value: 'sq1' },
-];
 
 export default function Cube() {
     const { settings, updateSettings } = useSettings();
@@ -33,13 +18,8 @@ export default function Cube() {
     const { user, toggleStarUser, toggleBlockUser } = useAuth();
 
     // Scramble Type State
-    const [scrambleType, setScrambleType] = useState<string>(() => {
-        return localStorage.getItem('cube-online-scramble-type') || '333';
-    });
-
-    useEffect(() => {
-        localStorage.setItem('cube-online-scramble-type', scrambleType);
-    }, [scrambleType]);
+    // Scramble Type is now in SettingsContext
+    const scrambleType = settings.scrambleType;
 
     // Live Mode State
     const [isLiveMode, setIsLiveMode] = useState(false);
@@ -96,6 +76,15 @@ export default function Cube() {
 
     const [specialType, setSpecialType] = useState<'normal' | 'y' | 'm' | 'w' | 'd' | 'h'>('normal');
     const [specialId, setSpecialId] = useState<string | null>(null);
+
+    // Visual Scramble Type (Synced with text update)
+    const [visualScrambleType, setVisualScrambleType] = useState(settings.scrambleType);
+
+    // Update visual type only when scramble changes
+    useEffect(() => {
+        setVisualScrambleType(settings.scrambleType);
+    }, [scramble]); // Depends on scramble text changing
+
 
     // --- Live Mode Logic ---
 
@@ -444,7 +433,8 @@ export default function Cube() {
     };
 
     const getScrambleSizeMultiplier = () => {
-        switch (scrambleType) {
+        // Use visual type for font size to match text update timing
+        switch (visualScrambleType) {
             case '444':
             case '555':
             case 'sq1':
@@ -484,7 +474,6 @@ export default function Cube() {
     return (
         <div className="flex flex-col h-full relative overflow-hidden">
 
-            {/* FAVORITES BAR (Top) - Only in Live Mode */}
             {isLiveMode && favoriteUsers.length > 0 && (
                 <div className="flex-shrink-0 border-b border-border bg-background/50 backdrop-blur-sm p-4 flex gap-4 overflow-x-auto items-center h-40 animate-in slide-in-from-top-4 fade-in duration-300">
                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500/20" />
@@ -510,46 +499,24 @@ export default function Cube() {
                     <>
                         <div className="flex items-center gap-6 mb-4 text-text-secondary transition-opacity hover:text-text-primary">
 
-                            {/* Live Toggle */}
-                            <button
-                                onClick={() => {
-                                    if (!isLiveMode) {
-                                        if (user && !user.emailVerified) {
-                                            alert("Please verify your email to access Live Mode.");
-                                            return;
-                                        }
-                                    }
-                                    setIsLiveMode(!isLiveMode);
-                                }}
-                                className={`flex items-center gap-1 transition-colors ${isLiveMode ? 'text-red-500 hover:text-red-400' : 'hover:text-accent'}`}
-                                title={isLiveMode ? "Disable Live Mode" : "Enable Live Mode"}
-                            >
-                                <Radio className={`w-5 h-5 ${isLiveMode ? 'animate-pulse' : ''}`} />
-                                {isLiveMode && <span className="text-xs font-bold uppercase tracking-widest">LIVE</span>}
-                            </button>
+                            {/* Live Toggle - Only visible if verified */}
+                            {user && user.emailVerified && (
+                                <div className="flex items-center gap-6">
+                                    <button
+                                        onClick={() => {
+                                            setIsLiveMode(!isLiveMode);
+                                        }}
+                                        className={`flex items-center gap-1 transition-colors ${isLiveMode ? 'text-red-500 hover:text-red-400' : 'hover:text-accent'}`}
+                                        title={isLiveMode ? "Disable Live Mode" : "Enable Live Mode"}
+                                    >
+                                        <Radio className={`w-5 h-5 ${isLiveMode ? 'animate-pulse' : ''}`} />
+                                        {isLiveMode && <span className="text-xs font-bold uppercase tracking-widest">LIVE</span>}
+                                    </button>
+                                    <div className="w-[1px] h-5 bg-border/50" />
+                                </div>
+                            )}
 
-                            <div className="w-[1px] h-5 bg-border/50" />
-
-                            {/* Scramble Type Selector */}
-                            <div className="relative group">
-                                <select
-                                    value={scrambleType}
-                                    onChange={(e) => setScrambleType(e.target.value)}
-                                    className="appearance-none bg-transparent font-medium border-b border-white/10 hover:border-accent
-                                            focus:outline-none focus:border-accent pl-2 pr-6 py-1 cursor-pointer text-center text-sm"
-                                >
-                                    {SCRAMBLE_TYPES.map(opt => (
-                                        <option key={opt.value} value={opt.value} className="bg-bg-secondary text-text-primary">
-                                            {opt.label}
-                                        </option>
-                                    ))}
-                                </select>
-                                <ChevronDown className="w-3 h-3 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none opacity-50 group-hover:opacity-100" />
-                            </div>
-
-                            <Link to="/about" className="hover:text-accent transition-colors" title="Scramble Info">
-                                <Info className="w-5 h-5" />
-                            </Link>
+                            {/* Scramble Type Selector Moved to Right Sidebar */}
 
                             <button onClick={() => setScrambleVisible(false)} className="hover:text-accent transition-colors" title="Hide Scramble">
                                 <EyeOff className="w-5 h-5" />
@@ -570,12 +537,14 @@ export default function Cube() {
                             <p
                                 onClick={handleCopyScramble}
                                 className="font-mono text-text-secondary leading-relaxed text-center transition-all cursor-pointer hover:text-text-primary active:scale-95"
-                                style={{ fontSize: `${settings.scrambleSize * getScrambleSizeMultiplier()}rem` }}
+                                style={{
+                                    fontSize: `${settings.scrambleSize * getScrambleSizeMultiplier()}rem`,
+                                    color: isCopied ? '#22c55e' : undefined
+                                }}
                                 title="Click to copy"
                             >
                                 {scramble}
                             </p>
-                            {isCopied && <div className="text-xs text-green-500 mt-2 font-medium animate-in fade-in slide-in-from-top-1">Copied!</div>}
                         </div>
                     </>
                 ) : (

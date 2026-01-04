@@ -14,6 +14,7 @@ interface Settings {
     localDataSettings: LocalDataSettings;
     dataBackup: 'all' | 'session-bests' | 'all-time-bests' | 'local-only';
     dailySolves: boolean;
+    scrambleType: string;
 }
 
 interface SettingsContextType {
@@ -33,6 +34,7 @@ const defaultSettings: Settings = {
     },
     dataBackup: 'session-bests',
     dailySolves: true,
+    scrambleType: '333',
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -40,20 +42,24 @@ const SettingsContext = createContext<SettingsContextType | undefined>(undefined
 export function SettingsProvider({ children }: { children: ReactNode }) {
     const [settings, setSettings] = useState<Settings>(() => {
         const stored = localStorage.getItem('cutter-cubing-settings');
+        // Migration/Initialization logic for scrambleType
+        const storedScrambleType = localStorage.getItem('cube-online-scramble-type') || '333';
+
         if (stored) {
             try {
                 // Merge stored settings with defaults to handle new fields in future
-                return { ...defaultSettings, ...JSON.parse(stored) };
+                return { ...defaultSettings, scrambleType: storedScrambleType, ...JSON.parse(stored) };
             } catch (e) {
                 console.error('Failed to parse settings', e);
-                return defaultSettings;
+                return { ...defaultSettings, scrambleType: storedScrambleType };
             }
         }
-        return defaultSettings;
+        return { ...defaultSettings, scrambleType: storedScrambleType };
     });
 
     useEffect(() => {
         localStorage.setItem('cutter-cubing-settings', JSON.stringify(settings));
+        localStorage.setItem('cube-online-scramble-type', settings.scrambleType);
     }, [settings]);
 
     const updateSettings = (newSettings: Partial<Settings>) => {

@@ -20,7 +20,7 @@ export default function Topbar() {
                     <>
                         {/* Logo: Plain dark grey square that becomes light in dark mode */}
                         <div className="w-3.5 h-3.5 bg-zinc-700 dark:bg-zinc-200 rounded-sm shadow-sm transition-colors duration-200" />
-                        <span className="font-semibold text-lg tracking-tight text-text-primary">Cube Timer</span>
+                        <span className="font-semibold text-lg tracking-tight text-text-primary">Cube Online</span>
                     </>
                 )}
             </div>

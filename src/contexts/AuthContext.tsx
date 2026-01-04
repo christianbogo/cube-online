@@ -6,8 +6,18 @@ import {
     signInWithEmailAndPassword,
     sendEmailVerification
 } from 'firebase/auth';
-import { doc, onSnapshot, query, collection, where, getDocs, writeBatch, deleteDoc, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, query, collection, where, getDocs, writeBatch, deleteDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+
+// Helper to generate 6-char alphanumeric ID
+const generateShortId = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+};
 
 interface UserData {
     uid: string;
@@ -41,37 +51,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(!user);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
-                // Real-time listener for user data
-                const userDocRef = doc(db, 'users', firebaseUser.uid);
-                const unsubscribeDoc = onSnapshot(userDocRef, (docSnap) => {
-                    let userData: UserData;
-                    if (docSnap.exists()) {
-                        userData = {
-                            uid: firebaseUser.uid,
+                // Query "users" collection where "uid" field (Auth UID) matches
+                // We do not know the document ID (Short ID) yet.
+                const q = query(collection(db, 'users'), where('uid', '==', firebaseUser.uid));
+
+                // We need a real-time listener on the query to get the doc ID
+                const unsubscribeQuery = onSnapshot(q, (snapshot) => {
+                    if (!snapshot.empty) {
+                        const userDoc = snapshot.docs[0];
+                        const data = userDoc.data();
+
+                        // Use the Firestore Document ID as the User's UID for the app
+                        const shortId = userDoc.id;
+
+                        const userData: UserData = {
+                            uid: shortId, // <--- Key Change: This is now the Short ID
                             email: firebaseUser.email,
                             emailVerified: firebaseUser.emailVerified,
-                            ...docSnap.data() as { username: string; color: string }
+                            ...data as { username: string; color: string; starredUsers?: string[]; blockedUsers?: string[] }
                         };
+                        setUser(userData);
+                        localStorage.setItem('cached_user_profile', JSON.stringify(userData));
+                        setLoading(false);
                     } else {
-                        userData = {
-                            uid: firebaseUser.uid,
-                            email: firebaseUser.email,
-                            emailVerified: firebaseUser.emailVerified,
-                            username: firebaseUser.displayName || 'CubingUser',
-                            color: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'][Math.floor(Math.random() * 10)],
-                            starredUsers: [],
-                            blockedUsers: []
-                        };
+                        // User authenticated but no profile yet? 
+                        // Should handle creation elsewhere or wait for it.
+                        // For legacy support or race conditions, we might just wait.
+                        // Or if this is a legacy user without a Short ID doc... 
+                        // (Migration might be needed if there are existing users, but assuming new project or fresh start)
+                        // If we just signed up, the doc creation happens in emailSignUp.
+                        setLoading(false);
                     }
-                    setUser(userData);
-                    localStorage.setItem('cached_user_profile', JSON.stringify(userData));
-                    setLoading(false);
                 });
 
-                // Cleanup subscription when auth state changes or component unmounts
-                return () => unsubscribeDoc();
+                return () => unsubscribeQuery();
             } else {
                 setUser(null);
                 localStorage.removeItem('cached_user_profile');
@@ -84,8 +99,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const emailSignUp = async (email: string, pass: string) => {
         const result = await createUserWithEmailAndPassword(auth, email, pass);
-        // Send verification email on sign up
+        // Send verification email
         await sendEmailVerification(result.user);
+
+        // Generate Short ID and create User Doc
+        let shortId = generateShortId();
+        let retries = 0;
+        let created = false;
+
+        while (!created && retries < 5) {
+            try {
+                // Check collision conceptually by just trying to create?
+                // setDoc with merge: false (default is overwrite, but we want to ensure uniqueness?)
+                // Actually to ensure uniqueness we should read first.
+                const docRef = doc(db, 'users', shortId);
+                const docSnap = await getDocs(query(collection(db, 'users'), where('__name__', '==', shortId)));
+
+                if (!docSnap.empty) {
+                    throw new Error("Collision");
+                }
+
+                // Create the user profile
+                await setDoc(docRef, {
+                    uid: result.user.uid, // Store the Auth UID for lookups
+                    username: 'CubingUser',
+                    color: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'][Math.floor(Math.random() * 10)],
+                    starredUsers: [],
+                    blockedUsers: []
+                });
+                created = true;
+            } catch (e) {
+                console.error("Collision or error creating user doc", e);
+                shortId = generateShortId();
+                retries++;
+            }
+        }
+
         return result;
     };
 

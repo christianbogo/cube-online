@@ -64,6 +64,18 @@ export default function Layout() {
             if (e.key === 'Escape') {
                 navigate('/');
             }
+            if (e.key === '?') {
+                navigate('/keybinds');
+            }
+
+            // Global Spacebar Focus Prevention for Buttons
+            if (e.code === 'Space') {
+                const target = e.target as HTMLElement;
+                if (target.tagName === 'BUTTON') {
+                    e.preventDefault();
+                    target.blur();
+                }
+            }
         };
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
@@ -252,7 +264,7 @@ export default function Layout() {
 
                 {/* Right Sidebar - Hidden on Account Page */}
                 {location.pathname !== '/account' && (
-                    <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col border-l border-border backdrop-blur-sm will-change-[width]">
+                    <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col backdrop-blur-sm will-change-[width]">
                         <div
                             className="absolute top-0 left-[-3px] w-1.5 h-full cursor-col-resize hover:bg-accent/50 z-10 transition-colors delay-75"
                             onMouseDown={startResizingRight}

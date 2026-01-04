@@ -2,6 +2,7 @@ import { useSolves, type Solve } from '../contexts/SolvesContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSession } from '../contexts/SessionContext';
 import { useConfirm } from '../contexts/ConfirmationContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { Trash2, ChevronLeft, ChevronRight, EyeOff } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage } from '../utils/calculations';
@@ -11,6 +12,20 @@ interface RightSidebarProps {
     collapsed?: boolean;
 }
 
+const SCRAMBLE_TYPES = [
+    { label: '3x3', value: '333' },
+    { label: '2x2', value: '222' },
+    { label: '4x4', value: '444' },
+    { label: '5x5', value: '555' },
+    { label: '6x6', value: '666' },
+    { label: '7x7', value: '777' },
+    { label: 'Clock', value: 'clock' },
+    { label: 'Mega', value: 'minx' },
+    { label: 'Pyra', value: 'pyram' },
+    { label: 'Skewb', value: 'skewb' },
+    { label: 'Sq-1', value: 'sq1' },
+];
+
 type StatsMode = 'best' | 'session';
 
 export default function RightSidebar({ onToggleCollapse, collapsed }: RightSidebarProps) {
@@ -18,6 +33,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
     const { user } = useAuth();
     const { currentSessionId } = useSession();
     const { confirm: confirmAction } = useConfirm();
+    const { settings, updateSettings } = useSettings(); // Use global settings
 
     // -- Derived State --
     // "Local Experience" (Private Mode or Signed Out) vs "Cloud Experience" (Signed In & Online)
@@ -26,9 +42,9 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
     // Filter Solves
     const displaySolves = useMemo(() => {
         if (isLocalExperience) {
-            return allSolves;
+            return allSolves.filter(s => (s.scrambleType || '333') === settings.scrambleType);
         } else {
-            return allSolves.filter(s => s.userId === user?.uid);
+            return allSolves.filter(s => s.userId === user?.uid && (s.scrambleType || '333') === settings.scrambleType);
         }
     }, [allSolves, isLocalExperience, user]);
 
@@ -173,6 +189,23 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
 
             {/* Header Area (Stats) */}
             <div className="flex flex-col border-b border-border bg-bg-secondary sticky top-0 z-10">
+
+                {/* Event Selector - Moved Here */}
+                <div className="p-2 border-b border-border/50 flex justify-center">
+                    <select
+                        value={settings.scrambleType}
+                        onChange={(e) => updateSettings({ scrambleType: e.target.value })}
+                        className="appearance-none bg-transparent font-medium border-none hover:text-accent
+                                focus:outline-none cursor-pointer text-center text-sm w-full"
+                    >
+                        {SCRAMBLE_TYPES.map(opt => (
+                            <option key={opt.value} value={opt.value} className="bg-bg-secondary text-text-primary">
+                                {opt.label}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
                 {/* Stats Table */}
                 <div className="grid grid-cols-3 gap-y-2 gap-x-2 text-center text-xs p-4 items-center">
                     <div className="col-span-1"></div>

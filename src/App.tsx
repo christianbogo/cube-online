@@ -10,6 +10,7 @@ import Daily from './pages/Daily';
 import Data from './pages/Data';
 import Account from './pages/Account';
 import About from './pages/About';
+import Keybinds from './pages/Keybinds';
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
                     <Route path="data/:type/:id" element={<Data />} />
                     <Route path="about" element={<About />} />
                     <Route path="account" element={<Account />} />
+                    <Route path="keybinds" element={<Keybinds />} />
                   </Route>
                 </Routes>
               </SolvesProvider>
