@@ -21,6 +21,7 @@ const generateShortId = () => {
 
 interface UserData {
     uid: string;
+    shortId?: string;
     email: string | null;
     username: string;
     color: string;
@@ -54,32 +55,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             console.log("AuthContext: onAuthStateChanged", firebaseUser?.uid);
             if (firebaseUser) {
-                // Query "users" collection where "uid" field (Auth UID) matches
-                // We do not know the document ID (Short ID) yet.
-                const q = query(collection(db, 'users'), where('uid', '==', firebaseUser.uid));
+                // Listen directly to the user's document at users/{AuthUID}
+                const userDocRef = doc(db, 'users', firebaseUser.uid);
 
-                // We need a real-time listener on the query to get the doc ID
-                const unsubscribeQuery = onSnapshot(q, (snapshot) => {
-                    console.log("AuthContext: Snapshot received", { empty: snapshot.empty, size: snapshot.size });
-
-                    if (!snapshot.empty) {
-                        // Priority: Find a doc with a Short ID (length <= 8 to be safe, usually 6)
-                        // This avoids picking up legacy docs keyed by the long Auth UID.
-                        let userDoc = snapshot.docs.find(d => d.id.length <= 10);
-
-                        // Fallback: If no short ID doc found, take the first one (legacy behavior)
-                        if (!userDoc) {
-                            console.warn("AuthContext: No Short ID doc found. Using first available doc.");
-                            userDoc = snapshot.docs[0];
-                        }
-
-                        console.log("AuthContext: Selected User Doc", { id: userDoc.id, data: userDoc.data() });
-
-                        const data = userDoc.data();
-                        const shortId = userDoc.id;
-
+                const unsubscribeDoc = onSnapshot(userDocRef, (docSnap) => {
+                    console.log("AuthContext: Doc Snapshot", { exists: docSnap.exists() });
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
                         const userData: UserData = {
-                            uid: shortId,
+                            uid: firebaseUser.uid, // The ID of the user is the Auth UID
+                            shortId: data.shortId, // The friend code
                             email: firebaseUser.email,
                             emailVerified: firebaseUser.emailVerified,
                             ...data as { username: string; color: string; starredUsers?: string[]; blockedUsers?: string[] }
@@ -87,20 +72,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         console.log("AuthContext: Setting User", userData);
                         setUser(userData);
                         localStorage.setItem('cached_user_profile', JSON.stringify(userData));
-                        setLoading(false);
                     } else {
-                        console.warn("AuthContext: User authenticated but NO profile doc found.");
-                        // User authenticated but no profile yet? 
-                        // Should handle creation elsewhere or wait for it.
-                        // For legacy support or race conditions, we might just wait.
-                        // Or if this is a legacy user without a Short ID doc... 
-                        // (Migration might be needed if there are existing users, but assuming new project or fresh start)
-                        // If we just signed up, the doc creation happens in emailSignUp.
-                        setLoading(false);
+                        console.warn("AuthContext: authenticated but no profile doc at users/" + firebaseUser.uid);
+                        // If no profile exists (legacy or just created), checking logic elsewhere handles creation
+                        // or we wait for creation in sign-up flow.
                     }
+                    setLoading(false);
                 });
 
-                return () => unsubscribeQuery();
+                return () => unsubscribeDoc();
             } else {
                 console.log("AuthContext: User signed out.");
                 setUser(null);
@@ -117,39 +97,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Send verification email
         await sendEmailVerification(result.user);
 
-        // Generate Short ID and create User Doc
+        // Generate a unique Short ID
         let shortId = generateShortId();
+        let isUnique = false;
         let retries = 0;
-        let created = false;
 
-        while (!created && retries < 5) {
-            try {
-                // Check collision conceptually by just trying to create?
-                // setDoc with merge: false (default is overwrite, but we want to ensure uniqueness?)
-                // Actually to ensure uniqueness we should read first.
-                const docRef = doc(db, 'users', shortId);
-                const docSnap = await getDocs(query(collection(db, 'users'), where('__name__', '==', shortId)));
-
-                if (!docSnap.empty) {
-                    throw new Error("Collision");
-                }
-
-                // Create the user profile
-                await setDoc(docRef, {
-                    uid: result.user.uid, // Store the Auth UID for lookups
-                    email: email, // Store email
-                    username: 'CubingUser',
-                    color: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'][Math.floor(Math.random() * 10)],
-                    starredUsers: [],
-                    blockedUsers: []
-                });
-                created = true;
-            } catch (e) {
-                console.error("Collision or error creating user doc", e);
+        while (!isUnique && retries < 5) {
+            // Check if this shortId already exists in ANY user document
+            const q = query(collection(db, 'users'), where('shortId', '==', shortId));
+            const querySnap = await getDocs(q);
+            if (querySnap.empty) {
+                isUnique = true;
+            } else {
                 shortId = generateShortId();
                 retries++;
             }
         }
+
+        // Create the user profile at users/{AuthUID}
+        await setDoc(doc(db, 'users', result.user.uid), {
+            uid: result.user.uid,
+            shortId: shortId,
+            email: email,
+            username: 'CubingUser',
+            color: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'][Math.floor(Math.random() * 10)],
+            starredUsers: [],
+            blockedUsers: []
+        });
 
         return result;
     };

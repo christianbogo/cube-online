@@ -229,7 +229,7 @@ export default function Account() {
                                 {user.email}
                             </p>
                             <p className="text-text-secondary text-xs font-mono opacity-60">
-                                {user.uid}
+                                {user.shortId || user.uid}
                             </p>
                             {!user.emailVerified && (
                                 <div className="mt-2 flex flex-col items-start gap-1">
@@ -258,7 +258,7 @@ export default function Account() {
                         <h1 className="text-3xl font-bold text-text-primary">Sign In</h1>
                     </div>
 
-                    <div className="flex flex-col gap-6 max-w-md">
+                    <div className="flex flex-col max-w-md">
                         {/* Form - Always Visible, No Card Styling (Floating) */}
                         <div className="space-y-4 w-full">
                             <div className="flex gap-4 border-b border-border mb-4">
