@@ -4,15 +4,19 @@ interface Column<T> {
     header: React.ReactNode;
     accessor: keyof T | ((item: T, index: number) => React.ReactNode);
     className?: string;
+    sortable?: boolean;
+    key?: string; // Unique key for sorting
 }
 
 interface TableProps<T> {
     data: T[];
     columns: Column<T>[];
     onRowClick?: (item: T) => void;
+    sortConfig?: { key: string; direction: 'asc' | 'desc' };
+    onHeaderClick?: (key: string) => void;
 }
 
-export default function Table<T extends { id: string | number }>({ data, columns, onRowClick }: TableProps<T>) {
+export default function Table<T extends { id: string | number }>({ data, columns, onRowClick, sortConfig, onHeaderClick }: TableProps<T>) {
     return (
         <div className="w-full overflow-x-auto border border-border rounded-lg">
             <table className="w-full text-left text-sm border-collapse">
@@ -21,9 +25,15 @@ export default function Table<T extends { id: string | number }>({ data, columns
                         {columns.map((col, index) => (
                             <th
                                 key={index}
-                                className={`p-3 font-medium text-text-secondary border-b border-border ${col.className || ''}`}
+                                className={`p-3 font-medium text-text-secondary border-b border-border ${col.className || ''} ${col.sortable ? 'cursor-pointer hover:text-text-primary select-none' : ''}`}
+                                onClick={() => col.sortable && onHeaderClick?.(col.key || '')}
                             >
-                                {col.header}
+                                <div className="flex items-center gap-1">
+                                    {col.header}
+                                    {sortConfig && sortConfig.key === col.key && (
+                                        <span className="text-xs">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+                                    )}
+                                </div>
                             </th>
                         ))}
                     </tr>

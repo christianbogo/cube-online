@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Table from '../components/Table';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, X, Trash, Save, Share2, Copy } from 'lucide-react';
 import { type Solve, useSolves } from '../contexts/SolvesContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { detectOutliers } from '../utils/analysis';
@@ -22,10 +22,28 @@ import { calculateAverage } from '../utils/calculations';
 import { startOfYear, startOfMonth, startOfWeek, startOfDay, format } from 'date-fns';
 
 export default function Data() {
-    const { solves } = useSolves();
+    const { solves, updateSolve, deleteSolve } = useSolves();
     const { settings } = useSettings();
     const { user } = useAuth();
     const [searchParams] = useSearchParams();
+
+    // -- State: Sorting --
+    const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>(() => {
+        const saved = localStorage.getItem('data_table_sort');
+        return saved ? JSON.parse(saved) : { key: 'date', direction: 'desc' };
+    });
+
+    useEffect(() => {
+        localStorage.setItem('data_table_sort', JSON.stringify(sortConfig));
+    }, [sortConfig]);
+
+    // -- State: Graph Mounting --
+    const [isGraphMounted, setIsGraphMounted] = useState(false);
+    useEffect(() => {
+        // Small delay to ensure container size is calculated
+        const t = setTimeout(() => setIsGraphMounted(true), 100);
+        return () => clearTimeout(t);
+    }, []);
 
     // -- Filter Solves based on Sidebar Selection and Event --
     const filteredSolves = useMemo(() => {
@@ -71,9 +89,81 @@ export default function Data() {
                     break;
             }
             return selectedKeys.has(key);
-        }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Keep old to new for graphs
 
     }, [solves, user, settings.scrambleType, searchParams]);
+
+    // -- Table Data (Sorted) --
+    const tableSolves = useMemo(() => {
+        const data = [...filteredSolves];
+        // Sort based on config
+        data.sort((a, b) => {
+            let valA, valB;
+
+            if (sortConfig.key === 'time') {
+                // Handle DNFs for sorting (push to bottom? or treat as infinity)
+                const getSolveTime = (s: Solve) => {
+                    if (s.penalty === 'DNF') return Infinity;
+                    let t = s.time;
+                    if (s.penalty === '+2') t += 2000;
+                    if (s.inspectionPenalty === '+2') t += 2000;
+                    return t;
+                };
+                valA = getSolveTime(a);
+                valB = getSolveTime(b);
+            } else {
+                // Date
+                valA = new Date(a.date).getTime();
+                valB = new Date(b.date).getTime();
+            }
+
+            if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+        return data;
+    }, [filteredSolves, sortConfig]);
+
+    const handleHeaderClick = (key: string) => {
+        setSortConfig(prev => ({
+            key,
+            direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
+        }));
+    };
+
+    // -- Actions --
+    const handleCopyScramble = (e: React.MouseEvent, scramble: string) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(scramble);
+        // Could show toast here
+    };
+
+    const handleAction = async (e: React.MouseEvent, action: 'plus2' | 'dnf' | 'delete' | 'share' | 'save', solve: Solve) => {
+        e.stopPropagation();
+        if (action === 'plus2') {
+            const newPenalty = solve.penalty === '+2' ? 'none' : '+2';
+            // If currently DNF, switching to +2 removes DNF.
+            // If currently none, becomes +2.
+            // Wait, logic: Toggle +2. If DNF, just set +2? Usually toggle means removing if present.
+            // Standard timer behavior:
+            // Click +2: Toggle between (none <-> +2). If was DNF, becomes +2.
+            updateSolve(solve.id, { penalty: newPenalty });
+        } else if (action === 'dnf') {
+            const newPenalty = solve.penalty === 'DNF' ? 'none' : 'DNF';
+            updateSolve(solve.id, { penalty: newPenalty });
+        } else if (action === 'delete') {
+            if (confirm('Are you sure you want to delete this solve?')) {
+                deleteSolve(solve.id);
+                if (selectedSolveId === solve.id) setSelectedSolveId(null);
+            }
+        } else if (action === 'share') {
+            // Placeholder
+            alert("Sharing not yet implemented");
+        } else if (action === 'save') {
+            // Placeholder
+            alert("Saving not yet implemented");
+        }
+    };
 
 
     // -- Prepare Data for Charts --
@@ -244,11 +334,15 @@ export default function Data() {
                     {/* Using the standard table but wired to open side pane */}
                     <div className="rounded-lg border border-border overflow-hidden">
                         <Table
-                            data={[...filteredSolves].reverse()} // Show newest first in table
+                            data={tableSolves}
+                            sortConfig={sortConfig}
+                            onHeaderClick={handleHeaderClick}
                             columns={[
-                                { header: '#', accessor: (_: any, i: number) => filteredSolves.length - i },
+                                { header: '#', accessor: (_: any, i: number) => tableSolves.length - i, className: 'w-12 text-center text-text-secondary/50' },
                                 {
                                     header: 'Time',
+                                    key: 'time',
+                                    sortable: true,
                                     accessor: (s: Solve) => (
                                         <span className={`font-mono font-medium ${s.penalty === 'DNF' ? 'text-red-500' : ''}`}>
                                             {s.penalty === 'DNF' ? 'DNF' : formatTime(s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0))}
@@ -257,10 +351,39 @@ export default function Data() {
                                     )
                                 },
                                 {
-                                    header: 'Date',
-                                    accessor: (s: Solve) => new Date(s.date).toLocaleDateString() + ' ' + new Date(s.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                                    className: 'hidden sm:table-cell text-text-secondary'
+                                    header: 'Scramble',
+                                    accessor: (s: Solve) => (
+                                        <div
+                                            onClick={(e) => handleCopyScramble(e, s.scramble)}
+                                            className="font-mono text-xs text-text-secondary truncate max-w-[200px] cursor-copy hover:text-text-primary transition-colors flex items-center gap-2 group/scramble"
+                                            title="Click to copy"
+                                        >
+                                            <Copy className="w-3 h-3 opacity-0 group-hover/scramble:opacity-100 transition-opacity" />
+                                            <span className="truncate">{s.scramble}</span>
+                                        </div>
+                                    ),
+                                    className: 'hidden md:table-cell'
                                 },
+                                {
+                                    header: 'Date',
+                                    key: 'date',
+                                    sortable: true,
+                                    accessor: (s: Solve) => new Date(s.date).toLocaleDateString() + ' ' + new Date(s.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                                    className: 'hidden sm:table-cell text-text-secondary w-40'
+                                },
+                                {
+                                    header: '',
+                                    accessor: (s: Solve) => (
+                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
+                                            <button onClick={(e) => handleAction(e, 'save', s)} className="p-1.5 hover:bg-bg-tertiary rounded text-text-secondary hover:text-accent" title="Save"><Save className="w-4 h-4" /></button>
+                                            <button onClick={(e) => handleAction(e, 'plus2', s)} className={`p-1.5 hover:bg-bg-tertiary rounded font-bold text-xs w-8 ${s.penalty === '+2' ? 'text-accent bg-accent/10' : 'text-text-secondary hover:text-text-primary'}`} title="+2">+2</button>
+                                            <button onClick={(e) => handleAction(e, 'dnf', s)} className={`p-1.5 hover:bg-bg-tertiary rounded font-bold text-xs w-8 ${s.penalty === 'DNF' ? 'text-red-500 bg-red-500/10' : 'text-text-secondary hover:text-text-primary'}`} title="DNF">DNF</button>
+                                            <button onClick={(e) => handleAction(e, 'share', s)} className="p-1.5 hover:bg-bg-tertiary rounded text-text-secondary hover:text-primary" title="Share"><Share2 className="w-4 h-4" /></button>
+                                            <button onClick={(e) => handleAction(e, 'delete', s)} className="p-1.5 hover:bg-red-500/10 rounded text-text-secondary hover:text-red-500" title="Delete"><Trash className="w-4 h-4" /></button>
+                                        </div>
+                                    ),
+                                    className: 'w-48 text-right'
+                                }
                             ]}
                             onRowClick={handleSolveClick}
                         />
