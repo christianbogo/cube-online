@@ -103,7 +103,7 @@ export default function Data() {
 
     // -- Downsample Chart Data for Performance --
     const displayedChartData = useMemo(() => {
-        const MAX_POINTS = 500;
+        const MAX_POINTS = 300;
         let data = chartData;
 
         // Downsample if too many points
@@ -165,62 +165,78 @@ export default function Data() {
             <div className="flex-1 flex flex-col gap-6 w-full min-w-0 pb-20"> {/* pb-20 for scrolling space */}
                 <h2 className="text-2xl font-semibold text-text-primary px-1">Analysis</h2>
 
-                {/* 1. Horizontal Box Plot */}
-                {boxPlotStats && (
-                    <div className="w-full bg-bg-secondary p-4 rounded-lg h-64 border border-border flex flex-col justify-center relative">
-                        <h3 className="text-xs font-bold text-text-secondary uppercase">Distribution</h3>
-                        <BoxPlot stats={boxPlotStats} />
+                {/* Graphs Container */}
+                {filteredSolves.length < 12 ? (
+                    <div className="w-full bg-bg-secondary p-8 rounded-lg border border-border flex flex-col items-center justify-center text-center h-64">
+                        <AlertTriangle className="w-8 h-8 text-text-secondary mb-3 opacity-50" />
+                        <h3 className="text-sm font-medium text-text-primary">Not Enough Data</h3>
+                        <p className="text-xs text-text-secondary mt-1 max-w-[250px]">
+                            Need at least 12 solves to generate meaningful analysis graphs.
+                        </p>
                     </div>
-                )}
+                ) : (
+                    <>
+                        {/* 1. Horizontal Box Plot */}
+                        {boxPlotStats && (
+                            <div className="w-full bg-bg-secondary p-4 rounded-lg h-64 border border-border flex flex-col justify-center relative min-w-0">
+                                <h3 className="text-xs font-bold text-text-secondary uppercase">Distribution</h3>
+                                <BoxPlot stats={boxPlotStats} />
+                            </div>
+                        )}
 
-                {/* 2. Scatter Plot with Trendline */}
-                <div className="w-full bg-bg-secondary p-4 rounded-lg h-64 border border-border flex flex-col relative">
-                    <h3 className="text-xs font-bold text-text-secondary uppercase">Trend</h3>
-                    <div className="flex-1 mt-4">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart data={displayedChartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" opacity={0.1} vertical={false} />
-                                <XAxis dataKey="index" hide />
-                                <YAxis
-                                    domain={['auto', 'auto']}
-                                    tickFormatter={(val) => (val / 1000).toFixed(1)}
-                                    width={40}
-                                    tick={{ fontSize: 10, fill: '#71717a' }}
-                                    axisLine={false}
-                                    tickLine={false}
-                                />
-                                <Tooltip
-                                    cursor={{ stroke: 'rgba(255,255,255,0.1)' }}
-                                    contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', fontSize: '12px' }}
-                                    labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
-                                    formatter={(value: any, name: any) => [
-                                        value ? formatTime(value) : 'DNF',
-                                        name === 'time' ? 'Time' : 'Ao5'
-                                    ]}
-                                    labelFormatter={(label) => `Solve #${label}`}
-                                />
-                                {/* Scatter for Individual Solves */}
-                                <Scatter
-                                    name="time"
-                                    dataKey="time"
-                                    fill="#3b82f6" // Blue
-                                    opacity={0.5}
-                                    shape={(props: any) => <circle cx={props.cx} cy={props.cy} r={2} fill="#3b82f6" opacity={0.6} />}
-                                />
-                                {/* Line for Moving Average (Trend) */}
-                                <Line
-                                    type="monotone"
-                                    dataKey="ao5"
-                                    stroke="#ec4899" // Pink/Accent
-                                    strokeWidth={2}
-                                    dot={false}
-                                    activeDot={{ r: 4 }}
-                                    connectNulls
-                                />
-                            </ComposedChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
+                        {/* 2. Scatter Plot with Trendline */}
+                        <div className="w-full bg-bg-secondary p-4 rounded-lg h-64 border border-border flex flex-col relative min-w-0">
+                            <h3 className="text-xs font-bold text-text-secondary uppercase">Trend</h3>
+                            {/* Fixed height container instead of flex-1 to strictly enforce size for Recharts */}
+                            <div className="mt-4 w-full h-[180px] min-w-0">
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                                    <ComposedChart data={displayedChartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" opacity={0.1} vertical={false} />
+                                        <XAxis dataKey="index" hide />
+                                        <YAxis
+                                            domain={['auto', 'auto']}
+                                            tickFormatter={(val) => (val / 1000).toFixed(1)}
+                                            width={40}
+                                            tick={{ fontSize: 10, fill: '#71717a' }}
+                                            axisLine={false}
+                                            tickLine={false}
+                                        />
+                                        <Tooltip
+                                            cursor={{ stroke: 'rgba(255,255,255,0.1)' }}
+                                            contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', fontSize: '12px' }}
+                                            labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
+                                            formatter={(value: any, name: any) => [
+                                                value ? formatTime(value) : 'DNF',
+                                                name === 'time' ? 'Time' : 'Ao5'
+                                            ]}
+                                            labelFormatter={(label) => `Solve #${label}`}
+                                        />
+                                        {/* Scatter for Individual Solves */}
+                                        <Scatter
+                                            name="time"
+                                            dataKey="time"
+                                            fill="#3b82f6" // Blue
+                                            opacity={0.5}
+                                            shape={(props: any) => <circle cx={props.cx} cy={props.cy} r={2} fill="#3b82f6" opacity={0.6} />}
+                                            isAnimationActive={false}
+                                        />
+                                        {/* Line for Moving Average (Trend) */}
+                                        <Line
+                                            type="monotone"
+                                            dataKey="ao5"
+                                            stroke="#ec4899" // Pink/Accent
+                                            strokeWidth={2}
+                                            dot={false}
+                                            activeDot={{ r: 4 }}
+                                            connectNulls
+                                            isAnimationActive={false}
+                                        />
+                                    </ComposedChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    </>
+                )}
 
                 {/* 3. Solves Table */}
                 <div className="w-full">
