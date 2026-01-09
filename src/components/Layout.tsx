@@ -88,6 +88,15 @@ export default function Layout() {
     // Global Keyboard Shortcuts
     useEffect(() => {
         const handleGlobalKeyDown = (e: KeyboardEvent) => {
+            // Safety: Ignore keybinds if user is typing in an input
+            const target = e.target as HTMLElement;
+            if (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) return;
+
+            if (e.key === 'Shift' && !e.repeat) {
+                toggleLeftSidebar();
+                return;
+            }
+
             if (e.key === 'Tab') {
                 if (location.pathname === '/account') return;
                 e.preventDefault();
@@ -100,7 +109,6 @@ export default function Layout() {
             if (e.key === '?') navigate('/keybinds');
 
             if (e.code === 'Space') {
-                const target = e.target as HTMLElement;
                 if (target.tagName === 'BUTTON') {
                     e.preventDefault();
                     target.blur();

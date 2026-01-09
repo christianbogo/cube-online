@@ -41,15 +41,26 @@ export default function Daily() {
         };
     }, [scrambleStats]);
 
-    // Calculate max days/hours in current month
-    const maxInMonth = useMemo(() => {
+    // Calculate elapsed time for progress bars
+    const elapsed = useMemo(() => {
         const now = new Date();
         const year = now.getFullYear();
         const month = now.getMonth() + 1;
-        const daysInMonth = new Date(year, month, 0).getDate();
+        const day = now.getDate();
+        const hour = now.getHours();
+
+        // ISO Week Number
+        const date = new Date(now.getTime());
+        date.setHours(0, 0, 0, 0);
+        date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+        const week1 = new Date(date.getFullYear(), 0, 4);
+        const currentWeek = 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+
         return {
-            d: daysInMonth,
-            h: daysInMonth * 24
+            weeks: Math.max(1, currentWeek),
+            months: Math.max(1, month),
+            days: Math.max(1, day),
+            hours: Math.max(1, (day - 1) * 24 + hour + 1)
         };
     }, []);
 
@@ -109,10 +120,10 @@ export default function Daily() {
                 {/* 2. Current Year Progress */}
                 <div className="bg-bg-secondary p-6 rounded-lg border border-border animate-in fade-in duration-300">
                     <h3 className="text-lg font-medium text-text-primary mb-4 flex items-center gap-2">
-                        <Calendar className="w-5 h-5 text-purple-500" /> 2025 Progress
+                        <Calendar className="w-5 h-5 text-purple-500" /> {new Date().getFullYear()} Progress
                     </h3>
-                    <ProgressBar label="Weeks" value={progress.w_year} max={52} color="bg-blue-500" icon={Calendar} />
-                    <ProgressBar label="Months" value={progress.m_year} max={12} color="bg-purple-500" icon={Calendar} />
+                    <ProgressBar label="Weeks" value={progress.w_year} max={elapsed.weeks} color="bg-blue-500" icon={Calendar} />
+                    <ProgressBar label="Months" value={progress.m_year} max={elapsed.months} color="bg-purple-500" icon={Calendar} />
                 </div>
 
                 {/* 3. Current Month Progress */}
@@ -120,8 +131,8 @@ export default function Daily() {
                     <h3 className="text-lg font-medium text-text-primary mb-4 flex items-center gap-2">
                         <Clock className="w-5 h-5 text-green-500" /> Current Month
                     </h3>
-                    <ProgressBar label="Days" value={progress.d_month} max={maxInMonth.d} color="bg-green-500" icon={Calendar} />
-                    <ProgressBar label="Hours" value={progress.h_month} max={maxInMonth.h} color="bg-gray-500" icon={Clock} />
+                    <ProgressBar label="Days" value={progress.d_month} max={elapsed.days} color="bg-green-500" icon={Calendar} />
+                    <ProgressBar label="Hours" value={progress.h_month} max={elapsed.hours} color="bg-gray-500" icon={Clock} />
                 </div>
             </div>
 
