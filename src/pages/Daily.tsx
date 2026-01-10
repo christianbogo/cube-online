@@ -41,48 +41,7 @@ export default function Daily() {
         };
     }, [scrambleStats]);
 
-    // Calculate elapsed time for progress bars
-    const elapsed = useMemo(() => {
-        const now = new Date();
-        // const year = now.getFullYear();
-        const month = now.getMonth() + 1;
-        const day = now.getDate();
-        const hour = now.getHours();
 
-        // ISO Week Number
-        const date = new Date(now.getTime());
-        date.setHours(0, 0, 0, 0);
-        date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
-        const week1 = new Date(date.getFullYear(), 0, 4);
-        const currentWeek = 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
-
-        return {
-            weeks: Math.max(1, currentWeek),
-            months: Math.max(1, month),
-            days: Math.max(1, day),
-            hours: Math.max(1, (day - 1) * 24 + hour + 1)
-        };
-    }, []);
-
-    const ProgressBar = ({ label, value, max, color, icon: Icon }: { label: string, value: number, max: number, color: string, icon?: any }) => {
-        const pct = Math.min(100, Math.max(0, (value / max) * 100));
-        return (
-            <div className="mb-4">
-                <div className="flex justify-between text-sm mb-1 items-center">
-                    <span className="font-medium text-text-primary flex items-center gap-2">
-                        {Icon && <Icon className="w-4 h-4" />} {label}
-                    </span>
-                    <span className="text-text-secondary">{value} / {max}</span>
-                </div>
-                <div className="h-2 w-full bg-bg-tertiary rounded-full overflow-hidden border border-border/30">
-                    <div
-                        className={`h-full ${color} transition-all duration-1000 ease-out`}
-                        style={{ width: `${pct}%` }}
-                    />
-                </div>
-            </div>
-        );
-    };
 
     const lootProbabilities = useMemo(() => {
         const total = Object.values(LOOT_WEIGHTS).reduce((a, b) => a + b, 0);
@@ -116,25 +75,45 @@ export default function Daily() {
                 </div>
             )}
 
-            <div className="grid md:grid-cols-2 gap-6 mb-8">
-                {/* 2. Current Year Progress */}
-                <div className="bg-bg-secondary p-6 rounded-lg border border-border animate-in fade-in duration-300">
-                    <h3 className="text-lg font-medium text-text-primary mb-4 flex items-center gap-2">
-                        <Calendar className="w-5 h-5 text-purple-500" /> {new Date().getFullYear()} Progress
-                    </h3>
-                    <ProgressBar label="Weeks" value={progress.w_year} max={elapsed.weeks} color="bg-blue-500" icon={Calendar} />
-                    <ProgressBar label="Months" value={progress.m_year} max={elapsed.months} color="bg-purple-500" icon={Calendar} />
+            {/* 2. Collection View */}
+            {scrambleStats && (
+                <div className="flex flex-col gap-6 mb-8">
+                    <CollectionBlock
+                        title="Yearly Scrambles"
+                        icon={Trophy}
+                        color="yellow"
+                        items={scrambleStats.completed_years}
+                    />
+                    <CollectionBlock
+                        title="Monthly Scrambles"
+                        icon={Calendar}
+                        color="purple"
+                        items={scrambleStats.completed_months}
+                    />
+                    <CollectionBlock
+                        title="Weekly Scrambles"
+                        icon={Calendar}
+                        color="blue"
+                        items={scrambleStats.completed_weeks}
+                    />
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <CollectionBlock
+                            title="Daily Scrambles"
+                            icon={Calendar}
+                            color="green"
+                            items={scrambleStats.completed_days}
+                            compact
+                        />
+                        <CollectionBlock
+                            title="Hourly Scrambles"
+                            icon={Clock}
+                            color="gray"
+                            items={scrambleStats.completed_hours}
+                            compact
+                        />
+                    </div>
                 </div>
-
-                {/* 3. Current Month Progress */}
-                <div className="bg-bg-secondary p-6 rounded-lg border border-border animate-in fade-in duration-300">
-                    <h3 className="text-lg font-medium text-text-primary mb-4 flex items-center gap-2">
-                        <Clock className="w-5 h-5 text-green-500" /> Current Month
-                    </h3>
-                    <ProgressBar label="Days" value={progress.d_month} max={elapsed.days} color="bg-green-500" icon={Calendar} />
-                    <ProgressBar label="Hours" value={progress.h_month} max={elapsed.hours} color="bg-gray-500" icon={Clock} />
-                </div>
-            </div>
+            )}
 
             {/* 4. Explanation Section */}
             <div className="bg-bg-secondary p-6 rounded-lg border border-border/50">
@@ -194,6 +173,73 @@ export default function Daily() {
                     </div>
                 </div>
             </div>
+        </div>
+    );
+}
+
+
+function CollectionBlock({ title, icon: Icon, color, items, compact }: { title: string, icon: any, color: string, items: string[] | undefined, compact?: boolean }) {
+    const list = items || [];
+    const count = list.length;
+    // Sort items? IDs (y-2025, m-2025-01) sort naturally chronologically
+    const sorted = [...list].sort();
+
+    // Mapping colors
+    const colorMap: Record<string, string> = {
+        yellow: 'bg-yellow-500',
+        purple: 'bg-purple-500',
+        blue: 'bg-blue-500',
+        green: 'bg-green-500',
+        gray: 'bg-zinc-500',
+    };
+    const textMap: Record<string, string> = {
+        yellow: 'text-yellow-500',
+        purple: 'text-purple-500',
+        blue: 'text-blue-500',
+        green: 'text-green-500',
+        gray: 'text-zinc-500',
+    };
+    const bgMap: Record<string, string> = {
+        yellow: 'bg-yellow-500/10 border-yellow-500/20',
+        purple: 'bg-purple-500/10 border-purple-500/20',
+        blue: 'bg-blue-500/10 border-blue-500/20',
+        green: 'bg-green-500/10 border-green-500/20',
+        gray: 'bg-zinc-500/10 border-zinc-500/20',
+    };
+
+    const bgColor = colorMap[color];
+    const textColor = textMap[color];
+
+    return (
+        <div className={`rounded-lg border p-5 ${compact ? 'bg-bg-secondary border-border' : 'bg-bg-secondary border-border'}`}>
+            <div className="flex justify-between items-center mb-4">
+                <h3 className={`text-lg font-medium text-text-primary flex items-center gap-2`}>
+                    <Icon className={`w-5 h-5 ${textColor}`} /> {title}
+                </h3>
+                <span className="text-xs font-mono text-text-secondary bg-bg-tertiary px-2 py-1 rounded">
+                    {count} Collected
+                </span>
+            </div>
+
+            {count === 0 ? (
+                <div className="text-sm text-text-secondary/50 italic py-4 text-center">
+                    No stats collected yet.
+                </div>
+            ) : (
+                <div className={`flex flex-wrap gap-1 ${compact ? 'max-h-40 overflow-y-auto custom-scrollbar p-1' : ''}`}>
+                    {sorted.map(id => (
+                        <div
+                            key={id}
+                            className={`w-3 h-3 rounded-sm ${bgColor} relative group cursor-default hover:ring-1 hover:ring-white/50 transition-all`}
+                        >
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-bg-tertiary text-text-primary text-[10px] px-2 py-1 rounded border border-border whitespace-nowrap z-10 shadow-xl pointer-events-none">
+                                <span className="font-mono font-bold text-accent">{id}</span>
+                            </div>
+                        </div>
+                    ))}
+                    {/* Placeholder for future "growth" feeling? Maybe not needed as it just expands. */}
+                </div>
+            )}
         </div>
     );
 }

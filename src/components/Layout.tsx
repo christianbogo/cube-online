@@ -218,22 +218,24 @@ export default function Layout() {
                 )}
 
                 {/* Main Content */}
-                <main className="flex-1 flex flex-col relative bg-bg-primary min-w-0">
-                    <div className="flex-1 p-6 overflow-y-auto custom-scrollbar w-full">
+                <main className="flex-1 flex flex-col relative bg-bg-primary min-w-0 overflow-hidden">
+                    <div className={`flex-1 w-full ${location.pathname.startsWith('/data') ? 'overflow-hidden p-0 flex flex-col' : 'p-6 overflow-y-auto custom-scrollbar'}`}>
                         <Outlet />
                     </div>
-                    <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8 shrink-0">
-                        <div className="flex gap-2 items-center">
-                            <span>Online • v0.1.0</span>
-                            <SyncIndicator status={syncStatus} />
-                            {isPrivateMode && (
-                                <button onClick={() => { if (confirm('Leave private mode?')) togglePrivateMode(); }} className="ml-2 bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20 uppercase font-bold text-[9px]">
-                                    Exit Private Mode
-                                </button>
-                            )}
-                        </div>
-                        {consoleInfo && <div className="text-[10px] text-yellow-500/70 truncate max-w-xs font-mono ml-auto" title={consoleInfo}>⚠️ {consoleInfo}</div>}
-                    </footer>
+                    {!location.pathname.startsWith('/data') && (
+                        <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8 shrink-0">
+                            <div className="flex gap-2 items-center">
+                                <span>Online • v0.1.0</span>
+                                <SyncIndicator status={syncStatus} />
+                                {isPrivateMode && (
+                                    <button onClick={() => { if (confirm('Leave private mode?')) togglePrivateMode(); }} className="ml-2 bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20 uppercase font-bold text-[9px]">
+                                        Exit Private Mode
+                                    </button>
+                                )}
+                            </div>
+                            {consoleInfo && <div className="text-[10px] text-yellow-500/70 truncate max-w-xs font-mono ml-auto" title={consoleInfo}>⚠️ {consoleInfo}</div>}
+                        </footer>
+                    )}
                 </main>
 
                 {/* Right Sidebar */}

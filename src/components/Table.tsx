@@ -31,7 +31,7 @@ export default function Table<T extends { id: string | number }>({ data, columns
                                 className={`p-3 font-medium text-text-secondary border-b border-border ${col.className || ''} ${col.sortable ? 'cursor-pointer hover:text-text-primary select-none' : ''}`}
                                 onClick={() => col.sortable && onHeaderClick?.(col.key || '')}
                             >
-                                <div className="flex items-center gap-1">
+                                <div className={`flex items-center gap-1 ${col.className?.includes('text-center') ? 'justify-center' : col.className?.includes('text-right') ? 'justify-end' : ''}`}>
                                     {col.header}
                                     {sortConfig && sortConfig.key === col.key && (
                                         <span className="text-xs">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>

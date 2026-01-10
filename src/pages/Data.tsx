@@ -272,6 +272,9 @@ export default function Data() {
                     </div>
                 ) : (
                     <>
+                        {/* 0. Activity Calendar */}
+                        <ActivityCalendar solves={filteredSolves} />
+
                         {/* 1. Horizontal Box Plot */}
                         {boxPlotStats && (
                             <div className="w-full h-24 flex flex-col justify-center relative min-w-0">
@@ -300,7 +303,8 @@ export default function Data() {
                                         />
                                         <Tooltip
                                             cursor={{ stroke: 'rgba(255,255,255,0.1)' }}
-                                            contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', fontSize: '12px' }}
+                                            contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', fontSize: '12px', color: '#fff' }}
+                                            itemStyle={{ color: '#e4e4e7' }}
                                             labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
                                             formatter={(value: any, name: any) => [
                                                 value ? formatTime(value) : 'DNF',
@@ -342,12 +346,13 @@ export default function Data() {
                             <AlertTriangle className="w-4 h-4 text-yellow-500" />
                             <h3 className="text-lg font-medium text-text-primary">Anomalies ({anomalySolves.length})</h3>
                         </div>
-                        <div className="rounded-lg overflow-hidden">
+                        <div className="">
                             <Table
                                 data={anomalySolves}
                                 sortConfig={{ key: 'date', direction: 'desc' }}
                                 onHeaderClick={() => { }}
-                                headerClassName="bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-yellow-500"
+                                className="w-full"
+                                headerClassName="bg-bg-secondary border border-border"
                                 rowClassName="border-none hover:bg-yellow-500/5 text-text-secondary"
                                 columns={[
                                     { header: '#', accessor: (_: any, i: number) => anomalySolves.length - i, className: 'w-12 text-center text-text-secondary/50' },
@@ -377,9 +382,9 @@ export default function Data() {
                                         className: 'text-text-secondary text-right w-40'
                                     },
                                     {
-                                        header: '',
+                                        header: 'Actions',
                                         accessor: (s: Solve) => (
-                                            <div className="flex items-center gap-2 justify-end">
+                                            <div className="flex items-center gap-2 justify-end pr-1">
                                                 <button onClick={(e) => handleAction(e, 'approve', s)} className="px-3 py-1 bg-bg-tertiary hover:bg-green-500/20 rounded text-xs font-medium text-text-primary hover:text-green-500 flex items-center gap-1 transition-colors">
                                                     <Check className="w-3 h-3" /> Approve
                                                 </button>
@@ -401,12 +406,13 @@ export default function Data() {
                 <div className="w-full">
                     <h3 className="text-lg font-medium text-text-primary mb-2 px-1">Solves ({filteredSolves.length})</h3>
                     {/* Using the standard table but wired to open side pane */}
-                    <div className="overflow-hidden">
+                    <div className="">
                         <Table
                             data={tableSolves}
                             sortConfig={sortConfig}
                             onHeaderClick={handleHeaderClick}
-                            headerClassName="bg-bg-secondary border border-border rounded-lg"
+                            className="w-full"
+                            headerClassName="bg-bg-secondary border border-border"
                             rowClassName="border-none"
                             columns={[
                                 { header: '#', accessor: (_: any, i: number) => tableSolves.length - i, className: 'w-16 text-center text-text-secondary/50' },
@@ -434,7 +440,7 @@ export default function Data() {
                                             <span className="truncate">{s.scramble}</span>
                                         </div>
                                     ),
-                                    className: 'hidden md:table-cell w-auto'
+                                    className: 'hidden md:table-cell w-auto max-w-[12rem]'
                                 },
                                 {
                                     header: 'Date',
@@ -444,9 +450,9 @@ export default function Data() {
                                     className: 'hidden sm:table-cell text-text-secondary w-48 text-right'
                                 },
                                 {
-                                    header: '',
+                                    header: 'Actions',
                                     accessor: (s: Solve) => (
-                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
+                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end pr-1">
                                             <button onClick={(e) => handleAction(e, 'save', s)} className="p-1.5 hover:bg-bg-tertiary rounded text-text-secondary hover:text-accent" title="Save"><Save className="w-4 h-4" /></button>
                                             <button onClick={(e) => handleAction(e, 'plus2', s)} className={`p-1.5 hover:bg-bg-tertiary rounded font-bold text-xs w-8 ${s.penalty === '+2' ? 'text-accent bg-accent/10' : 'text-text-secondary hover:text-text-primary'}`} title="+2">+2</button>
                                             <button onClick={(e) => handleAction(e, 'dnf', s)} className={`p-1.5 hover:bg-bg-tertiary rounded font-bold text-xs w-8 ${s.penalty === 'DNF' ? 'text-red-500 bg-red-500/10' : 'text-text-secondary hover:text-text-primary'}`} title="DNF">DNF</button>
@@ -486,7 +492,7 @@ function SidebarPane({ solve, onClose, allSolves, onAction, selectedSolveId }: {
 
     return (
         <div
-            className="flex flex-col bg-bg-secondary border-l border-border h-full overflow-y-auto animate-in slide-in-from-right duration-300 shrink-0 relative z-20 shadow-xl"
+            className="flex flex-col bg-bg-secondary border-l border-border h-full overflow-y-auto animate-in slide-in-from-right duration-300 shrink-0 relative z-20"
             style={{ width: width }}
         >
             {/* Resize Handle */}
@@ -524,34 +530,34 @@ function SidebarPane({ solve, onClose, allSolves, onAction, selectedSolveId }: {
                 </div>
 
                 {/* Big Time Display */}
-                <div className="text-center py-6 border-b border-border/50">
+                <div className="text-left px-2 py-4 border-b border-border/50">
                     <div className={`text-4xl font-mono font-bold ${solve.penalty === 'DNF' ? 'text-red-500' : 'text-accent'}`}>
                         {solve.penalty === 'DNF' ? 'DNF' : formatTime(solve.time + (solve.penalty === '+2' ? 2000 : 0))}
                     </div>
-                    {solve.penalty !== 'none' && <div className="text-red-500 font-bold mt-1 uppercase">{solve.penalty} Penalty</div>}
+                    {solve.penalty !== 'none' && <div className="text-red-500 font-bold mt-1 uppercase text-sm">{solve.penalty} Penalty</div>}
                 </div>
 
-                {/* Details Grid */}
-                <div className="grid grid-cols-2 gap-4 text-sm px-2">
+                {/* Details List (Single Column) */}
+                <div className="flex flex-col gap-6 px-2">
                     <div>
                         <div className="text-text-secondary text-xs uppercase font-bold mb-1">Date</div>
-                        <div className="text-text-primary">{new Date(solve.date).toLocaleDateString()}</div>
-                        <div className="text-text-secondary text-xs">{new Date(solve.date).toLocaleTimeString()}</div>
+                        <div className="text-text-primary text-sm flex flex-col">
+                            <span>{new Date(solve.date).toLocaleDateString()}</span>
+                            <span className="text-text-secondary text-xs">{new Date(solve.date).toLocaleTimeString()}</span>
+                        </div>
                     </div>
                     <div>
                         <div className="text-text-secondary text-xs uppercase font-bold mb-1">Inspection</div>
-                        <div className="text-text-primary font-mono">
+                        <div className="text-text-primary font-mono text-sm">
                             {solve.inspectionTime ? (solve.inspectionTime / 1000).toFixed(2) + 's' : '-'}
                         </div>
                         {solve.inspectionPenalty !== 'none' && <span className="text-red-500 text-xs font-bold">({solve.inspectionPenalty})</span>}
                     </div>
-                </div>
-
-                {/* Scramble */}
-                <div className="px-2">
-                    <div className="text-text-secondary text-xs uppercase font-bold mb-1">Scramble</div>
-                    <div className="bg-bg-tertiary p-3 rounded font-mono text-xs leading-relaxed break-all border border-border/50 text-text-primary/90">
-                        {solve.scramble}
+                    <div>
+                        <div className="text-text-secondary text-xs uppercase font-bold mb-1">Scramble</div>
+                        <div className="font-mono text-xs leading-relaxed break-all text-text-primary/90">
+                            {solve.scramble}
+                        </div>
                     </div>
                 </div>
 
@@ -581,6 +587,63 @@ function SidebarPane({ solve, onClose, allSolves, onAction, selectedSolveId }: {
     );
 }
 
+
+// -- Activity Calendar Component --
+function ActivityCalendar({ solves }: { solves: Solve[] }) {
+    // Generate last 100 days
+    const days = useMemo(() => {
+        const d = [];
+        const today = new Date();
+        for (let i = 99; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(date.getDate() - i);
+            d.push(format(startOfDay(date), 'yyyy-MM-dd'));
+        }
+        return d;
+    }, []);
+
+    // Create Map of Date -> Solve Count
+    const counts = useMemo(() => {
+        const c: Record<string, number> = {};
+        solves.forEach(s => {
+            const key = format(startOfDay(new Date(s.date)), 'yyyy-MM-dd');
+            c[key] = (c[key] || 0) + 1;
+        });
+        return c;
+    }, [solves]);
+
+    const getColor = (count: number) => {
+        if (count === 0) return 'bg-zinc-500/20';
+        if (count < 4) return 'bg-emerald-900/60';
+        if (count < 8) return 'bg-emerald-700/80';
+        if (count < 12) return 'bg-emerald-600';
+        return 'bg-emerald-500'; // "Darkest" / Most Intense for 12+
+    };
+
+    return (
+        <div className="w-full mb-6">
+            <h3 className="text-sm font-bold text-text-secondary uppercase mb-2 px-1">Recent Activity</h3>
+            <div className="flex flex-wrap gap-1">
+                {days.map(date => {
+                    const count = counts[date] || 0;
+                    return (
+                        <div
+                            key={date}
+                            className={`w-3 h-3 rounded-sm ${getColor(count)} transition-colors hover:ring-1 hover:ring-text-primary/50 relative group`}
+                            title={`${date}: ${count} solves`}
+                        >
+                            {/* Simple CSS Tooltip */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-bg-tertiary text-text-primary text-[10px] px-2 py-1 rounded border border-border whitespace-nowrap z-10 pointer-events-none">
+                                <span className="font-mono">{date}</span>: <span className="font-bold">{count}</span>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 // -- Simple SVG Box Plot Component --
 function BoxPlot({ stats }: { stats: { min: number, q1: number, median: number, q3: number, max: number } }) {
     if (!stats) return null;
@@ -602,7 +665,7 @@ function BoxPlot({ stats }: { stats: { min: number, q1: number, median: number, 
             <div className="absolute top-1/2 w-[2px] h-3 bg-text-secondary/50 -translate-y-1/2" style={{ left: `${getPos(max)}%` }} />
 
             {/* Box (Q1 to Q3) */}
-            <div className="absolute top-1/2 h-6 bg-blue-500/20 border border-blue-500/50 -translate-y-1/2 rounded-sm"
+            <div className="absolute top-1/2 h-6 bg-blue-500/20 border border-blue-500/50 -translate-y-1/2"
                 style={{ left: `${getPos(q1)}%`, width: `${getPos(q3) - getPos(q1)}%` }} />
 
             {/* Median Line */}

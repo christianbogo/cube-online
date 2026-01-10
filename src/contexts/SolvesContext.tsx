@@ -157,7 +157,8 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
                         daily: data.daily,
                         sessionId: data.sessionId,
                         userId: data.userId,
-                        scrambleType: data.scrambleType || '333'
+                        scrambleType: data.scrambleType || '333',
+                        anomalyApproved: data.anomalyApproved
                     };
 
                     setSolves(prev => {
@@ -192,11 +193,13 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
             if (action === 'delete') {
                 await deleteDoc(doc(db, 'solves', solve.id));
             } else {
-                await setDoc(doc(db, 'solves', solve.id), {
+                // Sanitize undefined values
+                const dataToSave = JSON.parse(JSON.stringify({
                     ...solve,
                     userId: user.uid,
                     updatedAt: serverTimestamp()
-                }, { merge: true });
+                }));
+                await setDoc(doc(db, 'solves', solve.id), dataToSave, { merge: true });
             }
             setSyncStatus('synced');
             setTimeout(() => setSyncStatus('idle'), 2000);
