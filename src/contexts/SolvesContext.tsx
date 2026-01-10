@@ -18,6 +18,7 @@ export interface Solve {
     inspectionPenalty?: 'none' | '+2' | 'DNF';
     daily?: string | null; // ID of the daily scramble if applicable
     scrambleType?: string; // e.g. '333', '444', 'clock'
+    anomalyApproved?: boolean;
 }
 
 interface Stats {

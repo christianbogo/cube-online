@@ -44,7 +44,7 @@ export default function Daily() {
     // Calculate elapsed time for progress bars
     const elapsed = useMemo(() => {
         const now = new Date();
-        const year = now.getFullYear();
+        // const year = now.getFullYear();
         const month = now.getMonth() + 1;
         const day = now.getDate();
         const hour = now.getHours();

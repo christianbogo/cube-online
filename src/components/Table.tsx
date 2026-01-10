@@ -14,13 +14,16 @@ interface TableProps<T> {
     onRowClick?: (item: T) => void;
     sortConfig?: { key: string; direction: 'asc' | 'desc' };
     onHeaderClick?: (key: string) => void;
+    headerClassName?: string;
+    rowClassName?: string;
+    className?: string;
 }
 
-export default function Table<T extends { id: string | number }>({ data, columns, onRowClick, sortConfig, onHeaderClick }: TableProps<T>) {
+export default function Table<T extends { id: string | number }>({ data, columns, onRowClick, sortConfig, onHeaderClick, headerClassName, rowClassName, className }: TableProps<T>) {
     return (
-        <div className="w-full overflow-x-auto border border-border rounded-lg">
+        <div className={`w-full overflow-x-auto ${className || 'border border-border rounded-lg'}`}>
             <table className="w-full text-left text-sm border-collapse">
-                <thead className="bg-bg-hover">
+                <thead className={headerClassName || "bg-bg-hover"}>
                     <tr>
                         {columns.map((col, index) => (
                             <th
@@ -42,7 +45,7 @@ export default function Table<T extends { id: string | number }>({ data, columns
                     {data.map((row, index) => (
                         <tr
                             key={row.id || index}
-                            className={`hover:bg-bg-hover/50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
+                            className={`hover:bg-bg-hover/50 transition-colors group ${rowClassName || ''} ${onRowClick ? 'cursor-pointer' : ''}`}
                             onClick={() => onRowClick?.(row)}
                         >
                             {columns.map((col, colIndex) => (

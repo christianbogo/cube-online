@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Table from '../components/Table';
-import { AlertTriangle, X, Trash, Save, Share2, Copy } from 'lucide-react';
+import { AlertTriangle, X, Trash, Save, Share2, Copy, Check } from 'lucide-react';
 import { type Solve, useSolves } from '../contexts/SolvesContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { detectOutliers } from '../utils/analysis';
@@ -38,12 +38,12 @@ export default function Data() {
     }, [sortConfig]);
 
     // -- State: Graph Mounting --
-    const [isGraphMounted, setIsGraphMounted] = useState(false);
-    useEffect(() => {
-        // Small delay to ensure container size is calculated
-        const t = setTimeout(() => setIsGraphMounted(true), 100);
-        return () => clearTimeout(t);
-    }, []);
+    // const [isGraphMounted, setIsGraphMounted] = useState(false);
+    // useEffect(() => {
+    //     // Small delay to ensure container size is calculated
+    //     const t = setTimeout(() => setIsGraphMounted(true), 100);
+    //     return () => clearTimeout(t);
+    // }, []);
 
     // -- Filter Solves based on Sidebar Selection and Event --
     const filteredSolves = useMemo(() => {
@@ -93,6 +93,16 @@ export default function Data() {
 
     }, [solves, user, settings.scrambleType, searchParams]);
 
+    // -- Anomalies --
+    const anomalySolves = useMemo(() => {
+        return filteredSolves.filter(s => {
+            if (s.anomalyApproved) return false; // Already approved
+            const { isOutlier } = detectOutliers(s.time, filteredSolves);
+            return isOutlier;
+        });
+    }, [filteredSolves]);
+
+
     // -- Table Data (Sorted) --
     const tableSolves = useMemo(() => {
         const data = [...filteredSolves];
@@ -138,15 +148,10 @@ export default function Data() {
         // Could show toast here
     };
 
-    const handleAction = async (e: React.MouseEvent, action: 'plus2' | 'dnf' | 'delete' | 'share' | 'save', solve: Solve) => {
+    const handleAction = async (e: React.MouseEvent, action: 'plus2' | 'dnf' | 'delete' | 'share' | 'save' | 'approve', solve: Solve) => {
         e.stopPropagation();
         if (action === 'plus2') {
             const newPenalty = solve.penalty === '+2' ? 'none' : '+2';
-            // If currently DNF, switching to +2 removes DNF.
-            // If currently none, becomes +2.
-            // Wait, logic: Toggle +2. If DNF, just set +2? Usually toggle means removing if present.
-            // Standard timer behavior:
-            // Click +2: Toggle between (none <-> +2). If was DNF, becomes +2.
             updateSolve(solve.id, { penalty: newPenalty });
         } else if (action === 'dnf') {
             const newPenalty = solve.penalty === 'DNF' ? 'none' : 'DNF';
@@ -156,6 +161,8 @@ export default function Data() {
                 deleteSolve(solve.id);
                 if (selectedSolveId === solve.id) setSelectedSolveId(null);
             }
+        } else if (action === 'approve') {
+            updateSolve(solve.id, { anomalyApproved: true });
         } else if (action === 'share') {
             // Placeholder
             alert("Sharing not yet implemented");
@@ -250,10 +257,9 @@ export default function Data() {
     }
 
     return (
-        <div className="w-full h-full flex relative">
+        <div className="w-full h-full flex flex-row overflow-hidden relative">
             {/* Main Content */}
-            <div className="flex-1 flex flex-col gap-6 w-full min-w-0 pb-20"> {/* pb-20 for scrolling space */}
-                <h2 className="text-2xl font-semibold text-text-primary px-1">Analysis</h2>
+            <div className={`flex-1 flex flex-col gap-6 w-full min-w-0 pb-20 overflow-y-auto px-6 py-6 transition-all duration-300`}>
 
                 {/* Graphs Container */}
                 {filteredSolves.length < 12 ? (
@@ -268,25 +274,26 @@ export default function Data() {
                     <>
                         {/* 1. Horizontal Box Plot */}
                         {boxPlotStats && (
-                            <div className="w-full bg-bg-secondary p-4 rounded-lg h-64 border border-border flex flex-col justify-center relative min-w-0">
-                                <h3 className="text-xs font-bold text-text-secondary uppercase">Distribution</h3>
+                            <div className="w-full h-24 flex flex-col justify-center relative min-w-0">
                                 <BoxPlot stats={boxPlotStats} />
                             </div>
                         )}
 
                         {/* 2. Scatter Plot with Trendline */}
-                        <div className="w-full bg-bg-secondary p-4 rounded-lg h-64 border border-border flex flex-col relative min-w-0">
-                            <h3 className="text-xs font-bold text-text-secondary uppercase">Trend</h3>
+                        <div className="w-full h-48 flex flex-col relative min-w-0">
                             {/* Fixed height container instead of flex-1 to strictly enforce size for Recharts */}
-                            <div className="mt-4 w-full h-[180px] min-w-0">
+                            <div className="mt-2 w-full h-[180px] min-w-0">
                                 <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                     <ComposedChart data={displayedChartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
                                         <CartesianGrid strokeDasharray="3 3" opacity={0.1} vertical={false} />
                                         <XAxis dataKey="index" hide />
                                         <YAxis
                                             domain={['auto', 'auto']}
-                                            tickFormatter={(val) => (val / 1000).toFixed(1)}
-                                            width={40}
+                                            tickFormatter={(val) => {
+                                                if (val > 60000) return formatTime(val);
+                                                return (val / 1000).toFixed(1);
+                                            }}
+                                            width={50}
                                             tick={{ fontSize: 10, fill: '#71717a' }}
                                             axisLine={false}
                                             tickLine={false}
@@ -328,17 +335,81 @@ export default function Data() {
                     </>
                 )}
 
-                {/* 3. Solves Table */}
+                {/* 3. Anomaly Table */}
+                {anomalySolves.length > 0 && (
+                    <div className="w-full mb-4">
+                        <div className="flex items-center gap-2 mb-2 px-1">
+                            <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                            <h3 className="text-lg font-medium text-text-primary">Anomalies ({anomalySolves.length})</h3>
+                        </div>
+                        <div className="rounded-lg overflow-hidden">
+                            <Table
+                                data={anomalySolves}
+                                sortConfig={{ key: 'date', direction: 'desc' }}
+                                onHeaderClick={() => { }}
+                                headerClassName="bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-yellow-500"
+                                rowClassName="border-none hover:bg-yellow-500/5 text-text-secondary"
+                                columns={[
+                                    { header: '#', accessor: (_: any, i: number) => anomalySolves.length - i, className: 'w-12 text-center text-text-secondary/50' },
+                                    {
+                                        header: 'Time',
+                                        accessor: (s: Solve) => (
+                                            <span className={`font-mono font-medium ${s.penalty === 'DNF' ? 'text-red-500' : 'text-yellow-500'}`}>
+                                                {formatTime(s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0))}
+                                            </span>
+                                        )
+                                    },
+                                    {
+                                        header: 'Issue',
+                                        accessor: (s: Solve) => {
+                                            const { reason } = detectOutliers(s.time, filteredSolves);
+                                            return (
+                                                <span className="text-xs text-text-secondary">
+                                                    {reason === 'suspected_misclick' ? 'Unusually Fast' : 'Unusually Slow'}
+                                                </span>
+                                            )
+                                        },
+                                        className: 'text-text-secondary'
+                                    },
+                                    {
+                                        header: 'Date',
+                                        accessor: (s: Solve) => new Date(s.date).toLocaleDateString(),
+                                        className: 'text-text-secondary text-right w-40'
+                                    },
+                                    {
+                                        header: '',
+                                        accessor: (s: Solve) => (
+                                            <div className="flex items-center gap-2 justify-end">
+                                                <button onClick={(e) => handleAction(e, 'approve', s)} className="px-3 py-1 bg-bg-tertiary hover:bg-green-500/20 rounded text-xs font-medium text-text-primary hover:text-green-500 flex items-center gap-1 transition-colors">
+                                                    <Check className="w-3 h-3" /> Approve
+                                                </button>
+                                                <button onClick={(e) => handleAction(e, 'delete', s)} className="px-3 py-1 bg-bg-tertiary hover:bg-red-500/20 rounded text-xs font-medium text-text-primary hover:text-red-500 flex items-center gap-1 transition-colors">
+                                                    <Trash className="w-3 h-3" /> Delete
+                                                </button>
+                                            </div>
+                                        ),
+                                        className: 'w-48 text-right'
+                                    }
+                                ]}
+                            />
+                        </div>
+                    </div>
+                )}
+
+
+                {/* 4. Solves Table */}
                 <div className="w-full">
                     <h3 className="text-lg font-medium text-text-primary mb-2 px-1">Solves ({filteredSolves.length})</h3>
                     {/* Using the standard table but wired to open side pane */}
-                    <div className="rounded-lg border border-border overflow-hidden">
+                    <div className="overflow-hidden">
                         <Table
                             data={tableSolves}
                             sortConfig={sortConfig}
                             onHeaderClick={handleHeaderClick}
+                            headerClassName="bg-bg-secondary border border-border rounded-lg"
+                            rowClassName="border-none"
                             columns={[
-                                { header: '#', accessor: (_: any, i: number) => tableSolves.length - i, className: 'w-12 text-center text-text-secondary/50' },
+                                { header: '#', accessor: (_: any, i: number) => tableSolves.length - i, className: 'w-16 text-center text-text-secondary/50' },
                                 {
                                     header: 'Time',
                                     key: 'time',
@@ -348,28 +419,29 @@ export default function Data() {
                                             {s.penalty === 'DNF' ? 'DNF' : formatTime(s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0))}
                                             {s.penalty === '+2' && '+'}
                                         </span>
-                                    )
+                                    ),
+                                    className: 'w-24'
                                 },
                                 {
                                     header: 'Scramble',
                                     accessor: (s: Solve) => (
                                         <div
                                             onClick={(e) => handleCopyScramble(e, s.scramble)}
-                                            className="font-mono text-xs text-text-secondary truncate max-w-[200px] cursor-copy hover:text-text-primary transition-colors flex items-center gap-2 group/scramble"
+                                            className="font-mono text-xs text-text-secondary cursor-copy hover:text-text-primary transition-colors flex items-center gap-2 group/scramble w-full"
                                             title="Click to copy"
                                         >
-                                            <Copy className="w-3 h-3 opacity-0 group-hover/scramble:opacity-100 transition-opacity" />
+                                            <Copy className="w-3 h-3 opacity-0 group-hover/scramble:opacity-100 transition-opacity shrink-0" />
                                             <span className="truncate">{s.scramble}</span>
                                         </div>
                                     ),
-                                    className: 'hidden md:table-cell'
+                                    className: 'hidden md:table-cell w-auto'
                                 },
                                 {
                                     header: 'Date',
                                     key: 'date',
                                     sortable: true,
                                     accessor: (s: Solve) => new Date(s.date).toLocaleDateString() + ' ' + new Date(s.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                                    className: 'hidden sm:table-cell text-text-secondary w-40'
+                                    className: 'hidden sm:table-cell text-text-secondary w-48 text-right'
                                 },
                                 {
                                     header: '',
@@ -391,70 +463,120 @@ export default function Data() {
                 </div>
             </div>
 
-            {/* Viewer Pane (Side Drawer) */}
+            {/* Viewer Pane (Side Panel) */}
             {selectedSolve && (
-                <div className="absolute top-0 right-0 bottom-0 w-[300px] sm:w-[350px] bg-bg-secondary border-l border-border shadow-2xl z-20 overflow-y-auto animate-in slide-in-from-right duration-300">
-                    <div className="p-4 flex flex-col gap-4">
-                        <div className="flex justify-between items-start">
-                            <h2 className="text-xl font-bold text-text-primary">Solve Details</h2>
-                            <button onClick={() => setSelectedSolveId(null)} className="p-1 hover:bg-bg-hover rounded text-text-secondary">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
+                <SidebarPane
+                    solve={selectedSolve}
+                    onClose={() => setSelectedSolveId(null)}
+                    allSolves={filteredSolves}
+                    onAction={handleAction}
+                    selectedSolveId={selectedSolveId}
+                />
+            )}
+        </div>
+    );
+}
 
-                        {/* Big Time Display */}
-                        <div className="text-center py-6 border-b border-border/50">
-                            <div className={`text-4xl font-mono font-bold ${selectedSolve.penalty === 'DNF' ? 'text-red-500' : 'text-accent'}`}>
-                                {selectedSolve.penalty === 'DNF' ? 'DNF' : formatTime(selectedSolve.time + (selectedSolve.penalty === '+2' ? 2000 : 0))}
-                            </div>
-                            {selectedSolve.penalty !== 'none' && <div className="text-red-500 font-bold mt-1 uppercase">{selectedSolve.penalty} Penalty</div>}
-                        </div>
+function SidebarPane({ solve, onClose, allSolves, onAction, selectedSolveId }: { solve: Solve, onClose: () => void, allSolves: Solve[], onAction: any, selectedSolveId: string | null }) {
+    const [width, setWidth] = useState(350);
 
-                        {/* Details Grid */}
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div>
-                                <div className="text-text-secondary text-xs uppercase font-bold mb-1">Date</div>
-                                <div className="text-text-primary">{new Date(selectedSolve.date).toLocaleDateString()}</div>
-                                <div className="text-text-secondary text-xs">{new Date(selectedSolve.date).toLocaleTimeString()}</div>
-                            </div>
-                            <div>
-                                <div className="text-text-secondary text-xs uppercase font-bold mb-1">Inspection</div>
-                                <div className="text-text-primary font-mono">
-                                    {selectedSolve.inspectionTime ? selectedSolve.inspectionTime.toFixed(2) + 's' : '-'}
-                                </div>
-                                {selectedSolve.inspectionPenalty !== 'none' && <span className="text-red-500 text-xs font-bold">({selectedSolve.inspectionPenalty})</span>}
-                            </div>
-                        </div>
 
-                        {/* Scramble */}
-                        <div>
-                            <div className="text-text-secondary text-xs uppercase font-bold mb-1">Scramble</div>
-                            <div className="bg-bg-tertiary p-3 rounded font-mono text-xs leading-relaxed break-all border border-border/50 text-text-primary/90">
-                                {selectedSolve.scramble}
-                            </div>
-                        </div>
+    // Initial resize handlers could go here, but for now simple toggle or fixed width + easy drag
+    // User asked "Grow and shrink".
 
-                        {/* Outlier Analysis */}
-                        {(() => {
-                            const { isOutlier, reason } = detectOutliers(selectedSolve.time, solves); // Pass all solves for context
-                            if (isOutlier) {
-                                return (
-                                    <div className="bg-yellow-500/10 border border-yellow-500/20 p-3 rounded flex items-start gap-3">
-                                        <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0" />
-                                        <div>
-                                            <div className="text-yellow-500 font-bold text-sm mb-0.5">Anomaly Detected</div>
-                                            <div className="text-yellow-500/80 text-xs">
-                                                {reason === 'suspected_misclick' ? 'This time is unusually fast. Possible misclick?' : 'This time is unusually slow.'}
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            }
-                            return null;
-                        })()}
+    return (
+        <div
+            className="flex flex-col bg-bg-secondary border-l border-border h-full overflow-y-auto animate-in slide-in-from-right duration-300 shrink-0 relative z-20 shadow-xl"
+            style={{ width: width }}
+        >
+            {/* Resize Handle */}
+            <div
+                className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-accent/50 transition-colors z-30"
+                onMouseDown={(e) => {
+                    e.preventDefault();
+                    const startX = e.clientX;
+                    const startWidth = width;
+
+                    const onMouseMove = (ev: MouseEvent) => {
+                        const newWidth = startWidth - (ev.clientX - startX);
+                        setWidth(Math.max(300, Math.min(600, newWidth)));
+                    };
+
+                    const onMouseUp = () => {
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                    };
+
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                }}
+            />
+
+            <div className="p-4 flex flex-col gap-4">
+                <div className="flex justify-between items-start">
+                    <div className="flex flex-col">
+                        <h2 className="text-xl font-bold text-text-primary">Solve Details</h2>
+                        <span className="text-xs text-text-secondary font-mono">#{selectedSolveId?.slice(0, 8)}</span>
+                    </div>
+                    <button onClick={onClose} className="p-1 hover:bg-bg-hover rounded text-text-secondary">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                {/* Big Time Display */}
+                <div className="text-center py-6 border-b border-border/50">
+                    <div className={`text-4xl font-mono font-bold ${solve.penalty === 'DNF' ? 'text-red-500' : 'text-accent'}`}>
+                        {solve.penalty === 'DNF' ? 'DNF' : formatTime(solve.time + (solve.penalty === '+2' ? 2000 : 0))}
+                    </div>
+                    {solve.penalty !== 'none' && <div className="text-red-500 font-bold mt-1 uppercase">{solve.penalty} Penalty</div>}
+                </div>
+
+                {/* Details Grid */}
+                <div className="grid grid-cols-2 gap-4 text-sm px-2">
+                    <div>
+                        <div className="text-text-secondary text-xs uppercase font-bold mb-1">Date</div>
+                        <div className="text-text-primary">{new Date(solve.date).toLocaleDateString()}</div>
+                        <div className="text-text-secondary text-xs">{new Date(solve.date).toLocaleTimeString()}</div>
+                    </div>
+                    <div>
+                        <div className="text-text-secondary text-xs uppercase font-bold mb-1">Inspection</div>
+                        <div className="text-text-primary font-mono">
+                            {solve.inspectionTime ? (solve.inspectionTime / 1000).toFixed(2) + 's' : '-'}
+                        </div>
+                        {solve.inspectionPenalty !== 'none' && <span className="text-red-500 text-xs font-bold">({solve.inspectionPenalty})</span>}
                     </div>
                 </div>
-            )}
+
+                {/* Scramble */}
+                <div className="px-2">
+                    <div className="text-text-secondary text-xs uppercase font-bold mb-1">Scramble</div>
+                    <div className="bg-bg-tertiary p-3 rounded font-mono text-xs leading-relaxed break-all border border-border/50 text-text-primary/90">
+                        {solve.scramble}
+                    </div>
+                </div>
+
+                {/* Outlier Analysis Details */}
+                {(() => {
+                    const { isOutlier, reason } = detectOutliers(solve.time, allSolves);
+                    if (isOutlier && !solve.anomalyApproved) {
+                        return (
+                            <div className="mx-2 bg-yellow-500/10 border border-yellow-500/20 p-3 rounded flex items-start gap-3">
+                                <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0" />
+                                <div>
+                                    <div className="text-yellow-500 font-bold text-sm mb-0.5">Anomaly Detected</div>
+                                    <div className="text-yellow-500/80 text-xs mb-2">
+                                        {reason === 'suspected_misclick' ? 'This time is unusually fast.' : 'This time is unusually slow.'}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={(e) => onAction(e, 'approve', solve)} className="text-xs font-bold text-yellow-500 hover:text-yellow-400 underline decoration-dotted">Approve</button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+                    return null;
+                })()}
+            </div>
         </div>
     );
 }
@@ -499,5 +621,3 @@ function BoxPlot({ stats }: { stats: { min: number, q1: number, median: number, 
         </div>
     );
 }
-
-

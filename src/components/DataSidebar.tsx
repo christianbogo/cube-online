@@ -360,8 +360,22 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
 
             {/* Footer Stats Table */}
             <div className="border-t border-border bg-bg-secondary p-3 flex flex-col gap-2">
-                <div className="text-[10px] uppercase font-bold text-text-secondary mb-1">
-                    {selectedKeys.size > 0 ? `Selected (${selectedKeys.size})` : 'All Solves'}
+                <div className="flex items-center justify-between mb-1">
+                    <div className="text-[10px] uppercase font-bold text-text-secondary">
+                        {selectedKeys.size > 0 ? `Selected (${selectedKeys.size})` : 'All Solves'}
+                    </div>
+                    {selectedKeys.size > 0 && (
+                        <button
+                            onClick={() => {
+                                const newParams = new URLSearchParams(searchParams);
+                                newParams.delete('selected');
+                                setSearchParams(newParams);
+                            }}
+                            className="text-[10px] text-accent hover:text-accent/80 font-medium transition-colors cursor-pointer"
+                        >
+                            Unselect All
+                        </button>
+                    )}
                 </div>
 
                 {selectedStats ? (
