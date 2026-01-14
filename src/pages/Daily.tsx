@@ -199,13 +199,7 @@ function CollectionBlock({ title, icon: Icon, color, items, compact }: { title: 
         green: 'text-green-500',
         gray: 'text-zinc-500',
     };
-    const bgMap: Record<string, string> = {
-        yellow: 'bg-yellow-500/10 border-yellow-500/20',
-        purple: 'bg-purple-500/10 border-purple-500/20',
-        blue: 'bg-blue-500/10 border-blue-500/20',
-        green: 'bg-green-500/10 border-green-500/20',
-        gray: 'bg-zinc-500/10 border-zinc-500/20',
-    };
+
 
     const bgColor = colorMap[color];
     const textColor = textMap[color];
