@@ -649,7 +649,7 @@ function ActivityCalendar({ solves }: { solves: Solve[] }) {
                 {range.map(date => {
                     const count = counts[date] || 0;
                     const dateObj = new Date(date);
-                    const isToday = date === format(new Date(), 'yyyy-MM-dd');
+
 
                     return (
                         <div
@@ -657,7 +657,6 @@ function ActivityCalendar({ solves }: { solves: Solve[] }) {
                             className={`
                                 w-8 h-8 rounded-md flex items-center justify-center text-xs transition-all relative group cursor-default select-none
                                 ${getColor(count)}
-                                ${isToday ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-secondary' : ''}
                             `}
                             title={`${date}: ${count} solves`}
                         >

@@ -159,7 +159,7 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
             return Array.from(groups.values()).map(g => {
                 const lastSolve = g.solves[0]; // Newest
                 // Basic label: Date + Time
-                const dateStr = format(new Date(lastSolve.date), 'MMM d, HH:mm');
+                const dateStr = format(new Date(lastSolve.date), 'MMM d, h:mm a');
                 return { ...g, label: dateStr, date: new Date(lastSolve.date) };
             }).sort((a, b) => b.date.getTime() - a.date.getTime());
         }
