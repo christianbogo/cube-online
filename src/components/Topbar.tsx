@@ -20,7 +20,6 @@ export default function Topbar() {
                 {user ? (
                     <Link
                         to="/account"
-                        to="/account"
                         className="flex items-center gap-3 py-1 pl-3 pr-1 rounded-lg hover:bg-bg-hover transition-colors border border-transparent hover:border-border/50"
                     >
                         <span className="font-medium text-sm text-text-primary hidden sm:block">

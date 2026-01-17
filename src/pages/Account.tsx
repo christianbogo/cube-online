@@ -1,4 +1,4 @@
-import { Check, X, LogOut, Info, Trash2, Download, Upload, TriangleAlert, Star, Ban, Users, BarChart3, Globe, Lock, Eye } from 'lucide-react';
+import { Check, X, LogOut, Info, Trash2, Download, Upload, TriangleAlert, Star, Ban, BarChart3 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 // import { useSolves } from '../contexts/SolvesContext'; // Unused
@@ -261,8 +261,7 @@ export default function Account() {
     );
 
     const SocialsTab = () => {
-        const [editingSocials, setEditingSocials] = useState<any[] | null>(null);
-        const [newNetwork, setNewNetwork] = useState('discord');
+        const [newNetwork, setNewNetwork] = useState<'email' | 'discord' | 'twitter' | 'instagram' | 'youtube' | 'twitch' | 'other'>('discord');
         const [newValue, setNewValue] = useState('');
 
         // Ensure we always have the email entry
@@ -293,7 +292,7 @@ export default function Account() {
                 id: crypto.randomUUID(),
                 network: newNetwork,
                 value: newValue.trim(),
-                privacy: 'hidden'
+                privacy: 'hidden' as 'hidden' | 'friends' | 'public'
             };
             // Combine existing (minus any email duplicates which shouldn't exist in 'other') + new
             // Then ensuring we keep the structured list clean.
@@ -319,9 +318,9 @@ export default function Account() {
             let fullList = [...socials];
             // If we are changing privacy of the 'email-default' which might not be in DB yet:
             if (id === 'email-default' && !fullList.find(s => s.network === 'email')) {
-                fullList.push({ ...emailEntry, privacy: newPrivacy });
+                fullList.push({ ...emailEntry, privacy: newPrivacy as 'hidden' | 'friends' | 'public' });
             } else {
-                fullList = fullList.map(s => s.id === id ? { ...s, privacy: newPrivacy } : s);
+                fullList = fullList.map(s => s.id === id ? { ...s, privacy: newPrivacy as 'hidden' | 'friends' | 'public' } : s);
             }
             updateSocials(fullList);
         };
@@ -396,7 +395,7 @@ export default function Account() {
                     <div className="mt-2 flex flex-col sm:flex-row gap-2 items-start sm:items-center p-3 border border-dashed border-border rounded opacity-80 hover:opacity-100 transition-opacity">
                         <select
                             value={newNetwork}
-                            onChange={(e) => setNewNetwork(e.target.value)}
+                            onChange={(e) => setNewNetwork(e.target.value as any)}
                             className="bg-bg-secondary border border-border text-sm text-text-primary rounded px-3 py-2 w-full sm:w-auto focus:outline-none focus:border-accent"
                         >
                             <option value="discord">Discord</option>

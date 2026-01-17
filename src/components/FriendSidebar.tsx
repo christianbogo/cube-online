@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Users } from 'lucide-react';
 
 export function FriendSidebar() {
