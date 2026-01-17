@@ -267,7 +267,7 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
 
 
     return (
-        <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-sm overflow-hidden min-w-0 font-sans border-r border-border">
+        <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-sm overflow-hidden min-w-0 font-sans">
             {/* Header Area */}
             <div className="flex flex-col border-b border-border/50 bg-bg-secondary/50 backdrop-blur-sm sticky top-0 z-10 text-text-primary">
 

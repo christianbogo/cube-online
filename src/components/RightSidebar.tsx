@@ -62,7 +62,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
     };
 
     // -- Stats Calculation --
-    const [statsMode, setStatsMode] = useState<StatsMode>('session');
+    const [statsMode, setStatsMode] = useState<StatsMode>('best');
 
     const currentSessionSolves = useMemo(() => {
         if (isPrivateMode) return displaySolves;
@@ -184,7 +184,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
     const bestStats = statsMode === 'session' ? stats.sessionBest : stats.allTimeBest;
 
     return (
-        <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-text-secondary text-sm overflow-hidden min-w-0 border-l border-border font-sans relative">
+        <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-text-secondary text-sm overflow-hidden min-w-0 font-sans relative">
 
             {/* Header Area (Stats) */}
             <div className="flex flex-col border-b border-border bg-bg-secondary sticky top-0 z-10">
@@ -408,32 +408,43 @@ const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onC
             <div className="flex items-center justify-between px-4 py-2">
                 <div className="flex items-center gap-3 min-w-0">
                     <span className="text-text-secondary/40 font-mono w-6 text-right text-[10px]">{number}</span>
-                    <span className={`font-mono font-medium ${solve.penalty === 'DNF' ? 'text-red-500' : 'text-text-primary'}`}>
+                    <span className={`font-mono font-medium ${solve.penalty === 'DNF' ? 'text-red-500' : (badge ? badge.color : 'text-text-primary')}`}>
                         {formatTimeDisplay(solve)}
                     </span>
-                    {badge && (
-                        <span className={`text-[10px] w-4 h-4 flex items-center justify-center rounded font-bold ${badge.color} ${badge.bg}`}>
-                            {badge.text}
-                        </span>
-                    )}
+                    {/* Badge Removed - Color applied to time */}
                 </div>
             </div>
 
             {/* Expanded Details */}
             {expanded && (
                 <div className="px-4 pb-3 pt-1 flex flex-col gap-2 animate-in slide-in-from-top-1 duration-200">
-                    {/* Date */}
+                    {/* Date or Special Info */}
                     <div className="text-[10px] text-text-secondary">
-                        {new Date(solve.date).toLocaleString(undefined, {
-                            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
-                        })}
+                        {badge ? (
+                            <span className={badge.color}>
+                                {badge.text === 'D' && 'Daily Challenge'}
+                                {badge.text === 'W' && 'Weekly Challenge'}
+                                {badge.text === 'M' && 'Monthly Challenge'}
+                                {badge.text === 'Y' && 'Yearly Challenge'}
+                                {badge.text === 'H' && 'Hourly Challenge'}
+                                {badge.text === 'S' && 'Special Scramble'}
+                                <span className="text-text-secondary/50 mx-1">•</span>
+                                {new Date(solve.date).toLocaleString(undefined, {
+                                    month: 'short', day: 'numeric'
+                                })}
+                            </span>
+                        ) : (
+                            new Date(solve.date).toLocaleString(undefined, {
+                                month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                            })
+                        )}
                     </div>
 
                     {/* Scramble */}
                     <div
                         onClick={handleCopy}
-                        className={`text-[11px] font-mono break-all leading-normal bg-black/5 dark:bg-black/20 p-2 rounded cursor-pointer transition-colors
-                            ${isCopied ? 'text-green-500 bg-green-500/10' : 'text-text-primary/80 dark:text-text-secondary/70 hover:bg-black/10 dark:hover:bg-black/30 hover:text-text-primary'}`}
+                        className={`text-[11px] font-mono break-all leading-normal p-2 rounded cursor-pointer transition-colors
+                            ${isCopied ? 'text-green-500 bg-green-500/10' : 'bg-zinc-100 text-zinc-900 border border-zinc-200 dark:border-transparent dark:bg-black/20 dark:text-text-secondary/70 hover:bg-zinc-200 dark:hover:bg-black/30'}`}
                         title="Click to copy"
                     >
                         {isCopied ? 'Copied to clipboard!' : solve.scramble}

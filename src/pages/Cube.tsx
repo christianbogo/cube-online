@@ -524,10 +524,10 @@ export default function Cube() {
 
                             {/* Separate Size Buttons */}
                             <div className="flex items-center gap-4">
-                                <button onClick={() => changeScrambleSize(-0.1)} className="hover:text-accent transition-colors" title="Smaller">
+                                <button onClick={() => changeScrambleSize(-0.4)} className="hover:text-accent transition-colors" title="Smaller">
                                     <Minus className="w-5 h-5" />
                                 </button>
-                                <button onClick={() => changeScrambleSize(0.1)} className="hover:text-accent transition-colors" title="Larger">
+                                <button onClick={() => changeScrambleSize(0.4)} className="hover:text-accent transition-colors" title="Larger">
                                     <Plus className="w-5 h-5" />
                                 </button>
                             </div>

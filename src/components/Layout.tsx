@@ -219,10 +219,10 @@ export default function Layout() {
 
                 {/* Main Content */}
                 <main className="flex-1 flex flex-col relative bg-bg-primary min-w-0 overflow-hidden">
-                    <div className={`flex-1 w-full ${location.pathname.startsWith('/data') ? 'overflow-hidden p-0 flex flex-col' : 'p-6 overflow-y-auto custom-scrollbar'}`}>
+                    <div className={`flex-1 w-full ${(location.pathname.startsWith('/data') || location.pathname === '/account') ? 'overflow-hidden p-0 flex flex-col' : 'p-6 overflow-y-auto custom-scrollbar'}`}>
                         <Outlet />
                     </div>
-                    {!location.pathname.startsWith('/data') && (
+                    {(!location.pathname.startsWith('/data') && location.pathname !== '/account') && (
                         <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8 shrink-0">
                             <div className="flex gap-2 items-center">
                                 <span>Online • v0.1.0</span>

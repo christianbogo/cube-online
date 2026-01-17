@@ -259,7 +259,7 @@ export default function Data() {
     return (
         <div className="w-full h-full flex flex-row overflow-hidden relative">
             {/* Main Content */}
-            <div className={`flex-1 flex flex-col gap-6 w-full min-w-0 pb-20 overflow-y-auto px-6 py-6 transition-all duration-300`}>
+            <div className={`flex-1 flex flex-col gap-6 w-full min-w-0 pb-20 overflow-y-auto px-6 py-6`}>
 
                 {/* Graphs Container */}
                 {filteredSolves.length < 12 ? (
@@ -272,23 +272,13 @@ export default function Data() {
                     </div>
                 ) : (
                     <>
-                        {/* 0. Activity Calendar */}
-                        <ActivityCalendar solves={filteredSolves} />
 
-                        {/* 1. Horizontal Box Plot */}
-                        {boxPlotStats && (
-                            <div className="w-full h-24 flex flex-col justify-center relative min-w-0">
-                                <BoxPlot stats={boxPlotStats} />
-                            </div>
-                        )}
-
-                        {/* 2. Scatter Plot with Trendline */}
+                        {/* 1. Scatter Plot with Trendline (Moved to Top) */}
                         <div className="w-full h-48 flex flex-col relative min-w-0">
-                            {/* Fixed height container instead of flex-1 to strictly enforce size for Recharts */}
                             <div className="mt-2 w-full h-[180px] min-w-0">
                                 <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                     <ComposedChart data={displayedChartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
-                                        <CartesianGrid strokeDasharray="3 3" opacity={0.1} vertical={false} />
+                                        <CartesianGrid stroke="#71717a" strokeOpacity={0.2} vertical={false} />
                                         <XAxis dataKey="index" hide />
                                         <YAxis
                                             domain={['auto', 'auto']}
@@ -302,33 +292,44 @@ export default function Data() {
                                             tickLine={false}
                                         />
                                         <Tooltip
-                                            cursor={{ stroke: 'rgba(255,255,255,0.1)' }}
-                                            contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', fontSize: '12px', color: '#fff' }}
+                                            cursor={{ stroke: 'rgba(100,100,100,0.2)' }}
+                                            contentStyle={{
+                                                backgroundColor: 'rgba(24, 24, 27, 0.95)', // Zinc-950
+                                                borderColor: '#27272a',
+                                                fontSize: '12px',
+                                                color: '#fff',
+                                                borderRadius: '6px',
+                                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                                            }}
                                             itemStyle={{ color: '#e4e4e7' }}
                                             labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
-                                            formatter={(value: any, name: any) => [
-                                                value ? formatTime(value) : 'DNF',
-                                                name === 'time' ? 'Time' : 'Ao5'
-                                            ]}
+                                            formatter={(value: any, name: any) => {
+                                                if (name === 'index') return [null, null]; // Hide index
+                                                return [
+                                                    value ? formatTime(value) : 'DNF',
+                                                    name === 'time' ? 'Time' : (name === 'Ao5' ? 'Ao5' : name)
+                                                ];
+                                            }}
                                             labelFormatter={(label) => `Solve #${label}`}
                                         />
                                         {/* Scatter for Individual Solves */}
                                         <Scatter
                                             name="time"
                                             dataKey="time"
-                                            fill="#3b82f6" // Blue
+                                            fill="#3b82f6"
                                             opacity={0.5}
                                             shape={(props: any) => <circle cx={props.cx} cy={props.cy} r={2} fill="#3b82f6" opacity={0.6} />}
                                             isAnimationActive={false}
                                         />
                                         {/* Line for Moving Average (Trend) */}
                                         <Line
+                                            name="Ao5"
                                             type="monotone"
                                             dataKey="ao5"
-                                            stroke="#ec4899" // Pink/Accent
+                                            stroke="#ec4899"
                                             strokeWidth={2}
                                             dot={false}
-                                            activeDot={{ r: 4 }}
+                                            activeDot={false} // Removed active dot on hover as requested ("remove second data point")
                                             connectNulls
                                             isAnimationActive={false}
                                         />
@@ -336,6 +337,16 @@ export default function Data() {
                                 </ResponsiveContainer>
                             </div>
                         </div>
+
+                        {/* 2. Activity Calendar */}
+                        <ActivityCalendar solves={filteredSolves} />
+
+                        {/* 3. Horizontal Box Plot */}
+                        {boxPlotStats && (
+                            <div className="w-full h-24 flex flex-col justify-center relative min-w-0">
+                                <BoxPlot stats={boxPlotStats} />
+                            </div>
+                        )}
                     </>
                 )}
 
@@ -433,11 +444,11 @@ export default function Data() {
                                     accessor: (s: Solve) => (
                                         <div
                                             onClick={(e) => handleCopyScramble(e, s.scramble)}
-                                            className="font-mono text-xs text-text-secondary cursor-copy hover:text-text-primary transition-colors flex items-center gap-2 group/scramble w-full"
+                                            className="font-mono text-xs text-text-secondary cursor-copy hover:text-text-primary transition-colors flex items-center justify-between gap-2 group/scramble w-full"
                                             title="Click to copy"
                                         >
-                                            <Copy className="w-3 h-3 opacity-0 group-hover/scramble:opacity-100 transition-opacity shrink-0" />
                                             <span className="truncate">{s.scramble}</span>
+                                            <Copy className="w-3 h-3 opacity-0 group-hover/scramble:opacity-100 transition-opacity shrink-0" />
                                         </div>
                                     ),
                                     className: 'hidden md:table-cell w-auto max-w-[12rem]'
@@ -590,17 +601,29 @@ function SidebarPane({ solve, onClose, allSolves, onAction, selectedSolveId }: {
 
 // -- Activity Calendar Component --
 function ActivityCalendar({ solves }: { solves: Solve[] }) {
-    // Generate last 100 days
-    const days = useMemo(() => {
+    // Generates dates dynamically based on solve history, up to 25 days
+    const range = useMemo(() => {
+        if (solves.length === 0) return [];
+        const today = startOfDay(new Date());
+
+        // Find earliest solve date
+        let earliest = today;
+        solves.forEach(s => {
+            const d = startOfDay(new Date(s.date));
+            if (d < earliest) earliest = d;
+        });
+
+        const daysDiff = Math.floor((today.getTime() - earliest.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        const countToShow = Math.min(25, Math.max(1, daysDiff)); // At least 1, max 25
+
         const d = [];
-        const today = new Date();
-        for (let i = 99; i >= 0; i--) {
+        for (let i = countToShow - 1; i >= 0; i--) {
             const date = new Date(today);
             date.setDate(date.getDate() - i);
-            d.push(format(startOfDay(date), 'yyyy-MM-dd'));
+            d.push(format(date, 'yyyy-MM-dd'));
         }
         return d;
-    }, []);
+    }, [solves]);
 
     // Create Map of Date -> Solve Count
     const counts = useMemo(() => {
@@ -613,33 +636,43 @@ function ActivityCalendar({ solves }: { solves: Solve[] }) {
     }, [solves]);
 
     const getColor = (count: number) => {
-        if (count === 0) return 'bg-zinc-500/20';
-        if (count < 4) return 'bg-emerald-900/60';
-        if (count < 8) return 'bg-emerald-700/80';
-        if (count < 12) return 'bg-emerald-600';
-        return 'bg-emerald-500'; // "Darkest" / Most Intense for 12+
+        if (count === 0) return 'bg-zinc-500/10 text-transparent'; // Muted for empty
+        if (count < 10) return 'bg-emerald-500/20 text-[#022c22] dark:text-emerald-400 border border-emerald-500/30';
+        if (count < 25) return 'bg-emerald-500/40 text-[#022c22] dark:text-emerald-200 border border-emerald-500/50';
+        if (count < 50) return 'bg-emerald-600 text-white border border-emerald-500';
+        return 'bg-emerald-700 text-white border border-emerald-600 font-bold shadow-sm shadow-emerald-900/20';
     };
 
     return (
-        <div className="w-full mb-6">
-            <h3 className="text-sm font-bold text-text-secondary uppercase mb-2 px-1">Recent Activity</h3>
-            <div className="flex flex-wrap gap-1">
-                {days.map(date => {
+        <div className="w-full mb-6 mt-8 flex justify-center">
+            <div className="flex flex-wrap gap-2 justify-center">
+                {range.map(date => {
                     const count = counts[date] || 0;
+                    const dateObj = new Date(date);
+                    const isToday = date === format(new Date(), 'yyyy-MM-dd');
+
                     return (
                         <div
                             key={date}
-                            className={`w-3 h-3 rounded-sm ${getColor(count)} transition-colors hover:ring-1 hover:ring-text-primary/50 relative group`}
+                            className={`
+                                w-8 h-8 rounded-md flex items-center justify-center text-xs transition-all relative group cursor-default select-none
+                                ${getColor(count)}
+                                ${isToday ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-secondary' : ''}
+                            `}
                             title={`${date}: ${count} solves`}
                         >
-                            {/* Simple CSS Tooltip */}
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-bg-tertiary text-text-primary text-[10px] px-2 py-1 rounded border border-border whitespace-nowrap z-10 pointer-events-none">
-                                <span className="font-mono">{date}</span>: <span className="font-bold">{count}</span>
+                            {count > 0 ? count : ''}
+
+                            {/* Tooltip */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block bg-bg-tertiary text-text-primary text-[10px] px-2 py-1 rounded border border-border whitespace-nowrap z-20 shadow-xl">
+                                <span className="font-semibold block text-center mb-0.5">{format(dateObj, 'MMM d')}</span>
+                                <div className="text-center opacity-80">{count} solves</div>
                             </div>
                         </div>
                     );
                 })}
             </div>
+            {range.length === 0 && <div className="text-text-secondary text-xs italic px-1">Start cubing to see activity!</div>}
         </div>
     );
 }
@@ -674,13 +707,13 @@ function BoxPlot({ stats }: { stats: { min: number, q1: number, median: number, 
 
             {/* Labels */}
             {/* Min/Max at ends */}
-            <div className="absolute -bottom-0 text-[10px] font-mono text-text-secondary " style={{ left: `${getPos(min)}%` }}>{formatTime(min)}</div>
-            <div className="absolute -bottom-0 text-[10px] font-mono text-text-secondary -translate-x-1/1" style={{ left: `${getPos(max)}%` }}>{formatTime(max)}</div>
+            <div className="absolute -bottom-0 text-xs font-mono text-text-secondary " style={{ left: `${getPos(min)}%` }}>{formatTime(min)}</div>
+            <div className="absolute -bottom-0 text-xs font-mono text-text-secondary -translate-x-1/1" style={{ left: `${getPos(max)}%` }}>{formatTime(max)}</div>
 
             {/* Q1/Median/Q3 in middle */}
-            <div className="absolute -top-0 text-[10px] font-mono text-text-secondary -translate-x-1/2 opacity-75" style={{ left: `${getPos(q1)}%` }}>{formatTime(q1)}</div>
-            <div className="absolute -bottom-0 text-[10px] font-mono font-bold text-text-primary -translate-x-1/2" style={{ left: `${getPos(median)}%` }}>{formatTime(median)}</div>
-            <div className="absolute -top-0 text-[10px] font-mono text-text-secondary -translate-x-1/2 opacity-75" style={{ left: `${getPos(q3)}%` }}>{formatTime(q3)}</div>
+            <div className="absolute -top-0 text-xs font-mono text-text-secondary -translate-x-1/2 opacity-75" style={{ left: `${getPos(q1)}%` }}>{formatTime(q1)}</div>
+            <div className="absolute -bottom-0 text-xs font-mono font-bold text-text-primary -translate-x-1/2" style={{ left: `${getPos(median)}%` }}>{formatTime(median)}</div>
+            <div className="absolute -top-0 text-xs font-mono text-text-secondary -translate-x-1/2 opacity-75" style={{ left: `${getPos(q3)}%` }}>{formatTime(q3)}</div>
         </div>
     );
 }

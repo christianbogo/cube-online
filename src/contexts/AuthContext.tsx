@@ -30,6 +30,25 @@ interface UserData {
     blockedUsers?: string[];
 }
 
+export interface SocialProfile {
+    id: string;
+    network: 'email' | 'discord' | 'twitter' | 'instagram' | 'youtube' | 'twitch' | 'other';
+    value: string;
+    privacy: 'hidden' | 'friends' | 'public';
+}
+
+interface UserData {
+    uid: string;
+    shortId?: string;
+    email: string | null;
+    username: string;
+    color: string;
+    emailVerified: boolean;
+    starredUsers?: string[];
+    blockedUsers?: string[];
+    socials?: SocialProfile[];
+}
+
 interface AuthContextType {
     user: UserData | null;
     loading: boolean;
@@ -67,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             shortId: data.shortId, // The friend code
                             email: firebaseUser.email,
                             emailVerified: firebaseUser.emailVerified,
-                            ...data as { username: string; color: string; starredUsers?: string[]; blockedUsers?: string[] }
+                            ...data as { username: string; color: string; starredUsers?: string[]; blockedUsers?: string[]; socials?: SocialProfile[] }
                         };
                         console.log("AuthContext: Setting User", userData);
                         setUser(userData);
