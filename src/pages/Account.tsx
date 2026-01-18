@@ -202,70 +202,96 @@ export default function Account() {
                 <main className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto p-4 md:p-8">
                     {!user ? (
                         // Not Signed In
-                        <div className="flex flex-col items-center justify-center h-full max-w-sm mx-auto animate-in fade-in zoom-in-95 duration-300">
-                            <div className="bg-bg-secondary border border-border rounded-xl p-8 w-full shadow-lg">
-                                <h2 className="text-2xl font-bold text-text-primary mb-2 text-center">
-                                    {isSignUpMode ? 'Create Account' : 'Welcome Back'}
-                                </h2>
-                                <p className="text-text-secondary text-sm mb-6 text-center">
-                                    {isSignUpMode ? 'Sign up to track your progress and compete.' : 'Sign in to access your stats and friends.'}
-                                </p>
-
-                                {Boolean(authError) && (
-                                    <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded text-red-500 text-sm flex items-center gap-2">
-                                        <TriangleAlert className="w-4 h-4" />
-                                        {authError}
-                                    </div>
-                                )}
-
-                                <div className="space-y-4">
-                                    <input
-                                        type="email"
-                                        placeholder="Email Address"
-                                        value={email}
-                                        onChange={e => setEmail(e.target.value)}
-                                        className="w-full bg-bg-primary border border-border rounded p-3 text-text-primary focus:border-accent outline-none transition-colors"
-                                    />
-                                    <input
-                                        type="password"
-                                        placeholder="Password"
-                                        value={password}
-                                        onChange={e => setPassword(e.target.value)}
-                                        className="w-full bg-bg-primary border border-border rounded p-3 text-text-primary focus:border-accent outline-none transition-colors"
-                                    />
-                                    {isSignUpMode && (
-                                        <input
-                                            type="password"
-                                            placeholder="Confirm Password"
-                                            value={confirmPassword}
-                                            onChange={e => setConfirmPassword(e.target.value)}
-                                            className="w-full bg-bg-primary border border-border rounded p-3 text-text-primary focus:border-accent outline-none transition-colors"
-                                        />
-                                    )}
-
-                                    <button
-                                        onClick={handleAuthAction}
-                                        disabled={authLoading}
-                                        className="w-full bg-accent text-white font-bold py-3 rounded hover:brightness-110 transition-all disabled:opacity-50 flex justify-center"
-                                    >
-                                        {authLoading ? (
-                                            <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                        ) : (
-                                            isSignUpMode ? 'Sign In' : 'Sign Up'
-                                        )}
-                                    </button>
-                                </div>
-
-                                <div className="mt-6 text-center">
-                                    <p className="text-sm text-text-secondary">
-                                        {isSignUpMode ? 'Already have an account?' : "Don't have an account?"}{' '}
-                                        <button
-                                            onClick={() => setIsSignUpMode(!isSignUpMode)}
-                                            className="text-accent hover:underline font-medium"
-                                        >
-                                            {isSignUpMode ? 'Sign In' : 'Sign Up'}
-                                        </button>
+                        <div className="flex flex-col items-center justify-center p-4 w-full h-full pb-32">
+                            <div className="mb-12 w-full animate-in fade-in duration-500 max-w-md mx-auto">
+                                <div className="flex flex-col items-center text-center gap-2 mb-8">
+                                    <img src="/logo.svg" alt="Logo" className="w-12 h-12 mb-2" />
+                                    <h1 className="text-3xl font-bold text-text-primary">
+                                        {isSignUpMode ? 'Create Account' : 'Welcome Back'}
+                                    </h1>
+                                    <p className="text-text-secondary text-sm">
+                                        {isSignUpMode ? 'Join the community and track your progress.' : 'Sign in to access your stats and settings.'}
                                     </p>
+                                </div>
+                                {/* Auth Form Container */}
+                                <div className="flex flex-col w-full">
+                                    <div className="flex gap-4 border-b border-border mb-6">
+                                        <button
+                                            className={`pb-2 text-sm font-medium px-4 flex-1 transition-colors relative ${!isSignUpMode ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}
+                                            onClick={() => { setIsSignUpMode(false); setAuthError(''); }}
+                                        >
+                                            Sign In
+                                            {!isSignUpMode && <div className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-accent" />}
+                                        </button>
+                                        <button
+                                            className={`pb-2 text-sm font-medium px-4 flex-1 transition-colors relative ${isSignUpMode ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}
+                                            onClick={() => { setIsSignUpMode(true); setAuthError(''); }}
+                                        >
+                                            Create Account
+                                            {isSignUpMode && <div className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-accent" />}
+                                        </button>
+                                    </div>
+
+                                    <form onSubmit={(e) => { e.preventDefault(); handleAuthAction(); }} className="flex flex-col gap-4 w-full">
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="text-xs font-bold text-text-secondary uppercase mb-1 block">Email</label>
+                                                <input
+                                                    type="email"
+                                                    name="email"
+                                                    autoComplete="email"
+                                                    value={email}
+                                                    onChange={e => setEmail(e.target.value)}
+                                                    className="w-full bg-bg-secondary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent transition-all"
+                                                    placeholder="hello@example.com"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-text-secondary uppercase mb-1 block">Password</label>
+                                                <input
+                                                    type="password"
+                                                    name="password"
+                                                    autoComplete={isSignUpMode ? "new-password" : "current-password"}
+                                                    value={password}
+                                                    onChange={e => setPassword(e.target.value)}
+                                                    className="w-full bg-bg-secondary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent transition-all"
+                                                    placeholder="••••••••"
+                                                />
+                                            </div>
+                                            {isSignUpMode && (
+                                                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                                                    <label className="text-xs font-bold text-text-secondary uppercase mb-1 block">Confirm Password</label>
+                                                    <input
+                                                        type="password"
+                                                        name="confirmPassword"
+                                                        autoComplete="new-password"
+                                                        value={confirmPassword}
+                                                        onChange={e => setConfirmPassword(e.target.value)}
+                                                        className="w-full bg-bg-secondary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent transition-all"
+                                                        placeholder="••••••••"
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {authError && (
+                                            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded text-sm text-red-500 flex items-center gap-2">
+                                                <TriangleAlert className="w-4 h-4 shrink-0" />
+                                                {authError}
+                                            </div>
+                                        )}
+
+                                        <button
+                                            type="submit"
+                                            disabled={authLoading}
+                                            className="mt-2 bg-text-primary text-bg-primary hover:opacity-90 px-6 py-2.5 rounded-md font-bold w-full transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-black/5"
+                                        >
+                                            {authLoading ? 'Please Wait...' : (isSignUpMode ? 'Create Account' : 'Sign In')}
+                                        </button>
+                                    </form>
+                                </div>
+                                <div className="text-xs text-text-secondary mt-6 text-center max-w-xs mx-auto opacity-70">
+                                    By continuing, you acknowledge that local solves are wiped upon signing in/out to ensure data consistency.
                                 </div>
                             </div>
                         </div>
