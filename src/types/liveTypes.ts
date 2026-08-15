@@ -13,7 +13,7 @@ export interface LiveUser {
     username: string;
     color: string;
     status: TimerState;
-    lastSolveTime?: number;
+    lastSolveTime?: number | null;
     recentSolves?: SimpleSolve[];
     timestamp: number;
 }

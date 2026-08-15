@@ -112,7 +112,7 @@ export default function Cube() {
                 username: user.username || 'CubingUser',
                 color: user.color || '#3b82f6',
                 status: timerState,
-                lastSolveTime: solves.length > 0 ? solves[0].time : undefined,
+                lastSolveTime: (solves.length > 0 && typeof solves[0]?.time === 'number') ? solves[0].time : null,
                 recentSolves: currentRecent,
                 timestamp: Date.now()
             };
@@ -121,17 +121,6 @@ export default function Cube() {
 
         updatePresence();
         onDisconnect(userPresenceRef).remove();
-
-        // Update when status changes
-        set(userPresenceRef, {
-            uid: user.uid,
-            username: user.username || 'CubingUser',
-            color: user.color || '#3b82f6',
-            status: timerState,
-            lastSolveTime: solves.length > 0 ? solves[0].time : undefined,
-            recentSolves: currentRecent,
-            timestamp: Date.now()
-        });
 
         return () => {
             remove(userPresenceRef);

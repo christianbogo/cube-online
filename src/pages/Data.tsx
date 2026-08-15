@@ -276,7 +276,7 @@ export default function Data() {
                         {/* 1. Scatter Plot with Trendline (Moved to Top) */}
                         <div className="w-full h-48 flex flex-col relative min-w-0">
                             <div className="mt-2 w-full h-[180px] min-w-0">
-                                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={180} initialDimension={{ width: 100, height: 180 }}>
                                     <ComposedChart data={displayedChartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
                                         <CartesianGrid stroke="#71717a" strokeOpacity={0.2} vertical={false} />
                                         <XAxis dataKey="index" hide />

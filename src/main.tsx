@@ -4,6 +4,12 @@ import './index.css'
 import App from './App.tsx'
 
 import { ThemeProvider } from './components/ThemeProvider'
+import { setSearchDebug } from 'cubing/search'
+
+setSearchDebug({
+  showWorkerInstantiationWarnings: false,
+  prioritizeEsbuildWorkaroundForWorkerInstantiation: true,
+})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

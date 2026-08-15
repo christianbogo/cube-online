@@ -14,6 +14,20 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    modulePreload: {
+      polyfill: false,
+    },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/cubing')) {
+            return 'cubing';
+          }
+        },
+      },
+    },
+  },
   worker: {
     format: 'es',
   },
