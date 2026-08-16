@@ -1,13 +1,20 @@
 <svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="35" cy="35" r="25" fill="#323956" />
-  <circle cx="100" cy="35" r="25" fill="#323956" />
-  <circle cx="165" cy="35" r="25" fill="#323956" />
+  <style>
+    .tile { fill: #475569; }
+    .center-tile { fill: #f05224; }
+    @media (prefers-color-scheme: dark) {
+      .tile { fill: #94a3b8; }
+    }
+  </style>
+  <rect x="15" y="15" width="48" height="48" rx="10" class="tile" />
+  <rect x="76" y="15" width="48" height="48" rx="10" class="tile" />
+  <rect x="137" y="15" width="48" height="48" rx="10" class="tile" />
   
-  <circle cx="35" cy="100" r="25" fill="#323956" />
-  <circle cx="100" cy="100" r="25" fill="#f05224" />
-  <circle cx="165" cy="100" r="25" fill="#323956" />
+  <rect x="15" y="76" width="48" height="48" rx="10" class="tile" />
+  <rect x="76" y="76" width="48" height="48" rx="10" class="center-tile" />
+  <rect x="137" y="76" width="48" height="48" rx="10" class="tile" />
   
-  <circle cx="35" cy="165" r="25" fill="#323956" />
-  <circle cx="100" cy="165" r="25" fill="#323956" />
-  <circle cx="165" cy="165" r="25" fill="#323956" />
+  <rect x="15" y="137" width="48" height="48" rx="10" class="tile" />
+  <rect x="76" y="137" width="48" height="48" rx="10" class="tile" />
+  <rect x="137" y="137" width="48" height="48" rx="10" class="tile" />
 </svg>

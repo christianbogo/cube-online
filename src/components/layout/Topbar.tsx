@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { Logo } from '../ui/Logo';
 
 export default function Topbar() {
     const { user } = useAuth();
@@ -10,7 +11,7 @@ export default function Topbar() {
             {/* Left Side: Logo/Brand */}
             <div className="flex items-center gap-3">
                 <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                    <img src="/logo.svg" alt="Logo" className="w-6 h-6" />
+                    <Logo className="w-6 h-6" />
                     <span className="font-semibold text-lg tracking-tight text-text-primary">Cube Online</span>
                 </Link>
             </div>

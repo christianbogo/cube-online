@@ -5,11 +5,14 @@ import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
 import DataSidebar from './DataSidebar';
 import { useSolves } from '../../contexts/SolvesContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function Layout() {
     const navigate = useNavigate();
     const location = useLocation();
     const { isPrivateMode, togglePrivateMode, syncStatus } = useSolves();
+    const { user } = useAuth();
+    const isSignInPage = location.pathname === '/account' && !user;
 
     // Persistence Helpers
     const getStoredWidth = (key: string, defaultWidth: number) => {
@@ -85,8 +88,13 @@ export default function Layout() {
     // Global Keyboard Shortcuts
     useEffect(() => {
         const handleGlobalKeyDown = (e: KeyboardEvent) => {
+            if (isSignInPage) return;
+
             const target = e.target as HTMLElement;
-            if (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) return;
+            if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName) || target.isContentEditable) {
+                if (e.key === 'Tab' || e.key === 'Shift') return;
+                if (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) return;
+            }
 
             if (e.key === 'Shift' && !e.repeat) {
                 toggleLeftSidebar();
@@ -118,7 +126,7 @@ export default function Layout() {
         };
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-    }, [navigate, toggleLeftSidebar, toggleRightSidebar, location.pathname, isPrivateMode, togglePrivateMode]);
+    }, [navigate, toggleLeftSidebar, toggleRightSidebar, location.pathname, isPrivateMode, togglePrivateMode, isSignInPage]);
 
     const startResizingLeft = useCallback(() => setIsResizingLeft(true), []);
     const startResizingRight = useCallback(() => setIsResizingRight(true), []);
@@ -195,12 +203,14 @@ export default function Layout() {
             <Topbar />
             <div ref={layoutRef} className="flex-1 flex overflow-hidden relative">
                 {/* Left Sidebar */}
-                <div style={{ width: leftWidth }} className="flex-shrink-0 relative flex flex-col border-r border-border backdrop-blur-sm will-change-[width] z-30">
-                    <LeftSidebar collapsed={isLeftCollapsed} onToggleCollapse={toggleLeftSidebar} />
-                    <div className="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-10 group flex justify-center" onMouseDown={startResizingLeft}>
-                        <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
+                {!isSignInPage && (
+                    <div style={{ width: leftWidth }} className="flex-shrink-0 relative flex flex-col border-r border-border backdrop-blur-sm will-change-[width] z-30">
+                        <LeftSidebar collapsed={isLeftCollapsed} onToggleCollapse={toggleLeftSidebar} />
+                        <div className="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-10 group flex justify-center" onMouseDown={startResizingLeft}>
+                            <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* Data Sidebar */}
                 {location.pathname.startsWith('/data') && (

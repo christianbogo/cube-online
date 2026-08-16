@@ -1,14 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-    Check, X, LogOut, Info, Trash2, Download, TriangleAlert
+    Check, X, LogOut, Info, Trash2, Download, TriangleAlert, Loader2
 } from 'lucide-react';
 
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, getDocs, collection, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Tabs, FriendSidebar, SocialsTab, ProfileStatsTab, CubingFriendsTab } from '../components';
+import { Tabs, FriendSidebar, SocialsTab, ProfileStatsTab, CubingFriendsTab, Logo } from '../components';
 
 export default function Account() {
     const { settings, updateSettings } = useSettings();
@@ -22,6 +22,7 @@ export default function Account() {
     const [tempName, setTempName] = useState('');
     const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
     const colorPickerRef = useRef<HTMLDivElement>(null);
+    const [downloadLoading, setDownloadLoading] = useState(false);
 
     // Auth State
     const [email, setEmail] = useState('');
@@ -62,7 +63,7 @@ export default function Account() {
     const saveProfileUpdate = async (newUsername?: string, newColor?: string) => {
         if (!user) return;
         try {
-            const updates: any = {};
+            const updates: Record<string, unknown> = {};
             if (newUsername !== undefined) updates.username = newUsername;
             if (newColor !== undefined) updates.color = newColor;
 
@@ -119,6 +120,55 @@ export default function Account() {
         }
     };
 
+    const handleDownloadData = async () => {
+        if (!user) return;
+        setDownloadLoading(true);
+        try {
+            // 1. Fetch User Profile Document
+            const userDocSnap = await getDoc(doc(db, 'users', user.uid));
+            const userData = userDocSnap.exists() ? userDocSnap.data() : { uid: user.uid, email: user.email, username: user.username, color: user.color };
+
+            // 2. Fetch User Solves from Firestore
+            const solvesQuery = query(collection(db, 'solves'), where('userId', '==', user.uid));
+            const solvesSnap = await getDocs(solvesQuery);
+            const solvesList: any[] = [];
+            solvesSnap.forEach(d => solvesList.push({ id: d.id, ...d.data() }));
+
+            // 3. Fetch User Sessions from Firestore
+            const sessionsQuery = query(collection(db, 'sessions'), where('userId', '==', user.uid));
+            const sessionsSnap = await getDocs(sessionsQuery);
+            const sessionsList: any[] = [];
+            sessionsSnap.forEach(d => sessionsList.push({ id: d.id, ...d.data() }));
+
+            // 4. Construct Data Backup Package
+            const exportData = {
+                version: "1.0",
+                exportedAt: new Date().toISOString(),
+                user: userData,
+                solvesCount: solvesList.length,
+                solves: solvesList,
+                sessionsCount: sessionsList.length,
+                sessions: sessionsList
+            };
+
+            // 5. Trigger Browser Download
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            const dateStr = new Date().toISOString().slice(0, 10);
+            const sanitizedName = (username || 'user').replace(/[^a-z0-9_-]/gi, '_');
+            downloadAnchor.setAttribute("download", `cube-online-data-${sanitizedName}-${dateStr}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        } catch (e) {
+            console.error("Error downloading data:", e);
+            alert("Failed to compile user data. Please try again.");
+        } finally {
+            setDownloadLoading(false);
+        }
+    };
+
     const colors = [
         '#ef4444', '#f97316', '#eab308', '#22c55e',
         '#06b6d4', '#3b82f6', '#a855f7', '#ec4899',
@@ -172,12 +222,23 @@ export default function Account() {
             </div>
 
             <button
-                className="flex items-center gap-2 px-4 py-2 bg-bg-secondary border border-border rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors text-sm w-full md:w-auto justify-center"
+                onClick={handleDownloadData}
+                disabled={downloadLoading}
+                className="flex items-center gap-2 px-4 py-2 bg-bg-secondary border border-border rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors text-sm w-full md:w-auto justify-center cursor-pointer disabled:opacity-50"
             >
-                <Download className="w-4 h-4" /> Download My Data
+                {downloadLoading ? (
+                    <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Compiling Data...</span>
+                    </>
+                ) : (
+                    <>
+                        <Download className="w-4 h-4" />
+                        <span>Download My Data</span>
+                    </>
+                )}
             </button>
             <button
-                // onClick={deleteUserAccount} // Needs proper wiring
                 className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/20 rounded text-red-500 hover:bg-red-500/20 transition-colors text-sm w-full md:w-auto justify-center"
             >
                 <Trash2 className="w-4 h-4" /> Delete Account
@@ -199,7 +260,7 @@ export default function Account() {
                         <div className="flex flex-col items-center justify-center p-4 w-full h-full pb-32">
                             <div className="mb-12 w-full animate-in fade-in duration-500 max-w-md mx-auto">
                                 <div className="flex flex-col items-center text-center gap-2 mb-8">
-                                    <img src="/logo.svg" alt="Logo" className="w-12 h-12 mb-2" />
+                                    <Logo className="w-12 h-12 mb-2" />
                                     <h1 className="text-3xl font-bold text-text-primary">
                                         {isSignUpMode ? 'Create Account' : 'Welcome Back'}
                                     </h1>
@@ -211,14 +272,16 @@ export default function Account() {
                                 <div className="flex flex-col w-full">
                                     <div className="flex gap-4 border-b border-border mb-6">
                                         <button
-                                            className={`pb-2 text-sm font-medium px-4 flex-1 transition-colors relative ${!isSignUpMode ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}
+                                            type="button"
+                                            className={`pb-2 text-sm font-medium px-4 flex-1 transition-colors relative cursor-pointer ${!isSignUpMode ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}
                                             onClick={() => { setIsSignUpMode(false); setAuthError(''); }}
                                         >
                                             Sign In
                                             {!isSignUpMode && <div className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-accent" />}
                                         </button>
                                         <button
-                                            className={`pb-2 text-sm font-medium px-4 flex-1 transition-colors relative ${isSignUpMode ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}
+                                            type="button"
+                                            className={`pb-2 text-sm font-medium px-4 flex-1 transition-colors relative cursor-pointer ${isSignUpMode ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}
                                             onClick={() => { setIsSignUpMode(true); setAuthError(''); }}
                                         >
                                             Create Account
@@ -229,8 +292,9 @@ export default function Account() {
                                     <form onSubmit={(e) => { e.preventDefault(); handleAuthAction(); }} className="flex flex-col gap-4 w-full">
                                         <div className="space-y-4">
                                             <div>
-                                                <label className="text-xs font-bold text-text-secondary uppercase mb-1 block">Email</label>
+                                                <label htmlFor="auth-email" className="text-xs font-bold text-text-secondary uppercase mb-1 block">Email</label>
                                                 <input
+                                                    id="auth-email"
                                                     type="email"
                                                     name="email"
                                                     autoComplete="email"
@@ -238,11 +302,13 @@ export default function Account() {
                                                     onChange={e => setEmail(e.target.value)}
                                                     className="w-full bg-bg-secondary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent transition-all"
                                                     placeholder="hello@example.com"
+                                                    required
                                                 />
                                             </div>
                                             <div>
-                                                <label className="text-xs font-bold text-text-secondary uppercase mb-1 block">Password</label>
+                                                <label htmlFor="auth-password" className="text-xs font-bold text-text-secondary uppercase mb-1 block">Password</label>
                                                 <input
+                                                    id="auth-password"
                                                     type="password"
                                                     name="password"
                                                     autoComplete={isSignUpMode ? "new-password" : "current-password"}
@@ -250,12 +316,14 @@ export default function Account() {
                                                     onChange={e => setPassword(e.target.value)}
                                                     className="w-full bg-bg-secondary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent transition-all"
                                                     placeholder="••••••••"
+                                                    required
                                                 />
                                             </div>
                                             {isSignUpMode && (
-                                                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                                                    <label className="text-xs font-bold text-text-secondary uppercase mb-1 block">Confirm Password</label>
+                                                <div className="animate-in fade-in slide-from-top-2 duration-300">
+                                                    <label htmlFor="auth-confirm-password" className="text-xs font-bold text-text-secondary uppercase mb-1 block">Confirm Password</label>
                                                     <input
+                                                        id="auth-confirm-password"
                                                         type="password"
                                                         name="confirmPassword"
                                                         autoComplete="new-password"
@@ -263,6 +331,7 @@ export default function Account() {
                                                         onChange={e => setConfirmPassword(e.target.value)}
                                                         className="w-full bg-bg-secondary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent transition-all"
                                                         placeholder="••••••••"
+                                                        required
                                                     />
                                                 </div>
                                             )}
@@ -278,7 +347,7 @@ export default function Account() {
                                         <button
                                             type="submit"
                                             disabled={authLoading}
-                                            className="mt-2 bg-text-primary text-bg-primary hover:opacity-90 px-6 py-2.5 rounded-md font-bold w-full transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-black/5"
+                                            className="mt-2 bg-text-primary text-bg-primary hover:opacity-90 px-6 py-2.5 rounded-md font-bold w-full transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-black/5 cursor-pointer"
                                         >
                                             {authLoading ? 'Please Wait...' : (isSignUpMode ? 'Create Account' : 'Sign In')}
                                         </button>
@@ -293,29 +362,28 @@ export default function Account() {
                         // Signed In
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
                             {/* Profile Header */}
-                            <div className="flex flex-col sm:flex-row items-center gap-6 p-6 relative group">
+                            <div className="flex flex-col sm:flex-row items-center gap-6 p-6 relative z-30 group">
                                 {/* Avatar */}
-                                <div
-                                    className="relative shrink-0 cursor-pointer transition-transform hover:scale-105 active:scale-95"
-                                    onClick={() => setIsColorPickerOpen(!isColorPickerOpen)}
-                                >
+                                <div className="relative shrink-0">
                                     <div
-                                        className="w-24 h-24 rounded-2xl shadow-lg"
+                                        className="w-24 h-24 rounded-2xl shadow-lg cursor-pointer transition-transform hover:scale-105 active:scale-95"
                                         style={{ backgroundColor: selectedColor }}
+                                        onClick={() => setIsColorPickerOpen(!isColorPickerOpen)}
+                                        title="Click to change profile color"
                                     />
 
                                     {/* Color Picker Popover */}
                                     {isColorPickerOpen && (
                                         <div
                                             ref={colorPickerRef}
-                                            className="absolute top-full left-0 mt-2 bg-bg-secondary border border-border shadow-xl rounded-lg p-3 z-50 grid grid-cols-5 gap-2 animate-in fade-in zoom-in-95 w-[180px]"
+                                            className="absolute top-full left-0 mt-3 bg-bg-secondary border border-border shadow-2xl rounded-xl p-3 z-50 grid grid-cols-5 gap-2 animate-in fade-in zoom-in-95 w-[190px]"
                                             onClick={(e) => e.stopPropagation()}
                                         >
                                             {colors.map(c => (
                                                 <button
                                                     key={c}
                                                     onClick={() => handleColorSelect(c)}
-                                                    className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${selectedColor === c ? 'border-text-primary' : 'border-transparent'}`}
+                                                    className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 cursor-pointer ${selectedColor === c ? 'border-text-primary scale-110 shadow-sm' : 'border-transparent'}`}
                                                     style={{ backgroundColor: c }}
                                                 />
                                             ))}
@@ -335,10 +403,10 @@ export default function Account() {
                                                 className="bg-bg-primary border border-border text-text-primary text-xl font-bold px-3 py-1 rounded focus:border-accent outline-none w-48"
                                                 onKeyDown={e => e.key === 'Enter' && handleNameSubmit()}
                                             />
-                                            <button onClick={handleNameSubmit} className="p-2 bg-accent/10 text-accent rounded hover:bg-accent/20">
+                                            <button onClick={handleNameSubmit} className="p-2 bg-accent/10 text-accent rounded hover:bg-accent/20 cursor-pointer">
                                                 <Check className="w-5 h-5" />
                                             </button>
-                                            <button onClick={() => setIsEditingName(false)} className="p-2 text-text-secondary hover:bg-bg-tertiary rounded">
+                                            <button onClick={() => setIsEditingName(false)} className="p-2 text-text-secondary hover:bg-bg-tertiary rounded cursor-pointer">
                                                 <X className="w-5 h-5" />
                                             </button>
                                         </div>
@@ -347,7 +415,7 @@ export default function Account() {
                                             <h2 className="text-2xl font-bold text-text-primary truncate">{username}</h2>
                                             <button
                                                 onClick={() => { setTempName(username); setIsEditingName(true); }}
-                                                className="opacity-0 group-hover/name:opacity-100 p-1 text-text-secondary hover:text-accent transition-all"
+                                                className="opacity-0 group-hover/name:opacity-100 p-1 text-text-secondary hover:text-accent transition-all cursor-pointer"
                                                 title="Edit Username"
                                             >
                                                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
@@ -371,7 +439,7 @@ export default function Account() {
                                         <div className="mt-2 text-xs text-yellow-500 bg-yellow-500/10 inline-flex items-center px-2 py-1 rounded gap-2">
                                             <TriangleAlert className="w-3 h-3" />
                                             Email not verified
-                                            <button onClick={resendVerificationEmail} className="underline hover:text-yellow-400">Resend</button>
+                                            <button onClick={resendVerificationEmail} className="underline hover:text-yellow-400 cursor-pointer">Resend</button>
                                         </div>
                                     )}
                                 </div>
@@ -379,7 +447,7 @@ export default function Account() {
                                 {/* Logout */}
                                 <button
                                     onClick={logout}
-                                    className="p-2 text-text-secondary hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors flex flex-col items-center gap-1 sm:self-center"
+                                    className="p-2 text-text-secondary hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors flex flex-col items-center gap-1 sm:self-center cursor-pointer"
                                     title="Sign Out"
                                 >
                                     <LogOut className="w-5 h-5" />
@@ -388,21 +456,23 @@ export default function Account() {
                             </div>
 
                             {/* Tabs & Content */}
-                            <Tabs
-                                tabs={[
-                                    { label: "Profile Statistics", id: "stats", content: <ProfileStatsTab /> },
-                                    { label: "Social Media Links", id: "socials", content: <SocialsTab /> },
-                                    { label: "Cubing Friends", id: "friends", content: <CubingFriendsTab /> },
-                                    { label: "Timer Settings", id: "timer", content: <TimerSettingsTab /> },
-                                    { label: "Danger Zone", id: "danger", content: <DangerZoneTab /> },
-                                ]}
-                            />
+                            <div className="relative z-10">
+                                <Tabs
+                                    tabs={[
+                                        { label: "Profile Statistics", id: "stats", content: <ProfileStatsTab /> },
+                                        { label: "Social Media Links", id: "socials", content: <SocialsTab /> },
+                                        { label: "Cubing Friends", id: "friends", content: <CubingFriendsTab /> },
+                                        { label: "Timer Settings", id: "timer", content: <TimerSettingsTab /> },
+                                        { label: "Danger Zone", id: "danger", content: <DangerZoneTab /> },
+                                    ]}
+                                />
+                            </div>
                         </div>
                     )}
                 </main>
             </div>
 
-            <FriendSidebar />
+            {user && <FriendSidebar />}
         </div>
     );
 }

@@ -1,9 +1,45 @@
 import { useState } from 'react';
-import { Mail, Trash2, Plus, ChevronUp, ChevronDown } from 'lucide-react';
+import { Trash2, Plus, ChevronUp, ChevronDown } from 'lucide-react';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../contexts/AuthContext';
-import type { SocialProfile } from '../../types';
+import type { SocialProfile, SocialNetwork } from '../../types';
+
+const NETWORK_LABELS: Record<string, string> = {
+    'email': 'Email',
+    'discord': 'Discord',
+    'x-twitter': 'X (Twitter)',
+    'twitter': 'Twitter',
+    'instagram': 'Instagram',
+    'youtube': 'YouTube',
+    'twitch': 'Twitch',
+    'github': 'GitHub',
+    'bluesky': 'Bluesky',
+    'threads': 'Threads',
+    'reddit': 'Reddit',
+    'tiktok': 'TikTok',
+    'spotify': 'Spotify',
+    'snapchat': 'Snapchat',
+    'facebook': 'Facebook',
+    'linkedin': 'LinkedIn',
+    'telegram': 'Telegram',
+    'signal': 'Signal',
+    'whatsapp': 'WhatsApp',
+    'pinterest': 'Pinterest',
+    'dribbble': 'Dribbble',
+    'figma': 'Figma',
+    'messenger': 'Messenger',
+    'tumblr': 'Tumblr',
+    'vk': 'VK',
+    'other': 'Other',
+};
+
+const AVAILABLE_NETWORKS: string[] = [
+    'discord', 'x-twitter', 'instagram', 'youtube', 'twitch', 'github',
+    'bluesky', 'threads', 'reddit', 'tiktok', 'spotify', 'snapchat',
+    'facebook', 'linkedin', 'telegram', 'signal', 'whatsapp', 'pinterest',
+    'dribbble', 'figma', 'messenger', 'tumblr', 'vk', 'other'
+];
 
 export default function SocialsTab() {
     const { user } = useAuth();
@@ -11,18 +47,11 @@ export default function SocialsTab() {
     const [newNetwork, setNewNetwork] = useState('discord');
     const [newValue, setNewValue] = useState('');
 
-    const availableNetworks = [
-        'apple', 'bluesky', 'discord', 'dribbble', 'facebook', 'figma', 'github',
-        'instagram', 'linkedin', 'messenger', 'pinterest', 'reddit', 'signal',
-        'snapchat', 'spotify', 'telegram', 'threads', 'tiktok', 'tumblr',
-        'twitch', 'vk', 'whatsapp', 'x-twitter', 'youtube'
-    ];
-
     // Ensure we always have the email entry
     const socials: SocialProfile[] = user?.socials || [];
     const emailEntry = socials.find(s => s.network === 'email') || {
         id: 'email-default',
-        network: 'email',
+        network: 'email' as SocialNetwork,
         value: user?.email || '',
         privacy: 'hidden' as const
     };
@@ -30,7 +59,7 @@ export default function SocialsTab() {
     // Filter out email from the main list, as it's pinned
     const otherSocials = socials.filter(s => s.network !== 'email');
 
-    // Sync email value if it changes in auth (local logic for display)
+    // Sync email value if it changes in auth
     if (emailEntry.value !== user?.email) emailEntry.value = user?.email || '';
 
     const updateSocials = async (newSocialsList: SocialProfile[]) => {
@@ -46,12 +75,12 @@ export default function SocialsTab() {
         if (!newValue.trim()) return;
         const newEntry: SocialProfile = {
             id: crypto.randomUUID(),
-            network: newNetwork as any, // Cast to known network type or string
+            network: newNetwork as SocialNetwork,
             value: newValue.trim(),
             privacy: 'hidden'
         };
 
-        let fullList = [...socials];
+        const fullList = [...socials];
         if (!fullList.find(s => s.network === 'email')) {
             fullList.push(emailEntry as SocialProfile);
         }
@@ -61,7 +90,7 @@ export default function SocialsTab() {
         setNewValue('');
     };
 
-    const handlDeleteSocial = (id: string) => {
+    const handleDeleteSocial = (id: string) => {
         const fullList = socials.filter(s => s.id !== id);
         updateSocials(fullList);
     };
@@ -72,7 +101,6 @@ export default function SocialsTab() {
         const nextPrivacy = states[(currentIndex + 1) % states.length];
 
         let fullList = [...socials];
-        // If it's the default email entry and it's not in the list yet, add it
         if (id === 'email-default' && !fullList.find(s => s.network === 'email')) {
             fullList.push({ ...emailEntry, privacy: nextPrivacy as 'hidden' | 'friends' | 'public' } as SocialProfile);
         } else {
@@ -82,7 +110,6 @@ export default function SocialsTab() {
     };
 
     const handleMove = (index: number, direction: 'up' | 'down') => {
-        // operate on otherSocials copy
         const newSocials = [...otherSocials];
         if (direction === 'up' && index > 0) {
             [newSocials[index], newSocials[index - 1]] = [newSocials[index - 1], newSocials[index]];
@@ -90,16 +117,10 @@ export default function SocialsTab() {
             [newSocials[index], newSocials[index + 1]] = [newSocials[index + 1], newSocials[index]];
         }
 
-        // Reconstruct full list with email always first
         let fullList: SocialProfile[] = [];
-
         if (socials.find(s => s.network === 'email')) {
-            // If email is in the DB list, put it first
             fullList = [socials.find(s => s.network === 'email')!, ...newSocials];
         } else {
-            // If email isn't in DB list, it's virtual, so just save `newSocials`.
-            // logic matches original, assuming user wants implicitly saved email only if modified?
-            // If email is not in DB but we are reordering others, we should preserve otherSocials order.
             fullList = [...newSocials];
             const dbEmail = socials.find(s => s.network === 'email');
             if (dbEmail) {
@@ -114,41 +135,12 @@ export default function SocialsTab() {
         switch (privacy) {
             case 'public': return 'text-green-500 bg-green-500/10 hover:bg-green-500/20';
             case 'friends': return 'text-yellow-500 bg-yellow-500/10 hover:bg-yellow-500/20';
-            default: return 'text-text-secondary bg-text-secondary/10 hover:bg-text-secondary/20'; // hidden
+            default: return 'text-text-secondary bg-text-secondary/10 hover:bg-text-secondary/20';
         }
     };
 
-    const NetworkIcon = ({ network }: { network: string }) => {
-        if (network === 'email') {
-            return (
-                <div className="w-8 h-8 flex items-center justify-center">
-                    <span className="text-text-primary"><Mail className="w-6 h-6" /></span>
-                </div>
-            );
-        }
-
-        if (availableNetworks.includes(network)) {
-            return (
-                <div className="w-8 h-8 relative flex items-center justify-center">
-                    <img
-                        src={`/socials/${network}.svg`}
-                        alt={network}
-                        className="w-full h-full object-contain dark:hidden"
-                    />
-                    <img
-                        src={`/socials/${network}-dark.svg`}
-                        alt={network}
-                        className="w-full h-full object-contain hidden dark:block"
-                    />
-                </div>
-            );
-        }
-
-        return (
-            <div className="w-8 h-8 bg-bg-secondary rounded-full flex items-center justify-center text-xs font-bold uppercase text-text-secondary border border-border">
-                {network.substring(0, 2)}
-            </div>
-        );
+    const getNetworkLabel = (network: string) => {
+        return NETWORK_LABELS[network] || network.charAt(0).toUpperCase() + network.slice(1);
     };
 
     return (
@@ -163,30 +155,28 @@ export default function SocialsTab() {
                 </button>
             </div>
 
-            <div className="flex flex-col gap-4">
-                {/* Email (Virtual or Real) */}
-                <div className="flex items-center justify-between py-2 border-b border-border/20 last:border-0 group">
-                    <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-3">
+                {/* Email Entry */}
+                <div className="flex items-center justify-between py-2.5 px-3 rounded-lg border border-border/40 bg-bg-secondary/40">
+                    <div className="flex items-center gap-3 min-w-0">
                         <button
                             onClick={() => cyclePrivacy(emailEntry.id, emailEntry.privacy)}
-                            className={`px-2 py-1 text-xs font-bold rounded capitalize w-16 text-center transition-colors ${getPrivacyStyles(emailEntry.privacy)}`}
+                            className={`px-2 py-1 text-xs font-bold rounded capitalize w-16 text-center transition-colors shrink-0 ${getPrivacyStyles(emailEntry.privacy)}`}
                             title="Click to toggle privacy"
                         >
                             {emailEntry.privacy}
                         </button>
-                        <div className="w-8 flex justify-center">
-                            <Mail className="w-6 h-6 text-text-primary" />
-                        </div>
-                        <div className="flex flex-col">
-                            <span className="text-sm font-medium text-text-primary">Email</span>
-                            <span className="text-xs text-text-secondary font-mono">{user?.email}</span>
-                        </div>
+                        <span className="text-xs font-bold text-accent bg-accent/10 px-2 py-0.5 rounded shrink-0">
+                            Email
+                        </span>
+                        <span className="text-xs text-text-secondary font-mono truncate">{user?.email}</span>
                     </div>
                 </div>
 
+                {/* Other Socials */}
                 {otherSocials.map((social: SocialProfile) => (
-                    <div key={social.id} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0 group">
-                        <div className="flex items-center gap-4 overflow-hidden">
+                    <div key={social.id} className="flex items-center justify-between py-2.5 px-3 rounded-lg border border-border/40 bg-bg-secondary/40">
+                        <div className="flex items-center gap-3 min-w-0 overflow-hidden">
                             <button
                                 onClick={() => cyclePrivacy(social.id, social.privacy)}
                                 className={`px-2 py-1 text-xs font-bold rounded capitalize w-16 text-center shrink-0 transition-colors ${getPrivacyStyles(social.privacy)}`}
@@ -194,17 +184,14 @@ export default function SocialsTab() {
                             >
                                 {social.privacy}
                             </button>
-                            <div className="w-8 shrink-0 flex justify-center">
-                                <NetworkIcon network={social.network} />
-                            </div>
-                            <div className="flex flex-col overflow-hidden">
-                                <span className="text-sm font-medium text-text-primary capitalize">{(social.network as string) === 'x-twitter' ? 'X (Twitter)' : social.network}</span>
-                                <span className="text-xs text-text-secondary truncate font-mono">{social.value}</span>
-                            </div>
+                            <span className="text-xs font-semibold text-text-primary bg-bg-hover px-2 py-0.5 rounded shrink-0 border border-border/50">
+                                {getNetworkLabel(social.network)}
+                            </span>
+                            <span className="text-xs text-text-secondary truncate font-mono">{social.value}</span>
                         </div>
 
                         {isEditingSocials && (
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 shrink-0 ml-2">
                                 <button
                                     onClick={() => handleMove(otherSocials.indexOf(social), 'up')}
                                     disabled={otherSocials.indexOf(social) === 0}
@@ -222,7 +209,7 @@ export default function SocialsTab() {
                                     <ChevronDown className="w-4 h-4" />
                                 </button>
                                 <button
-                                    onClick={() => handlDeleteSocial(social.id)}
+                                    onClick={() => handleDeleteSocial(social.id)}
                                     className="p-1.5 text-red-500 hover:bg-red-500/10 rounded transition-colors ml-1"
                                     title="Remove"
                                 >
@@ -240,25 +227,25 @@ export default function SocialsTab() {
                 )}
             </div>
 
+            {/* Add New Profile */}
             {isEditingSocials && (
-                <div className="mt-4 p-4 dotted-bg rounded-lg border border-dashed border-border animate-in slide-in-from-top-2">
+                <div className="mt-4 p-4 bg-bg-secondary/20 rounded-lg border border-dashed border-border animate-in slide-in-from-top-2">
                     <h5 className="text-xs font-bold text-text-secondary uppercase mb-3">Add New Profile</h5>
                     <div className="flex flex-col sm:flex-row gap-2">
                         <select
                             value={newNetwork}
                             onChange={(e) => setNewNetwork(e.target.value)}
-                            className="bg-bg-secondary border border-border text-sm text-text-primary rounded px-3 py-2 w-full sm:w-auto focus:outline-none focus:border-accent capitalize"
+                            className="bg-bg-secondary border border-border text-sm text-text-primary rounded px-3 py-2 w-full sm:w-auto focus:outline-none focus:border-accent"
                         >
-                            {availableNetworks.map(net => (
+                            {AVAILABLE_NETWORKS.map(net => (
                                 <option key={net} value={net}>
-                                    {net === 'x-twitter' ? 'X (Twitter)' : net}
+                                    {getNetworkLabel(net)}
                                 </option>
                             ))}
-                            <option value="other">Other</option>
                         </select>
                         <input
                             type="text"
-                            placeholder="Username"
+                            placeholder="Username or handle"
                             value={newValue}
                             onChange={(e) => setNewValue(e.target.value)}
                             className="bg-bg-secondary border border-border text-sm text-text-primary rounded px-3 py-2 flex-1 focus:outline-none focus:border-accent"
@@ -267,9 +254,10 @@ export default function SocialsTab() {
                         <button
                             onClick={handleAddSocial}
                             disabled={!newValue.trim()}
-                            className="bg-accent text-white px-4 py-2 rounded text-sm font-bold hover:brightness-110 disabled:opacity-50 transition-all"
+                            className="bg-accent text-white px-4 py-2 rounded text-sm font-bold hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-1.5"
                         >
                             <Plus className="w-4 h-4" />
+                            <span>Add</span>
                         </button>
                     </div>
                 </div>

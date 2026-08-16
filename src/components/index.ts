@@ -15,6 +15,8 @@ export { default as Toast } from './ui/Toast';
 export type { ToastProps, ToastAction } from './ui/Toast';
 export { UserCard } from './ui/UserCard';
 export type { UserCardProps } from './ui/UserCard';
+export { Logo } from './ui/Logo';
+export type { LogoProps } from './ui/Logo';
 export { ThemeProvider, useTheme } from './ui/ThemeProvider';
 export type { Theme, ThemeProviderProps, ThemeProviderState } from './ui/ThemeProvider';
 
