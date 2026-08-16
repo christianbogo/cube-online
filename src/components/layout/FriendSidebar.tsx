@@ -1,27 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Users, GripVertical, ChevronRight, ChevronDown } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 
 export interface FriendItem {
     id: string;
+    uid: string;
     name: string;
     color: string;
     status?: string;
     lastSeen?: string;
+    lastSeenAt?: string;
+    isOnline: boolean;
 }
 
-const DEFAULT_ONLINE: FriendItem[] = [
-    { id: 'f1', name: 'speedcuber99', color: '#f43f5e', status: 'Solving 3x3' },
-    { id: 'f2', name: 'feliks_fan', color: '#8b5cf6', status: 'Idle' },
-    { id: 'f3', name: 'cube_wizard', color: '#10b981', status: 'In Menu' },
-];
-
-const DEFAULT_OFFLINE: FriendItem[] = [
-    { id: 'f4', name: 'rubiks_master', color: '#f59e0b', lastSeen: '2h ago' },
-    { id: 'f5', name: 'blindsolver', color: '#0ea5e9', lastSeen: '5h ago' },
-    { id: 'f6', name: 'one_hand', color: '#ec4899', lastSeen: '1d ago' },
-];
-
 export function FriendSidebar() {
+    const { user } = useAuth();
+
     // State persistence
     const [width, setWidth] = useState(() => {
         const stored = localStorage.getItem('account_sidebar_width');
@@ -38,30 +34,137 @@ export function FriendSidebar() {
     useEffect(() => localStorage.setItem('account_sidebar_width', width.toString()), [width]);
     useEffect(() => localStorage.setItem('account_sidebar_collapsed', isCollapsed.toString()), [isCollapsed]);
 
-    // Friend list ordering state
-    const [onlineFriends, setOnlineFriends] = useState<FriendItem[]>(() => {
-        const stored = localStorage.getItem('cutter_friends_order_online');
-        if (stored) {
-            try { return JSON.parse(stored); } catch { /* ignore */ }
-        }
-        return DEFAULT_ONLINE;
-    });
+    // Tab key listener to open/close right bar when signed in
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (!user) return;
+            const target = e.target as HTMLElement;
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable) return;
 
-    const [offlineFriends, setOfflineFriends] = useState<FriendItem[]>(() => {
-        const stored = localStorage.getItem('cutter_friends_order_offline');
-        if (stored) {
-            try { return JSON.parse(stored); } catch { /* ignore */ }
-        }
-        return DEFAULT_OFFLINE;
-    });
+            if (e.key === 'Tab' && !e.shiftKey && !e.repeat) {
+                e.preventDefault();
+                setIsCollapsed(prev => !prev);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [user]);
+
+    // Live Friends State from Firestore
+    const [rawFriendsData, setRawFriendsData] = useState<Record<string, any>>({});
 
     useEffect(() => {
-        localStorage.setItem('cutter_friends_order_online', JSON.stringify(onlineFriends));
-    }, [onlineFriends]);
+        if (!user || !user.starredUsers || user.starredUsers.length === 0) {
+            setRawFriendsData({});
+            return;
+        }
+
+        const starredIds = user.starredUsers;
+        const unsubscribers: (() => void)[] = [];
+
+        starredIds.forEach((friendUid) => {
+            const unsub = onSnapshot(doc(db, 'users', friendUid), (docSnap) => {
+                if (docSnap.exists()) {
+                    setRawFriendsData(prev => ({
+                        ...prev,
+                        [friendUid]: { uid: friendUid, ...docSnap.data() }
+                    }));
+                }
+            }, () => {
+                // Ignore permission/missing doc errors
+            });
+            unsubscribers.push(unsub);
+        });
+
+        return () => {
+            unsubscribers.forEach(unsub => unsub());
+        };
+    }, [user?.starredUsers]);
+
+    // Format relative time helper
+    const getRelativeLastSeen = (isoString?: string) => {
+        if (!isoString) return 'Offline';
+        const diffMs = Date.now() - new Date(isoString).getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        const diffHours = Math.floor(diffMins / 60);
+        if (diffHours < 24) return `${diffHours}h ago`;
+        const diffDays = Math.floor(diffHours / 24);
+        return `${diffDays}d ago`;
+    };
+
+    // Calculate Online / Offline lists
+    const { liveOnline, liveOffline } = useMemo(() => {
+        const online: FriendItem[] = [];
+        const offline: FriendItem[] = [];
+        const ONLINE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+        Object.values(rawFriendsData).forEach((f: any) => {
+            const lastSeenTime = f.lastSeenAt ? new Date(f.lastSeenAt).getTime() : 0;
+            const isOnline = (Date.now() - lastSeenTime) <= ONLINE_THRESHOLD_MS;
+
+            const item: FriendItem = {
+                id: f.uid,
+                uid: f.uid,
+                name: f.username || 'CubingFriend',
+                color: f.color || '#3b82f6',
+                status: isOnline ? (f.status || 'Online') : undefined,
+                lastSeen: !isOnline ? getRelativeLastSeen(f.lastSeenAt) : undefined,
+                lastSeenAt: f.lastSeenAt,
+                isOnline
+            };
+
+            if (isOnline) online.push(item);
+            else offline.push(item);
+        });
+
+        return { liveOnline: online, liveOffline: offline };
+    }, [rawFriendsData]);
+
+    // Friend list custom ordering
+    const [onlineFriends, setOnlineFriends] = useState<FriendItem[]>([]);
+    const [offlineFriends, setOfflineFriends] = useState<FriendItem[]>([]);
 
     useEffect(() => {
-        localStorage.setItem('cutter_friends_order_offline', JSON.stringify(offlineFriends));
-    }, [offlineFriends]);
+        const orderOnlineStr = localStorage.getItem('cutter_friends_order_online');
+        const orderOfflineStr = localStorage.getItem('cutter_friends_order_offline');
+
+        let sortedOnline = [...liveOnline];
+        let sortedOffline = [...liveOffline];
+
+        if (orderOnlineStr) {
+            try {
+                const orderedIds: string[] = JSON.parse(orderOnlineStr);
+                sortedOnline.sort((a, b) => {
+                    const idxA = orderedIds.indexOf(a.id);
+                    const idxB = orderedIds.indexOf(b.id);
+                    if (idxA === -1 && idxB === -1) return 0;
+                    if (idxA === -1) return 1;
+                    if (idxB === -1) return -1;
+                    return idxA - idxB;
+                });
+            } catch { /* ignore */ }
+        }
+
+        if (orderOfflineStr) {
+            try {
+                const orderedIds: string[] = JSON.parse(orderOfflineStr);
+                sortedOffline.sort((a, b) => {
+                    const idxA = orderedIds.indexOf(a.id);
+                    const idxB = orderedIds.indexOf(b.id);
+                    if (idxA === -1 && idxB === -1) return 0;
+                    if (idxA === -1) return 1;
+                    if (idxB === -1) return -1;
+                    return idxA - idxB;
+                });
+            } catch { /* ignore */ }
+        }
+
+        setOnlineFriends(sortedOnline);
+        setOfflineFriends(sortedOffline);
+    }, [liveOnline, liveOffline]);
 
     // Section collapse / expansion states
     const [onlineExpanded, setOnlineExpanded] = useState(true);
@@ -137,8 +240,10 @@ export function FriendSidebar() {
                 list.splice(toIndex, 0, moved);
                 if (targetSection === 'online') {
                     setOnlineFriends(list);
+                    localStorage.setItem('cutter_friends_order_online', JSON.stringify(list.map(x => x.id)));
                 } else {
                     setOfflineFriends(list);
+                    localStorage.setItem('cutter_friends_order_offline', JSON.stringify(list.map(x => x.id)));
                 }
             }
         }
@@ -152,9 +257,11 @@ export function FriendSidebar() {
         setDragOverItem(null);
     };
 
+    const totalFriends = onlineFriends.length + offlineFriends.length;
+
     return (
         <div
-            className="bg-bg-secondary border-l border-border hidden lg:flex flex-col shrink-0 relative select-none transition-all duration-200"
+            className="bg-bg-secondary border-l border-border flex flex-col shrink-0 relative select-none transition-all duration-200"
             style={{ width: currentWidth }}
         >
             {/* Resize Handle */}
@@ -170,8 +277,8 @@ export function FriendSidebar() {
                 /* COLLAPSED VIEW - Clicking opens the right bar */
                 <div
                     onClick={() => setIsCollapsed(false)}
-                    className="flex flex-col items-center py-4 gap-4 min-w-0 overflow-hidden cursor-pointer hover:bg-bg-hover/50 h-full transition-colors"
-                    title="Click to open Friends Sidebar"
+                    className="flex flex-col items-center py-4 gap-3 min-w-0 overflow-hidden cursor-pointer hover:bg-bg-hover/50 h-full transition-colors"
+                    title="Click or press Tab to open Friends Sidebar"
                 >
                     <button
                         onClick={(e) => {
@@ -179,14 +286,14 @@ export function FriendSidebar() {
                             setIsCollapsed(false);
                         }}
                         className="p-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
-                        title="Open Friends"
+                        title="Open Friends (Tab)"
                     >
                         <Users className="w-5 h-5 text-accent" />
                     </button>
 
                     <div className="w-8 h-[1px] bg-border/50 my-1" />
 
-                    {/* Online Stack */}
+                    {/* Online Avatars */}
                     <div className="flex flex-col gap-2.5">
                         {onlineFriends.map((friend) => (
                             <div
@@ -203,9 +310,11 @@ export function FriendSidebar() {
                         ))}
                     </div>
 
-                    <div className="w-6 h-[1px] bg-border/50 my-1" />
+                    {onlineFriends.length > 0 && offlineFriends.length > 0 && (
+                        <div className="w-6 h-[1px] bg-border/50 my-1" />
+                    )}
 
-                    {/* Offline Stack */}
+                    {/* Offline Avatars */}
                     <div className="flex flex-col gap-2.5 opacity-50">
                         {offlineFriends.map((friend) => (
                             <div
@@ -220,6 +329,12 @@ export function FriendSidebar() {
                             </div>
                         ))}
                     </div>
+
+                    {totalFriends === 0 && (
+                        <div className="text-[10px] text-text-secondary/60 text-center px-1">
+                            No friends
+                        </div>
+                    )}
                 </div>
             ) : (
                 /* EXPANDED VIEW */
@@ -228,122 +343,142 @@ export function FriendSidebar() {
                     <div className="flex items-center justify-between mb-4 pb-2 border-b border-border/50 shrink-0">
                         <div className="flex items-center gap-2 text-text-primary font-bold text-sm">
                             <Users className="w-4 h-4 text-accent" />
-                            <span>Friends</span>
+                            <span>Friends ({totalFriends})</span>
                         </div>
                         <button
                             onClick={() => setIsCollapsed(true)}
-                            className="p-1 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
-                            title="Collapse Sidebar"
+                            className="p-1 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors cursor-pointer"
+                            title="Collapse Sidebar (Tab)"
                         >
                             <ChevronRight className="w-4 h-4" />
                         </button>
                     </div>
 
                     <div className="overflow-y-auto flex-1 custom-scrollbar pr-1 flex flex-col gap-5">
-                        {/* Online Friends Section */}
-                        <div>
-                            <button
-                                onClick={() => setOnlineExpanded(!onlineExpanded)}
-                                className="w-full flex items-center justify-between text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 hover:text-text-primary transition-colors py-1"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <span className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                                    <span>Online ({onlineFriends.length})</span>
+                        {totalFriends === 0 ? (
+                            <div className="flex flex-col items-center justify-center p-6 text-center text-text-secondary gap-3 bg-bg-secondary/40 rounded-xl border border-border/40">
+                                <Users className="w-8 h-8 opacity-40 text-accent" />
+                                <span className="text-xs font-semibold text-text-primary">No Friends Starred</span>
+                                <p className="text-[11px] leading-relaxed opacity-75">
+                                    Star cubing friends in the Cubing Friends tab to track their live status and activity here.
+                                </p>
+                            </div>
+                        ) : (
+                            <>
+                                {/* Online Friends Section */}
+                                <div>
+                                    <button
+                                        onClick={() => setOnlineExpanded(!onlineExpanded)}
+                                        className="w-full flex items-center justify-between text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 hover:text-text-primary transition-colors py-1 cursor-pointer"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <span className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                                            <span>Online ({onlineFriends.length})</span>
+                                        </div>
+                                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${onlineExpanded ? '' : '-rotate-90'}`} />
+                                    </button>
+
+                                    {onlineExpanded && (
+                                        <div className="flex flex-col gap-1.5 min-h-[30px]">
+                                            {onlineFriends.length === 0 ? (
+                                                <span className="text-xs text-text-secondary/50 italic px-2 py-1">No friends online right now</span>
+                                            ) : (
+                                                onlineFriends.map((friend) => {
+                                                    const isDragging = draggedItem?.id === friend.id;
+                                                    const isTarget = dragOverItem?.id === friend.id;
+
+                                                    return (
+                                                        <div
+                                                            key={friend.id}
+                                                            draggable
+                                                            onDragStart={(e) => handleDragStart(friend.id, 'online', e)}
+                                                            onDragOver={(e) => handleDragOver(friend.id, 'online', e)}
+                                                            onDrop={(e) => handleDrop(friend.id, 'online', e)}
+                                                            onDragEnd={handleDragEnd}
+                                                            className={`flex items-center gap-2.5 p-2 rounded-lg transition-all cursor-grab active:cursor-grabbing group
+                                                                ${isDragging ? 'opacity-40 scale-95' : 'hover:bg-bg-hover'}
+                                                                ${isTarget ? 'border-t-2 border-accent pt-1' : 'border border-transparent hover:border-border/40'}
+                                                            `}
+                                                        >
+                                                            <div className="opacity-0 group-hover:opacity-60 transition-opacity text-text-secondary shrink-0">
+                                                                <GripVertical className="w-3.5 h-3.5" />
+                                                            </div>
+                                                            <div className="relative shrink-0">
+                                                                <div
+                                                                    className="w-7 h-7 rounded-md shadow-sm"
+                                                                    style={{ backgroundColor: friend.color }}
+                                                                />
+                                                                <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 border-2 border-bg-secondary rounded-full" />
+                                                            </div>
+                                                            <div className="flex flex-col min-w-0 flex-1">
+                                                                <span className="text-sm font-medium text-text-primary truncate">{friend.name}</span>
+                                                                <span className="text-[10px] text-text-secondary truncate opacity-80 group-hover:opacity-100">{friend.status}</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
-                                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${onlineExpanded ? '' : '-rotate-90'}`} />
-                            </button>
 
-                            {onlineExpanded && (
-                                <div className="flex flex-col gap-1.5 min-h-[40px]">
-                                    {onlineFriends.map((friend) => {
-                                        const isDragging = draggedItem?.id === friend.id;
-                                        const isTarget = dragOverItem?.id === friend.id;
+                                {/* Offline Friends Section */}
+                                <div>
+                                    <button
+                                        onClick={() => setOfflineExpanded(!offlineExpanded)}
+                                        className="w-full flex items-center justify-between text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 hover:text-text-primary transition-colors py-1 cursor-pointer"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <span className="w-2 h-2 rounded-full bg-zinc-500" />
+                                            <span>Offline ({offlineFriends.length})</span>
+                                        </div>
+                                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${offlineExpanded ? '' : '-rotate-90'}`} />
+                                    </button>
 
-                                        return (
-                                            <div
-                                                key={friend.id}
-                                                draggable
-                                                onDragStart={(e) => handleDragStart(friend.id, 'online', e)}
-                                                onDragOver={(e) => handleDragOver(friend.id, 'online', e)}
-                                                onDrop={(e) => handleDrop(friend.id, 'online', e)}
-                                                onDragEnd={handleDragEnd}
-                                                className={`flex items-center gap-2.5 p-2 rounded-lg transition-all cursor-grab active:cursor-grabbing group
-                                                    ${isDragging ? 'opacity-40 scale-95' : 'hover:bg-bg-hover'}
-                                                    ${isTarget ? 'border-t-2 border-accent pt-1' : 'border border-transparent hover:border-border/40'}
-                                                `}
-                                            >
-                                                <div className="opacity-0 group-hover:opacity-60 transition-opacity text-text-secondary shrink-0">
-                                                    <GripVertical className="w-3.5 h-3.5" />
-                                                </div>
-                                                <div className="relative shrink-0">
-                                                    <div
-                                                        className="w-7 h-7 rounded-md shadow-sm"
-                                                        style={{ backgroundColor: friend.color }}
-                                                    />
-                                                    <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 border-2 border-bg-secondary rounded-full" />
-                                                </div>
-                                                <div className="flex flex-col min-w-0 flex-1">
-                                                    <span className="text-sm font-medium text-text-primary truncate">{friend.name}</span>
-                                                    <span className="text-[10px] text-text-secondary truncate opacity-80 group-hover:opacity-100">{friend.status}</span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                    {offlineExpanded && (
+                                        <div className="flex flex-col gap-1.5 min-h-[30px]">
+                                            {offlineFriends.length === 0 ? (
+                                                <span className="text-xs text-text-secondary/50 italic px-2 py-1">No offline friends</span>
+                                            ) : (
+                                                offlineFriends.map((friend) => {
+                                                    const isDragging = draggedItem?.id === friend.id;
+                                                    const isTarget = dragOverItem?.id === friend.id;
+
+                                                    return (
+                                                        <div
+                                                            key={friend.id}
+                                                            draggable
+                                                            onDragStart={(e) => handleDragStart(friend.id, 'offline', e)}
+                                                            onDragOver={(e) => handleDragOver(friend.id, 'offline', e)}
+                                                            onDrop={(e) => handleDrop(friend.id, 'offline', e)}
+                                                            onDragEnd={handleDragEnd}
+                                                            className={`flex items-center gap-2.5 p-2 rounded-lg transition-all cursor-grab active:cursor-grabbing opacity-75 hover:opacity-100 group
+                                                                ${isDragging ? 'opacity-40 scale-95' : 'hover:bg-bg-hover'}
+                                                                ${isTarget ? 'border-t-2 border-accent pt-1' : 'border border-transparent hover:border-border/40'}
+                                                            `}
+                                                        >
+                                                            <div className="opacity-0 group-hover:opacity-60 transition-opacity text-text-secondary shrink-0">
+                                                                <GripVertical className="w-3.5 h-3.5" />
+                                                            </div>
+                                                            <div className="relative shrink-0">
+                                                                <div
+                                                                    className="w-7 h-7 rounded-md shadow-sm grayscale brightness-90"
+                                                                    style={{ backgroundColor: friend.color }}
+                                                                />
+                                                            </div>
+                                                            <div className="flex flex-col min-w-0 flex-1">
+                                                                <span className="text-sm font-medium text-text-primary truncate">{friend.name}</span>
+                                                                <span className="text-[10px] text-text-secondary truncate">Last seen {friend.lastSeen}</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                        </div>
-
-                        {/* Offline Friends Section */}
-                        <div>
-                            <button
-                                onClick={() => setOfflineExpanded(!offlineExpanded)}
-                                className="w-full flex items-center justify-between text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 hover:text-text-primary transition-colors py-1"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <span className="w-2 h-2 rounded-full bg-zinc-500" />
-                                    <span>Offline ({offlineFriends.length})</span>
-                                </div>
-                                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${offlineExpanded ? '' : '-rotate-90'}`} />
-                            </button>
-
-                            {offlineExpanded && (
-                                <div className="flex flex-col gap-1.5 min-h-[40px]">
-                                    {offlineFriends.map((friend) => {
-                                        const isDragging = draggedItem?.id === friend.id;
-                                        const isTarget = dragOverItem?.id === friend.id;
-
-                                        return (
-                                            <div
-                                                key={friend.id}
-                                                draggable
-                                                onDragStart={(e) => handleDragStart(friend.id, 'offline', e)}
-                                                onDragOver={(e) => handleDragOver(friend.id, 'offline', e)}
-                                                onDrop={(e) => handleDrop(friend.id, 'offline', e)}
-                                                onDragEnd={handleDragEnd}
-                                                className={`flex items-center gap-2.5 p-2 rounded-lg transition-all cursor-grab active:cursor-grabbing opacity-75 hover:opacity-100 group
-                                                    ${isDragging ? 'opacity-40 scale-95' : 'hover:bg-bg-hover'}
-                                                    ${isTarget ? 'border-t-2 border-accent pt-1' : 'border border-transparent hover:border-border/40'}
-                                                `}
-                                            >
-                                                <div className="opacity-0 group-hover:opacity-60 transition-opacity text-text-secondary shrink-0">
-                                                    <GripVertical className="w-3.5 h-3.5" />
-                                                </div>
-                                                <div className="relative shrink-0">
-                                                    <div
-                                                        className="w-7 h-7 rounded-md shadow-sm grayscale brightness-90"
-                                                        style={{ backgroundColor: friend.color }}
-                                                    />
-                                                </div>
-                                                <div className="flex flex-col min-w-0 flex-1">
-                                                    <span className="text-sm font-medium text-text-primary truncate">{friend.name}</span>
-                                                    <span className="text-[10px] text-text-secondary truncate">Last seen {friend.lastSeen}</span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}

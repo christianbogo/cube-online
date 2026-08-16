@@ -37,6 +37,62 @@
   color-scheme: dark;
 }
 
+/* Custom Unlockable Theme Palettes */
+.theme-synthwave {
+  --bg-primary: #120b22;
+  --bg-secondary: #1a1033;
+  --bg-hover: #26164a;
+  --border-color: #4a2b82;
+  --text-primary: #f8e9ff;
+  --text-secondary: #b592db;
+  --accent-color: #f43f5e;
+  color-scheme: dark;
+}
+
+.theme-cyberpunk {
+  --bg-primary: #0a0d14;
+  --bg-secondary: #111726;
+  --bg-hover: #1b243b;
+  --border-color: #fcee0a44;
+  --text-primary: #fcee0a;
+  --text-secondary: #00f0ff;
+  --accent-color: #00f0ff;
+  color-scheme: dark;
+}
+
+.theme-matrix {
+  --bg-primary: #040d06;
+  --bg-secondary: #08170c;
+  --bg-hover: #0d2613;
+  --border-color: #1a4d26;
+  --text-primary: #00ff66;
+  --text-secondary: #009933;
+  --accent-color: #00ff66;
+  color-scheme: dark;
+}
+
+.theme-blood {
+  --bg-primary: #0f0507;
+  --bg-secondary: #1a080c;
+  --bg-hover: #2b0e14;
+  --border-color: #4d1822;
+  --text-primary: #ffccd5;
+  --text-secondary: #c94b62;
+  --accent-color: #ff1e46;
+  color-scheme: dark;
+}
+
+.theme-holographic {
+  --bg-primary: #080811;
+  --bg-secondary: #101024;
+  --bg-hover: #1c1c3d;
+  --border-color: #6366f166;
+  --text-primary: #e0e7ff;
+  --text-secondary: #818cf8;
+  --accent-color: #a855f7;
+  color-scheme: dark;
+}
+
 html,
 body {
   height: 100%;

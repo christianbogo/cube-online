@@ -129,20 +129,9 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
         return (
             <aside className="h-full bg-bg-secondary w-[50px] flex flex-col border-l border-border transition-all duration-300">
                 <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col items-center py-4 gap-1">
-                    {currentSessionSolves.map(solve => {
-                        let bgClass = "bg-text-secondary/20";
-                        if (solve.daily) {
-                            const id = solve.daily;
-                            if (id.startsWith('d-') || id.includes('daily')) bgClass = "bg-green-500";
-                            else if (id.startsWith('w-') || id.includes('weekly')) bgClass = "bg-blue-500";
-                            else if (id.startsWith('m-') || id.includes('monthly')) bgClass = "bg-purple-500";
-                            else if (id.startsWith('y-') || id.includes('project_2025')) bgClass = "bg-yellow-500";
-                            else if (id.startsWith('h-') || id.includes('hour')) bgClass = "bg-zinc-500";
-                        }
-                        return (
-                            <div key={solve.id} className={`w-3 h-1.5 rounded-[1px] ${bgClass}`} title={formatTime(solve.time)} />
-                        );
-                    })}
+                    {currentSessionSolves.map(solve => (
+                        <div key={solve.id} className="w-3 h-1.5 rounded-[1px] bg-text-secondary/20" title={formatTime(solve.time)} />
+                    ))}
                 </div>
 
                 <div className="p-2 border-t border-border flex flex-col gap-2 items-center">
@@ -353,17 +342,6 @@ const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onC
         setTimeout(() => setIsCopied(false), 2000);
     };
 
-    let badge = null;
-    if (solve.daily) {
-        const id = solve.daily.toLowerCase();
-        if (id.includes('daily') || id.startsWith('d-')) badge = { text: 'D', color: 'text-green-500', bg: 'bg-green-500/10' };
-        else if (id.includes('weekly') || id.startsWith('w-')) badge = { text: 'W', color: 'text-blue-500', bg: 'bg-blue-500/10' };
-        else if (id.includes('monthly') || id.startsWith('m-')) badge = { text: 'M', color: 'text-purple-500', bg: 'bg-purple-500/10' };
-        else if (id.includes('project_2025') || id.startsWith('y-')) badge = { text: 'Y', color: 'text-yellow-500', bg: 'bg-yellow-500/10' };
-        else if (id.includes('hour') || id.startsWith('h-')) badge = { text: 'H', color: 'text-zinc-500', bg: 'bg-zinc-500/10' };
-        else badge = { text: 'S', color: 'text-accent', bg: 'bg-accent/10' };
-    }
-
     return (
         <div
             onClick={onToggle}
@@ -374,7 +352,7 @@ const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onC
             <div className="flex items-center justify-between px-4 py-2">
                 <div className="flex items-center gap-3 min-w-0">
                     <span className="text-text-secondary/40 font-mono w-6 text-right text-[10px]">{number}</span>
-                    <span className={`font-mono font-medium ${solve.penalty === 'DNF' ? 'text-red-500' : (badge ? badge.color : 'text-text-primary')}`}>
+                    <span className={`font-mono font-medium ${solve.penalty === 'DNF' ? 'text-red-500' : 'text-text-primary'}`}>
                         {formatTimeDisplay(solve)}
                     </span>
                 </div>
@@ -383,24 +361,9 @@ const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onC
             {expanded && (
                 <div className="px-4 pb-3 pt-1 flex flex-col gap-2 animate-in slide-in-from-top-1 duration-200">
                     <div className="text-[10px] text-text-secondary">
-                        {badge ? (
-                            <span className={badge.color}>
-                                {badge.text === 'D' && 'Daily Challenge'}
-                                {badge.text === 'W' && 'Weekly Challenge'}
-                                {badge.text === 'M' && 'Monthly Challenge'}
-                                {badge.text === 'Y' && 'Yearly Challenge'}
-                                {badge.text === 'H' && 'Hourly Challenge'}
-                                {badge.text === 'S' && 'Special Scramble'}
-                                <span className="text-text-secondary/50 mx-1">•</span>
-                                {new Date(solve.date).toLocaleString(undefined, {
-                                    month: 'short', day: 'numeric'
-                                })}
-                            </span>
-                        ) : (
-                            new Date(solve.date).toLocaleString(undefined, {
-                                month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
-                            })
-                        )}
+                        {new Date(solve.date).toLocaleString(undefined, {
+                            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                        })}
                     </div>
 
                     <div

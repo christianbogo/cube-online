@@ -26,6 +26,8 @@ export interface UserData {
     starredUsers?: string[];
     blockedUsers?: string[];
     socials?: SocialProfile[];
+    lastSeenAt?: string;
+    status?: string;
 }
 
 export interface AuthContextType {

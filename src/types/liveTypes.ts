@@ -4,7 +4,6 @@ export interface SimpleSolve {
     time: number;
     penalty: 'none' | '+2' | 'DNF';
     inspectionPenalty?: 'none' | '+2' | 'DNF';
-    daily: string | null;
     timestamp: number;
 }
 

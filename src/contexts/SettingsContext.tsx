@@ -14,7 +14,6 @@ const defaultSettings: Settings = {
         localLimit: 250,
     },
     dataBackup: 'session-bests',
-    dailySolves: true,
     scrambleType: '333',
 };
 

@@ -122,7 +122,8 @@ export default function Layout() {
             if (e.key === 's') { if (!isPrivateMode) navigate('/data'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/data'); } }
             if (e.key === 'a') { if (!isPrivateMode) navigate('/account'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/account'); } }
             if (e.key === 'c') { if (!isPrivateMode) navigate('/'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/'); } }
-            if (e.key === 'd') { if (!isPrivateMode) navigate('/daily'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/daily'); } }
+            if (e.key === 'e' || e.key === 'd') { if (!isPrivateMode) navigate('/store'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/store'); } }
+            if (e.key === 'g') { if (!isPrivateMode) navigate('/guide'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/guide'); } }
         };
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
@@ -238,13 +239,13 @@ export default function Layout() {
                                     </button>
                                 )}
                             </div>
-                            {consoleInfo && <div className="text-[10px] text-yellow-500/70 truncate max-w-xs font-mono ml-auto" title={consoleInfo}>⚠️ {consoleInfo}</div>}
+                            {consoleInfo && <div className="text-[10px] text-yellow-500/70 truncate max-w-xs font-mono ml-auto" title={consoleInfo}>{consoleInfo}</div>}
                         </footer>
                     )}
                 </main>
 
                 {/* Right Sidebar */}
-                {location.pathname !== '/account' && location.pathname !== '/data' && (
+                {!['/account', '/data', '/keybinds', '/store', '/guide', '/info'].some(p => location.pathname.startsWith(p)) && (
                     <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col backdrop-blur-sm will-change-[width] border-l border-border z-20">
                         <div className="absolute top-0 left-[-5px] w-2.5 h-full cursor-col-resize z-50 group flex justify-center" onMouseDown={startResizingRight}>
                             <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />

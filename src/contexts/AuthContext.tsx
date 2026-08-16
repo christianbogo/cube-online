@@ -43,19 +43,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     if (docSnap.exists()) {
                         const data = docSnap.data();
                         const userData: UserData = {
-                            uid: firebaseUser.uid, // The ID of the user is the Auth UID
-                            shortId: data.shortId, // The friend code
+                            uid: firebaseUser.uid,
+                            shortId: data.shortId,
                             email: firebaseUser.email,
                             emailVerified: firebaseUser.emailVerified,
-                            ...data as { username: string; color: string; starredUsers?: string[]; blockedUsers?: string[]; socials?: SocialProfile[] }
+                            username: data.username || 'CubingUser',
+                            color: data.color || '#3b82f6',
+                            starredUsers: data.starredUsers || [],
+                            blockedUsers: data.blockedUsers || [],
+                            socials: data.socials || [],
+                            lastSeenAt: data.lastSeenAt,
+                            status: data.status,
                         };
                         console.log("AuthContext: Setting User", userData);
                         setUser(userData);
                         localStorage.setItem('cached_user_profile', JSON.stringify(userData));
                     } else {
                         console.warn("AuthContext: authenticated but no profile doc at users/" + firebaseUser.uid);
-                        // If no profile exists (legacy or just created), checking logic elsewhere handles creation
-                        // or we wait for creation in sign-up flow.
                     }
                     setLoading(false);
                 });
@@ -71,6 +75,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return () => unsubscribe();
     }, []);
+
+    // Presence Heartbeat: updates lastSeenAt while user is active
+    useEffect(() => {
+        if (!user?.uid) return;
+
+        const updatePresence = async () => {
+            try {
+                await updateDoc(doc(db, 'users', user.uid), {
+                    lastSeenAt: new Date().toISOString(),
+                    status: 'Online'
+                });
+            } catch {
+                // Ignore if document not yet ready
+            }
+        };
+
+        updatePresence();
+        const interval = setInterval(updatePresence, 60000);
+        const handleActivity = () => updatePresence();
+        window.addEventListener('focus', handleActivity);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('focus', handleActivity);
+        };
+    }, [user?.uid]);
 
     const emailSignUp = async (email: string, pass: string) => {
         const result = await createUserWithEmailAndPassword(auth, email, pass);

@@ -13,7 +13,6 @@ export interface Settings {
     scrambleSize: number; // in rem
     localDataSettings: LocalDataSettings;
     dataBackup: DataBackupOption;
-    dailySolves: boolean;
     scrambleType: string;
 }
 

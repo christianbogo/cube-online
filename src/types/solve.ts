@@ -8,7 +8,6 @@ export interface Solve {
     penalty: 'none' | '+2' | 'DNF';
     inspectionTime?: number;
     inspectionPenalty?: 'none' | '+2' | 'DNF';
-    daily?: string | null; // ID of the daily scramble if applicable
     scrambleType?: string; // e.g. '333', '444', 'clock'
     anomalyApproved?: boolean;
 }

@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSolves, type Solve } from '../../contexts/SolvesContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage, standardDeviation } from '../../utils/calculations';
-import { ChevronDown, Calendar, Clock, Layers, Archive, CalendarDays, CalendarRange } from 'lucide-react';
+import { ChevronDown, Calendar, Clock, Layers, Archive, CalendarDays, CalendarRange, Check } from 'lucide-react';
 import { startOfYear, startOfMonth, startOfWeek, startOfDay, format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
 
@@ -20,12 +20,12 @@ const GROUPING_OPTIONS: { value: GroupingType; label: string; icon: any }[] = [
 ];
 
 const COLUMN_OPTIONS: { value: StatColumn; label: string }[] = [
-    { value: 'count', label: 'Solves' },
-    { value: 'single', label: 'Best' },
-    { value: 'ao5', label: 'Ao5' },
-    { value: 'ao12', label: 'Ao12' },
-    { value: 'ao100', label: 'Ao100' },
-    { value: 'time', label: 'Time' },
+    { value: 'count', label: 'Solve Count' },
+    { value: 'single', label: 'Best Single' },
+    { value: 'ao5', label: 'Best Ao5' },
+    { value: 'ao12', label: 'Best Ao12' },
+    { value: 'ao100', label: 'Best Ao100' },
+    { value: 'time', label: 'Accumulative Time' },
 ];
 
 const SCRAMBLE_TYPES = [
@@ -246,56 +246,53 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
 
     return (
         <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-sm overflow-hidden min-w-0 font-sans">
-            {/* Header Area */}
-            <div className="flex flex-col border-b border-border/50 bg-bg-secondary/50 backdrop-blur-sm sticky top-0 z-10 text-text-primary">
+            {/* Header Area: Event & Grouping Selectors in same row */}
+            <div className="grid grid-cols-2 border-b border-border/50 bg-bg-secondary/50 backdrop-blur-sm sticky top-0 z-10 text-text-primary divide-x divide-border/40">
                 {/* Event Selector */}
-                <div className="p-2 border-b border-border/50 flex justify-center relative group">
+                <div className="p-2 flex items-center justify-center relative group">
                     <select
                         value={settings.scrambleType}
                         onChange={(e) => updateSettings({ scrambleType: e.target.value })}
-                        className="appearance-none bg-transparent font-bold hover:text-accent focus:outline-none cursor-pointer text-center text-sm w-full z-10"
+                        className="appearance-none bg-transparent font-bold hover:text-accent focus:outline-none cursor-pointer text-center text-xs w-full pr-3 z-10"
                     >
                         {SCRAMBLE_TYPES.map(opt => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            <option key={opt.value} value={opt.value} className="bg-bg-secondary text-text-primary">{opt.label}</option>
                         ))}
                     </select>
-                    <ChevronDown className="w-3 h-3 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
+                    <ChevronDown className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
                 </div>
 
                 {/* Grouping Selector */}
-                <div className="p-2 border-b border-border/50 flex justify-center relative group">
+                <div className="p-2 flex items-center justify-center relative group">
                     <select
                         value={grouping}
                         onChange={(e) => setGrouping(e.target.value as GroupingType)}
-                        className="appearance-none bg-transparent font-bold hover:text-accent focus:outline-none cursor-pointer text-center text-sm w-full z-10"
+                        className="appearance-none bg-transparent font-bold hover:text-accent focus:outline-none cursor-pointer text-center text-xs w-full pr-3 z-10"
                     >
                         {GROUPING_OPTIONS.map(opt => (
-                            <option key={opt.value} value={opt.value}>
+                            <option key={opt.value} value={opt.value} className="bg-bg-secondary text-text-primary">
                                 {opt.label}
                             </option>
                         ))}
                     </select>
-                    <ChevronDown className="w-3 h-3 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
+                    <ChevronDown className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
                 </div>
             </div>
 
-            {/* List Header */}
-            <div className="grid grid-cols-[1fr_auto] gap-2 px-4 py-2 text-xs font-bold text-text-secondary border-b border-border/20 uppercase tracking-wider items-center">
-                <div className="cursor-pointer hover:text-text-primary">
-                    {grouping === 'all' ? 'Period' : grouping === 'sessions' ? 'Date' : grouping.slice(0, -1)}
-                </div>
-
-                {/* Dropdown for Stat Column */}
-                <div className="relative group min-w-[120px] text-right">
-                    <select
-                        value={statColumn}
-                        onChange={(e) => setStatColumn(e.target.value as StatColumn)}
-                        className="appearance-none bg-transparent hover:text-accent cursor-pointer focus:outline-none text-right w-full pr-3 uppercase"
-                    >
-                        {COLUMN_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                    </select>
-                    <ChevronDown className="w-3 h-3 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
-                </div>
+            {/* Sub-Header: Full Row Stat Filter Dropdown */}
+            <div className="px-3 py-2 border-b border-border/30 bg-bg-secondary/30 relative flex items-center">
+                <select
+                    value={statColumn}
+                    onChange={(e) => setStatColumn(e.target.value as StatColumn)}
+                    className="appearance-none bg-transparent hover:text-accent font-bold text-xs cursor-pointer focus:outline-none w-full text-left uppercase pr-6 z-10"
+                >
+                    {COLUMN_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value} className="bg-bg-secondary text-text-primary">
+                            {opt.label}
+                        </option>
+                    ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 absolute right-3 pointer-events-none opacity-60 text-text-secondary" />
             </div>
 
             {/* List Content */}
@@ -309,17 +306,45 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
                             <div
                                 key={item.key}
                                 onClick={() => handleSelect(item.key)}
-                                className={`grid grid-cols-[1fr_auto] gap-2 px-4 py-3 border-b border-border/10 hover:bg-bg-hover transition-colors cursor-pointer items-center
-                                    ${isSelected ? 'bg-accent/10 border-l-2 border-l-accent pl-[14px]' : 'border-l-2 border-l-transparent'}
+                                className={`flex items-center px-3 py-2.5 border-b border-border/10 hover:bg-bg-hover transition-colors cursor-pointer group overflow-hidden
+                                    ${isSelected ? 'bg-accent/10 border-l-2 border-l-accent pl-[10px]' : 'border-l-2 border-l-transparent'}
                                 `}
                             >
-                                <div className="min-w-0">
-                                    <span className={`font-medium truncate ${isSelected ? 'text-accent' : 'text-text-primary'}`}>
+                                {/* Checkbox: Only occupies space when selected or on hover, causing text to jump right */}
+                                <div
+                                    className={`flex items-center justify-center transition-all duration-200 ease-out shrink-0 overflow-hidden
+                                        ${isSelected
+                                            ? 'w-4 h-4 mr-2.5 opacity-100 scale-100'
+                                            : 'w-0 h-4 mr-0 opacity-0 scale-0 group-hover:w-4 group-hover:mr-2.5 group-hover:opacity-100 group-hover:scale-100'
+                                        }
+                                    `}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSelect(item.key);
+                                    }}
+                                    title={isSelected ? "Deselect group" : "Select group"}
+                                >
+                                    <div
+                                        className={`w-4 h-4 rounded border flex items-center justify-center transition-colors
+                                            ${isSelected
+                                                ? 'bg-accent border-accent text-white shadow-sm'
+                                                : 'border-border hover:border-accent'
+                                            }
+                                        `}
+                                    >
+                                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                    </div>
+                                </div>
+
+                                {/* Label: Jumps to the right when checkbox space appears */}
+                                <div className="min-w-0 flex-1 transition-all duration-200">
+                                    <span className={`font-medium text-xs sm:text-sm truncate block transition-colors duration-200 ${isSelected ? 'text-accent font-semibold' : 'text-text-primary'}`}>
                                         {item.label}
                                     </span>
                                 </div>
 
-                                <div className="flex items-center justify-end font-mono text-sm text-text-primary min-w-[60px]">
+                                {/* Stat Value */}
+                                <div className="flex items-center justify-end font-mono text-xs sm:text-sm text-text-primary min-w-[55px] shrink-0 ml-2">
                                     {statColumn === 'count' && <span>{item.stats.count}</span>}
                                     {statColumn === 'single' && <span>{formatTime(item.stats.bestSingle)}</span>}
                                     {statColumn === 'ao5' && <span>{formatTime(item.stats.bestAo5)}</span>}

@@ -1,6 +1,5 @@
-import { createContext, useContext, useEffect, useState, useMemo, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef, type ReactNode } from 'react';
 import { calculateAverage, calculateBestAverage } from '../utils/calculations';
-import { unmarkScrambleComplete } from '../utils/dailyScramble'; // Import unmarkScrambleComplete
 import { useAuth } from './AuthContext';
 import { useSession } from './SessionContext';
 import { doc, setDoc, deleteDoc, collection, query, where, onSnapshot, serverTimestamp, addDoc } from 'firebase/firestore';
@@ -125,7 +124,6 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
                         penalty: data.penalty,
                         inspectionTime: data.inspectionTime,
                         inspectionPenalty: data.inspectionPenalty,
-                        daily: data.daily,
                         sessionId: data.sessionId,
                         userId: data.userId,
                         scrambleType: data.scrambleType || '333',
@@ -368,14 +366,6 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
         setSolves(prev => prev.filter(s => s.id !== id));
         if (solve) {
             await syncToCloud(solve, 'delete');
-            // If it was a daily solve, update stats
-            if (solve.daily && user) {
-                const idParts = solve.daily.split('-');
-                if (idParts.length >= 2) {
-                    const typeLetter = idParts[0];
-                    await unmarkScrambleComplete(user.uid, typeLetter, solve.daily);
-                }
-            }
         }
     };
 
@@ -395,10 +385,10 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
         return localStorage.getItem('cutter-cubing-current-scramble');
     });
 
-    const setCurrentScramble = (scramble: string) => {
+    const setCurrentScramble = useCallback((scramble: string) => {
         setCurrentScrambleState(scramble);
         localStorage.setItem('cutter-cubing-current-scramble', scramble);
-    };
+    }, []);
 
     return (
         <SolvesContext.Provider value={{ solves: activeSolves, stats, currentScramble, setCurrentScramble, addSolve, updateSolve, deleteSolve, clearSolves, trimSolves, syncStatus, isPrivateMode, togglePrivateMode }}>

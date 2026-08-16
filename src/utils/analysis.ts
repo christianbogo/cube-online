@@ -8,6 +8,7 @@ interface Solve {
     id: string;
     time: number;
     date: string | number | Date;
+    anomalyApproved?: boolean;
     [key: string]: any;
 }
 
@@ -28,18 +29,33 @@ const K_LOW = 3.0; // Sensitivity for "Too Fast"
 const K_HIGH = 5.0; // Sensitivity for "Too Slow"
 const MIN_MAD = 0.5; // Critical Guardrail in seconds
 
-export function detectOutliers(currentSolveTime: number, recentSolves: Solve[], isGlobalPB: boolean = false): OutlierResult {
+export function detectOutliers(currentSolve: number | Solve, recentSolves: Solve[], isGlobalPB: boolean = false): OutlierResult {
+    let currentSolveTime: number;
+
+    // If an entire solve object is passed and it was already approved, it can NEVER be flagged again
+    if (typeof currentSolve === 'object' && currentSolve !== null) {
+        if (currentSolve.anomalyApproved) {
+            return { isOutlier: false };
+        }
+        currentSolveTime = currentSolve.time;
+    } else {
+        currentSolveTime = currentSolve;
+    }
+
     // If not enough data, cannot determine outlier reliably
     if (recentSolves.length < 10) {
         return { isOutlier: false };
     }
 
-    // Sort solves by date desc to get recent window
-    // Assuming recentSolves are already sorted or we sort them here.
-    // We only need the times.
+    // Filter and sort window solves (exclude DNFs and extreme invalid data)
     const windowSolves = recentSolves
+        .filter(s => s.penalty !== 'DNF' && s.inspectionPenalty !== 'DNF')
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .slice(0, WINDOW_SIZE);
+
+    if (windowSolves.length < 10) {
+        return { isOutlier: false };
+    }
 
     const times = windowSolves.map(s => s.time);
 

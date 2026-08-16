@@ -160,53 +160,57 @@ export default function CubingFriendsTab() {
 
     return (
         <div className="flex flex-col gap-6 p-2">
-            {/* My ID Section */}
-            <div className="flex items-center justify-between p-4 bg-accent/10 rounded-lg border border-accent/20">
-                <div className="flex flex-col">
-                    <span className="text-xs text-accent font-bold uppercase tracking-wider">My Friend Code</span>
-                    <div className="flex items-center gap-2 mt-1 cursor-pointer" onClick={copyMyCode}>
-                        <span className="text-lg font-mono font-bold text-text-primary">#{user?.shortId || 'Pending...'}</span>
-                        <Copy className={`w-4 h-4 ${copiedId ? 'text-green-500' : 'text-text-primary'}`} />
+            {/* Top Row: My ID Section & Find User */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+                {/* My ID Card */}
+                <div className="flex items-center justify-between p-4 bg-accent/10 rounded-lg border border-accent/20 h-full">
+                    <div className="flex flex-col justify-center">
+                        <span className="text-xs text-accent font-bold uppercase tracking-wider">My Friend Code</span>
+                        <div className="flex items-center gap-2 mt-1 cursor-pointer" onClick={copyMyCode} title="Click to copy code">
+                            <span className="text-lg font-mono font-bold text-text-primary">#{user?.shortId || 'Pending...'}</span>
+                            <Copy className={`w-4 h-4 ${copiedId ? 'text-green-500' : 'text-text-primary'}`} />
+                        </div>
                     </div>
-                </div>
-                {copiedId && <span className="text-xs text-green-500 font-medium animate-in fade-in">Copied!</span>}
-            </div>
-
-            {/* Search */}
-            <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold text-text-secondary uppercase">Find User</label>
-                <div className="flex gap-2">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
-                        <input
-                            type="text"
-                            placeholder="Enter 6-character code..."
-                            value={searchCode}
-                            onChange={(e) => setSearchCode(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                            className="w-full bg-bg-secondary border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-                            maxLength={6}
-                        />
-                    </div>
-                    <button
-                        onClick={handleSearch}
-                        className="px-4 py-2 bg-text-primary text-bg-primary font-bold rounded-lg text-sm hover:opacity-90 transition-opacity"
-                        disabled={isSearching}
-                    >
-                        Search
-                    </button>
+                    {copiedId && <span className="text-xs text-green-500 font-medium animate-in fade-in">Copied!</span>}
                 </div>
 
-                {/* Search Results */}
-                {searchResults.length > 0 && (
-                    <div className="flex flex-col gap-2 mt-2">
-                        {searchResults.map(u => (
-                            <UserCard key={u.uid} targetUser={u} type="search" />
-                        ))}
+                {/* Find User Card */}
+                <div className="flex flex-col justify-between p-3.5 bg-bg-secondary/40 rounded-lg border border-border/40 gap-2 h-full">
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Find User</label>
+                    <div className="flex gap-2">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+                            <input
+                                type="text"
+                                placeholder="Enter 6-character code..."
+                                value={searchCode}
+                                onChange={(e) => setSearchCode(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                                className="w-full bg-bg-secondary border border-border rounded-lg pl-9 pr-3 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent"
+                                maxLength={6}
+                            />
+                        </div>
+                        <button
+                            onClick={handleSearch}
+                            className="px-4 py-1.5 bg-text-primary text-bg-primary font-bold rounded-lg text-sm hover:opacity-90 transition-opacity cursor-pointer"
+                            disabled={isSearching}
+                        >
+                            Search
+                        </button>
                     </div>
-                )}
-                {isSearching && <p className="text-xs text-text-secondary italic">Searching...</p>}
+                </div>
             </div>
+
+            {/* Search Results */}
+            {searchResults.length > 0 && (
+                <div className="flex flex-col gap-2">
+                    <span className="text-xs font-bold text-text-secondary uppercase">Search Results</span>
+                    {searchResults.map(u => (
+                        <UserCard key={u.uid} targetUser={u} type="search" />
+                    ))}
+                </div>
+            )}
+            {isSearching && <p className="text-xs text-text-secondary italic">Searching...</p>}
 
             <hr className="border-border/50" />
 

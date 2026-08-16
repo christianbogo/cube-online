@@ -36,8 +36,6 @@ export const UserCard = ({ user, isStarred, onStar, onBlock }: UserCardProps) =>
         return str;
     };
 
-    const isDaily = (s: SimpleSolve | undefined) => !!s?.daily;
-
     return (
         <div className={`flex-shrink-0 w-44 h-32 bg-surface-elevation-1 rounded-xl border-2 flex flex-col relative group hover:shadow-lg transition-all
             ${getBorderColor(user.status)}`}
@@ -74,8 +72,7 @@ export const UserCard = ({ user, isStarred, onStar, onBlock }: UserCardProps) =>
                 {/* Main (Recent) Solve */}
                 {recent ? (
                     <div className={`text-3xl font-mono font-medium tracking-tight
-                        ${isDaily(recent) ? 'text-accent' : 'text-text-primary'}
-                        ${recent.penalty === 'DNF' ? 'text-red-500' : ''}
+                        ${recent.penalty === 'DNF' ? 'text-red-500' : 'text-text-primary'}
                     `}>
                         {formatTimeStr(recent)}
                     </div>
@@ -90,8 +87,7 @@ export const UserCard = ({ user, isStarred, onStar, onBlock }: UserCardProps) =>
                         if (!s) return <div key={i} className="w-8 h-4 bg-black/10 rounded" />;
                         return (
                             <div key={i} className={`text-[10px] font-mono px-1 rounded
-                                ${isDaily(s) ? 'text-accent bg-accent/10' : 'text-text-secondary bg-black/20'}
-                                ${s.penalty === 'DNF' ? 'text-red-500' : ''}
+                                ${s.penalty === 'DNF' ? 'text-red-500' : 'text-text-secondary bg-black/20'}
                             `}>
                                 {formatTimeStr(s)}
                             </div>

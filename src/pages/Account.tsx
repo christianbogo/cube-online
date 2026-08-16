@@ -6,18 +6,23 @@ import {
 
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useEconomy } from '../contexts/EconomyContext';
+import { COLOR_LADDER } from '../utils/cosmeticsData';
 import { doc, setDoc, getDoc, getDocs, collection, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Tabs, FriendSidebar, SocialsTab, ProfileStatsTab, CubingFriendsTab, Logo } from '../components';
+import { Link } from 'react-router-dom';
+import { Lock, ShoppingBag, Coins, Flame, HeartCrack } from 'lucide-react';
 
 export default function Account() {
     const { settings, updateSettings } = useSettings();
     const { user, emailSignUp, emailSignIn, resendVerificationEmail, logout } = useAuth();
+    const { economy, equipColor } = useEconomy();
     const location = useLocation();
 
     // Profile State
     const [username, setUsername] = useState('');
-    const [selectedColor, setSelectedColor] = useState('#3b82f6');
+    const [selectedColor, setSelectedColor] = useState('#ef4444');
     const [isEditingName, setIsEditingName] = useState(false);
     const [tempName, setTempName] = useState('');
     const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
@@ -43,9 +48,9 @@ export default function Account() {
     useEffect(() => {
         if (user) {
             setUsername(user.username || 'CubingUser');
-            setSelectedColor(user.color || '#3b82f6');
+            setSelectedColor(economy.equippedColor || user.color || '#ef4444');
         }
-    }, [user]);
+    }, [user, economy.equippedColor]);
 
     // Color Picker Close Click Outside
     useEffect(() => {
@@ -95,7 +100,11 @@ export default function Account() {
     };
 
     const handleColorSelect = (c: string) => {
+        if (!economy.unlockedColors.includes(c)) {
+            return;
+        }
         setSelectedColor(c);
+        equipColor(c);
         saveProfileUpdate(undefined, c);
         setIsColorPickerOpen(false);
     };
@@ -124,23 +133,19 @@ export default function Account() {
         if (!user) return;
         setDownloadLoading(true);
         try {
-            // 1. Fetch User Profile Document
             const userDocSnap = await getDoc(doc(db, 'users', user.uid));
             const userData = userDocSnap.exists() ? userDocSnap.data() : { uid: user.uid, email: user.email, username: user.username, color: user.color };
 
-            // 2. Fetch User Solves from Firestore
             const solvesQuery = query(collection(db, 'solves'), where('userId', '==', user.uid));
             const solvesSnap = await getDocs(solvesQuery);
             const solvesList: any[] = [];
             solvesSnap.forEach(d => solvesList.push({ id: d.id, ...d.data() }));
 
-            // 3. Fetch User Sessions from Firestore
             const sessionsQuery = query(collection(db, 'sessions'), where('userId', '==', user.uid));
             const sessionsSnap = await getDocs(sessionsQuery);
             const sessionsList: any[] = [];
             sessionsSnap.forEach(d => sessionsList.push({ id: d.id, ...d.data() }));
 
-            // 4. Construct Data Backup Package
             const exportData = {
                 version: "1.0",
                 exportedAt: new Date().toISOString(),
@@ -151,7 +156,6 @@ export default function Account() {
                 sessions: sessionsList
             };
 
-            // 5. Trigger Browser Download
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
             const downloadAnchor = document.createElement('a');
             downloadAnchor.setAttribute("href", dataStr);
@@ -168,12 +172,6 @@ export default function Account() {
             setDownloadLoading(false);
         }
     };
-
-    const colors = [
-        '#ef4444', '#f97316', '#eab308', '#22c55e',
-        '#06b6d4', '#3b82f6', '#a855f7', '#ec4899',
-        '#64748b', '#000000'
-    ];
 
     const SettingRow = ({ label, description, children }: { label: string, description: string, children: React.ReactNode }) => (
         <div className="flex items-center justify-between py-2 group border-b border-border/20 last:border-0">
@@ -212,6 +210,56 @@ export default function Account() {
         </div>
     );
 
+    const VaultStatsTab = () => (
+        <div className="p-4 flex flex-col gap-6 max-w-xl">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="p-4 bg-bg-secondary border border-border rounded-xl">
+                    <div className="flex items-center gap-2 text-xs font-bold text-text-secondary uppercase mb-1">
+                        <Coins className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Total Won</span>
+                    </div>
+                    <div className="text-xl font-bold font-mono text-text-primary">
+                        {economy.stats.totalWon.toLocaleString()}
+                    </div>
+                </div>
+
+                <div className="p-4 bg-bg-secondary border border-border rounded-xl">
+                    <div className="flex items-center gap-2 text-xs font-bold text-text-secondary uppercase mb-1">
+                        <Flame className="w-3.5 h-3.5 text-orange-500" />
+                        <span>Best Multiplier</span>
+                    </div>
+                    <div className="text-xl font-bold font-mono text-text-primary">
+                        {economy.stats.highestMultiplier}x
+                    </div>
+                </div>
+
+                <div className="p-4 bg-bg-secondary border border-border rounded-xl">
+                    <div className="flex items-center gap-2 text-xs font-bold text-text-secondary uppercase mb-1">
+                        <HeartCrack className="w-3.5 h-3.5 text-rose-500" />
+                        <span>Near Misses</span>
+                    </div>
+                    <div className="text-xl font-bold font-mono text-text-primary">
+                        {economy.stats.nearMissesCount}
+                    </div>
+                </div>
+            </div>
+
+            <div className="p-4 bg-bg-secondary border border-border rounded-xl flex items-center justify-between">
+                <div>
+                    <h4 className="text-sm font-bold text-text-primary mb-0.5">Visit the Store</h4>
+                    <p className="text-xs text-text-secondary">Unlock exponential color palettes, themes, and gacha loot boxes.</p>
+                </div>
+                <Link
+                    to="/store"
+                    className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white font-bold text-xs rounded-lg hover:opacity-90 transition-opacity"
+                >
+                    <ShoppingBag className="w-4 h-4" />
+                    <span>Go to Store</span>
+                </Link>
+            </div>
+        </div>
+    );
+
     const DangerZoneTab = () => (
         <div className="p-4 flex flex-col items-start gap-4 max-w-lg">
             <div className="p-3 bg-red-500/10 border border-red-500/20 rounded text-sm text-red-500 flex items-start gap-2">
@@ -247,7 +295,7 @@ export default function Account() {
     );
 
     return (
-        <div className="flex h-screen bg-bg-primary overflow-hidden relative">
+        <div className="flex h-full w-full bg-bg-primary overflow-hidden relative">
             <div className="flex-1 flex flex-col h-full bg-bg-primary min-w-0 transition-all duration-300 relative z-0">
                 {/* Header (Mobile) */}
                 <header className="h-14 border-b border-border flex items-center justify-between px-4 bg-bg-secondary md:hidden shrink-0">
@@ -366,27 +414,58 @@ export default function Account() {
                                 {/* Avatar */}
                                 <div className="relative shrink-0">
                                     <div
-                                        className="w-24 h-24 rounded-2xl shadow-lg cursor-pointer transition-transform hover:scale-105 active:scale-95"
+                                        className="w-24 h-24 rounded-2xl shadow-lg cursor-pointer transition-transform hover:scale-105 active:scale-95 flex items-center justify-center"
                                         style={{ backgroundColor: selectedColor }}
                                         onClick={() => setIsColorPickerOpen(!isColorPickerOpen)}
-                                        title="Click to change profile color"
+                                        title="Click to select unlocked color"
                                     />
 
-                                    {/* Color Picker Popover */}
+                                    {/* Color Picker Popover (Restricted to Unlocked Colors) */}
                                     {isColorPickerOpen && (
                                         <div
                                             ref={colorPickerRef}
-                                            className="absolute top-full left-0 mt-3 bg-bg-secondary border border-border shadow-2xl rounded-xl p-3 z-50 grid grid-cols-5 gap-2 animate-in fade-in zoom-in-95 w-[190px]"
+                                            className="absolute top-full left-0 mt-3 bg-bg-secondary border border-border shadow-2xl rounded-2xl p-4 z-50 animate-in fade-in zoom-in-95 w-[240px]"
                                             onClick={(e) => e.stopPropagation()}
                                         >
-                                            {colors.map(c => (
-                                                <button
-                                                    key={c}
-                                                    onClick={() => handleColorSelect(c)}
-                                                    className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 cursor-pointer ${selectedColor === c ? 'border-text-primary scale-110 shadow-sm' : 'border-transparent'}`}
-                                                    style={{ backgroundColor: c }}
-                                                />
-                                            ))}
+                                            <div className="text-[11px] font-bold uppercase text-text-secondary mb-2 tracking-wider">
+                                                Unlocked Colors
+                                            </div>
+
+                                            <div className="grid grid-cols-4 gap-2 mb-3">
+                                                {COLOR_LADDER.map(item => {
+                                                    const isUnlocked = economy.unlockedColors.includes(item.hex);
+                                                    const isSelected = selectedColor.toLowerCase() === item.hex.toLowerCase();
+
+                                                    return (
+                                                        <button
+                                                            key={item.id}
+                                                            onClick={() => isUnlocked && handleColorSelect(item.hex)}
+                                                            disabled={!isUnlocked}
+                                                            title={isUnlocked ? `${item.name} (${item.hex})` : `Locked (${item.name} - ${item.price} coins)`}
+                                                            className={`w-9 h-9 rounded-xl border-2 transition-all flex items-center justify-center relative ${
+                                                                isSelected
+                                                                    ? 'border-text-primary scale-110 shadow-md ring-2 ring-accent/30'
+                                                                    : isUnlocked
+                                                                    ? 'border-transparent hover:scale-105 cursor-pointer'
+                                                                    : 'border-transparent opacity-40 cursor-not-allowed'
+                                                            }`}
+                                                            style={{ backgroundColor: item.hex }}
+                                                        >
+                                                            {!isUnlocked && <Lock className="w-3.5 h-3.5 text-white/90 drop-shadow" />}
+                                                            {isSelected && <Check className="w-4 h-4 text-white stroke-[3] drop-shadow" />}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            <Link
+                                                to="/store"
+                                                onClick={() => setIsColorPickerOpen(false)}
+                                                className="w-full py-1.5 px-2 bg-bg-hover hover:bg-border rounded-lg text-xs font-bold text-accent flex items-center justify-center gap-1.5 transition-colors"
+                                            >
+                                                <ShoppingBag className="w-3.5 h-3.5" />
+                                                <span>Buy Colors in Store</span>
+                                            </Link>
                                         </div>
                                     )}
                                 </div>
@@ -422,6 +501,14 @@ export default function Account() {
                                             </button>
                                         </div>
                                     )}
+
+                                    {/* Equipped Title */}
+                                    {economy.equippedCosmetics.title && (
+                                        <div className="text-xs font-mono text-accent font-semibold mt-0.5">
+                                            {economy.equippedCosmetics.title}
+                                        </div>
+                                    )}
+
                                     <p className="text-text-secondary text-sm mt-1">{user.email}</p>
 
                                     {/* Short ID */}
@@ -460,6 +547,7 @@ export default function Account() {
                                 <Tabs
                                     tabs={[
                                         { label: "Profile Statistics", id: "stats", content: <ProfileStatsTab /> },
+                                        { label: "Vault & Gambling", id: "vault", content: <VaultStatsTab /> },
                                         { label: "Social Media Links", id: "socials", content: <SocialsTab /> },
                                         { label: "Cubing Friends", id: "friends", content: <CubingFriendsTab /> },
                                         { label: "Timer Settings", id: "timer", content: <TimerSettingsTab /> },
