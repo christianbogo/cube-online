@@ -4,13 +4,12 @@ import Topbar from './Topbar';
 import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
 import DataSidebar from './DataSidebar';
-import { useSolves } from '../contexts/SolvesContext';
+import { useSolves } from '../../contexts/SolvesContext';
 
 export default function Layout() {
     const navigate = useNavigate();
     const location = useLocation();
     const { isPrivateMode, togglePrivateMode, syncStatus } = useSolves();
-    // const { confirm: confirmAction } = useConfirm(); // Unused in this version
 
     // Persistence Helpers
     const getStoredWidth = (key: string, defaultWidth: number) => {
@@ -38,7 +37,7 @@ export default function Layout() {
     useEffect(() => localStorage.setItem('sidebar_data_width', dataWidth.toString()), [dataWidth]);
     const [isResizingLeft, setIsResizingLeft] = useState(false);
     const [isResizingRight, setIsResizingRight] = useState(false);
-    const [consoleInfo, setConsoleInfo] = useState<string | null>(null); // For footer
+    const [consoleInfo, setConsoleInfo] = useState<string | null>(null);
     const layoutRef = useRef<HTMLDivElement>(null);
 
     // Constants
@@ -65,8 +64,6 @@ export default function Layout() {
         };
     }, []);
 
-
-
     const toggleLeftSidebar = useCallback(() => {
         if (isLeftCollapsed) {
             setLeftWidth(lastOpenLeftWidth < MIN_EXPANDED_WIDTH ? 240 : lastOpenLeftWidth);
@@ -88,7 +85,6 @@ export default function Layout() {
     // Global Keyboard Shortcuts
     useEffect(() => {
         const handleGlobalKeyDown = (e: KeyboardEvent) => {
-            // Safety: Ignore keybinds if user is typing in an input
             const target = e.target as HTMLElement;
             if (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) return;
 
@@ -115,7 +111,6 @@ export default function Layout() {
                 }
             }
 
-            // Shortcuts
             if (e.key === 's') { if (!isPrivateMode) navigate('/data'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/data'); } }
             if (e.key === 'a') { if (!isPrivateMode) navigate('/account'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/account'); } }
             if (e.key === 'c') { if (!isPrivateMode) navigate('/'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/'); } }
@@ -123,7 +118,7 @@ export default function Layout() {
         };
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-    }, [navigate, toggleLeftSidebar, toggleRightSidebar, location.pathname, isPrivateMode, togglePrivateMode]); // Removed confirmAction dep as it's not used in simple implementation or causing issues
+    }, [navigate, toggleLeftSidebar, toggleRightSidebar, location.pathname, isPrivateMode, togglePrivateMode]);
 
     const startResizingLeft = useCallback(() => setIsResizingLeft(true), []);
     const startResizingRight = useCallback(() => setIsResizingRight(true), []);
@@ -260,5 +255,3 @@ function SyncIndicator({ status }: { status: string }) {
         </span>
     );
 }
-
-// SessionToast moved to Cube page as per request

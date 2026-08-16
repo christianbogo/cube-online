@@ -1,11 +1,11 @@
 import { Box, BarChart2, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Calendar, Info, Keyboard } from 'lucide-react';
-import { useTheme } from './ThemeProvider';
+import { useTheme } from '../ui/ThemeProvider';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useSolves } from '../contexts/SolvesContext';
-import { useAuth } from '../contexts/AuthContext';
-import { useConfirm } from '../contexts/ConfirmationContext';
+import { useSolves } from '../../contexts/SolvesContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useConfirm } from '../../contexts/ConfirmationContext';
 
-interface LeftSidebarProps {
+export interface LeftSidebarProps {
     collapsed: boolean;
     onToggleCollapse: () => void;
 }
@@ -83,7 +83,6 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
 
             {/* Bottom Actions */}
             <div className="p-2 border-t border-border flex flex-col gap-2">
-
                 {/* Theme Selector */}
                 {!collapsed ? (
                     <div className="flex items-center justify-between bg-bg-hover rounded-md p-1 border border-border/50">

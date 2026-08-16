@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import Table from '../components/Table';
+import { Table } from '../components';
 import { AlertTriangle, X, Trash, Save, Share2, Copy, Check } from 'lucide-react';
 import { type Solve, useSolves } from '../contexts/SolvesContext';
 import { useSettings } from '../contexts/SettingsContext';

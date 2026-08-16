@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { useSolves, type Solve } from '../contexts/SolvesContext';
-import { useSettings } from '../contexts/SettingsContext';
-import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage, standardDeviation } from '../utils/calculations';
+import { useAuth } from '../../contexts/AuthContext';
+import { useSolves, type Solve } from '../../contexts/SolvesContext';
+import { useSettings } from '../../contexts/SettingsContext';
+import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage, standardDeviation } from '../../utils/calculations';
 import { ChevronDown, Calendar, Clock, Layers, Archive, CalendarDays, CalendarRange } from 'lucide-react';
 import { startOfYear, startOfMonth, startOfWeek, startOfDay, format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
@@ -42,7 +42,7 @@ const SCRAMBLE_TYPES = [
     { label: 'Sq-1', value: 'sq1' },
 ];
 
-export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, collapsed: _collapsed }: { onToggleCollapse: () => void, collapsed: boolean }) {
+export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, collapsed: _collapsed }: { onToggleCollapse?: () => void, collapsed?: boolean }) {
     const { user } = useAuth();
     const { solves } = useSolves();
     const { settings, updateSettings } = useSettings();
@@ -63,19 +63,13 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
     }, [searchParams]);
 
     // -- Effects --
-    // Sync Grouping to URL and LocalStorage
     useEffect(() => {
         localStorage.setItem('sidebar_grouping', grouping);
-
-        // Update URL if needed (preserve selection if valid?)
-        // Actually, changing grouping usually invalidates selection keys (different format)
-        // So we might want to clear selection on grouping change unless we are careful.
-        // For now, let's just update the param.
 
         const newParams = new URLSearchParams(searchParams);
         if (newParams.get('grouping') !== grouping) {
             newParams.set('grouping', grouping);
-            newParams.delete('selected'); // Clear selection on group change
+            newParams.delete('selected');
             setSearchParams(newParams, { replace: true });
         }
     }, [grouping, setSearchParams, searchParams]);
@@ -84,11 +78,8 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
         localStorage.setItem('sidebar_stat_column', statColumn);
     }, [statColumn]);
 
-
     // 1. Filter Solves by Event (and User)
     const filteredSolves = useMemo(() => {
-        // If not logged in, we still show local solves which are in context
-        // But context might have mixed types.
         let base = solves;
         if (user) {
             base = solves.filter(s => s.userId === user.uid);
@@ -143,8 +134,8 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
                     break;
                 case 'sessions':
                     key = solve.sessionId || 'unknown';
-                    label = 'Session'; // Will be refined
-                    orderDate = date; // Approximate by last solve
+                    label = 'Session';
+                    orderDate = date;
                     break;
             }
 
@@ -154,11 +145,9 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
             groups.get(key)!.solves.push(solve);
         });
 
-        // Refine Labels for Sessions (Use Date/Time of first solve in group)
         if (grouping === 'sessions') {
             return Array.from(groups.values()).map(g => {
-                const lastSolve = g.solves[0]; // Newest
-                // Basic label: Date + Time
+                const lastSolve = g.solves[0];
                 const dateStr = format(new Date(lastSolve.date), 'MMM d, h:mm a');
                 return { ...g, label: dateStr, date: new Date(lastSolve.date) };
             }).sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -194,7 +183,6 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
         return `${secs}s`;
     };
 
-    // -- Selection Handler --
     const handleSelect = (key: string) => {
         const newSet = new Set(selectedKeys);
         if (newSet.has(key)) newSet.delete(key);
@@ -214,12 +202,8 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
         let targetSolves: Solve[] = [];
 
         if (selectedKeys.size === 0) {
-            // Assume ALL solves for event
             targetSolves = filteredSolves;
         } else {
-            // Filter based on selection
-            // We need to map back from keys to solves.
-            // Efficient way: iterate groupedItems which has keys and solves.
             groupedItems.forEach(g => {
                 if (selectedKeys.has(g.key)) {
                     targetSolves.push(...g.solves);
@@ -230,13 +214,9 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
         if (targetSolves.length === 0) return null;
 
         const count = targetSolves.length;
-        const mean = calculateAverage(targetSolves, targetSolves.length); // Mean of all? Usually mean is average of all times excluding DNFs
+        const mean = calculateAverage(targetSolves, targetSolves.length);
         const stdDev = standardDeviation(targetSolves);
-
-        // Single
         const bestSingle = calculateBestSingle(targetSolves);
-
-        // Averages
         const bestAo5 = calculateBestAverage(targetSolves, 5);
         const bestAo12 = calculateBestAverage(targetSolves, 12);
         const bestAo100 = calculateBestAverage(targetSolves, 100);
@@ -262,15 +242,12 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
             bestAo10000,
             totalTime
         };
-
     }, [selectedKeys, groupedItems, filteredSolves]);
-
 
     return (
         <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-sm overflow-hidden min-w-0 font-sans">
             {/* Header Area */}
             <div className="flex flex-col border-b border-border/50 bg-bg-secondary/50 backdrop-blur-sm sticky top-0 z-10 text-text-primary">
-
                 {/* Event Selector */}
                 <div className="p-2 border-b border-border/50 flex justify-center relative group">
                     <select
@@ -336,14 +313,12 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
                                     ${isSelected ? 'bg-accent/10 border-l-2 border-l-accent pl-[14px]' : 'border-l-2 border-l-transparent'}
                                 `}
                             >
-                                {/* Label */}
                                 <div className="min-w-0">
                                     <span className={`font-medium truncate ${isSelected ? 'text-accent' : 'text-text-primary'}`}>
                                         {item.label}
                                     </span>
                                 </div>
 
-                                {/* Stat */}
                                 <div className="flex items-center justify-end font-mono text-sm text-text-primary min-w-[60px]">
                                     {statColumn === 'count' && <span>{item.stats.count}</span>}
                                     {statColumn === 'single' && <span>{formatTime(item.stats.bestSingle)}</span>}
@@ -380,7 +355,6 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
 
                 {selectedStats ? (
                     <div className="flex flex-col gap-1 text-xs px-1">
-                        {/* Summary */}
                         <div className="flex justify-between items-center">
                             <span className="text-text-secondary">Solves</span>
                             <span className="font-mono text-text-primary">{selectedStats.count}</span>
@@ -400,7 +374,6 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
 
                         <div className="h-[1px] bg-border/50 my-1" />
 
-                        {/* Bests */}
                         <div className="flex justify-between items-center">
                             <span className="text-text-secondary">Best</span>
                             <span className="font-mono text-text-primary font-bold">{formatTime(selectedStats.bestSingle)}</span>
@@ -437,4 +410,3 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
         </aside>
     );
 }
-

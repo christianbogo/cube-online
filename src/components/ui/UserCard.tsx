@@ -1,28 +1,27 @@
 import { Star, Ban } from 'lucide-react';
-import { formatTime } from '../utils/formatTime';
-import type { TimerState, LiveUser, SimpleSolve } from '../types/liveTypes'; // We will define these types
+import { formatTime } from '../../utils/formatTime';
+import type { TimerState, LiveUser, SimpleSolve } from '../../types';
 
-export const UserCard = ({ user, isStarred, onStar, onBlock }: {
-    user: LiveUser,
-    isStarred: boolean,
-    onStar: (id: string, e: React.MouseEvent) => void,
-    onBlock: (id: string, e: React.MouseEvent) => void
-}) => {
+export interface UserCardProps {
+    user: LiveUser;
+    isStarred: boolean;
+    onStar: (id: string, e: React.MouseEvent) => void;
+    onBlock: (id: string, e: React.MouseEvent) => void;
+}
 
+export const UserCard = ({ user, isStarred, onStar, onBlock }: UserCardProps) => {
     // Determine Border Color based on Status
     const getBorderColor = (status: TimerState) => {
         switch (status) {
             case 'RUNNING': return 'border-green-500';
             case 'INSPECTION': return 'border-orange-500';
             case 'SOLVED': return 'border-blue-500';
-            case 'PRIMING': return 'border-red-500'; // Or generic ready color?
-            default: return 'border-border'; // Idle
+            case 'PRIMING': return 'border-red-500';
+            default: return 'border-border';
         }
     };
 
     // Format Solves Display
-    // 0: Most Recent (Large)
-    // 1-3: Older (Small)
     const solves = user.recentSolves || [];
     const recent = solves[0];
     const history = solves.slice(1, 4);
@@ -72,7 +71,6 @@ export const UserCard = ({ user, isStarred, onStar, onBlock }: {
 
             {/* Solves Area */}
             <div className="flex-1 flex flex-col items-center justify-center p-2 pt-0 gap-1">
-
                 {/* Main (Recent) Solve */}
                 {recent ? (
                     <div className={`text-3xl font-mono font-medium tracking-tight
@@ -89,7 +87,7 @@ export const UserCard = ({ user, isStarred, onStar, onBlock }: {
                 <div className="flex gap-2 mt-1">
                     {[0, 1, 2].map(i => {
                         const s = history[i];
-                        if (!s) return <div key={i} className="w-8 h-4 bg-black/10 rounded" />; // Placeholder
+                        if (!s) return <div key={i} className="w-8 h-4 bg-black/10 rounded" />;
                         return (
                             <div key={i} className={`text-[10px] font-mono px-1 rounded
                                 ${isDaily(s) ? 'text-accent bg-accent/10' : 'text-text-secondary bg-black/20'}

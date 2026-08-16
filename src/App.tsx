@@ -4,7 +4,7 @@ import { SettingsProvider } from './contexts/SettingsContext';
 import { SolvesProvider } from './contexts/SolvesContext';
 import { SessionProvider } from './contexts/SessionContext';
 import { ConfirmationProvider } from './contexts/ConfirmationContext';
-import Layout from './components/Layout';
+import { Layout } from './components';
 import Cube from './pages/Cube';
 import Daily from './pages/Daily';
 import Data from './pages/Data';

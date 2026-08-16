@@ -1,13 +1,15 @@
 # Cutter's Cubing - Architecture & Style Guide
 
 ## Overview
-Cutter's Cubing is a modern, high-performance speedcubing timer application built with **Vite**, **React**, and **Tailwind CSS**. The design philosophy emphasizes a "No Zoom, No Scroll" main interface for the timer, while specialized pages offer rich data visualization and settings.
+Cutter's Cubing is a modern, high-performance speedcubing timer application built with **Vite**, **React**, and **Tailwind CSS**. The design philosophy emphasizes a "No Zoom, No Scroll" main interface for the timer, while specialized pages offer rich data visualization, multiplayer features, and settings.
 
 ## Tech Stack
-- **Framework**: React 18+ (with Hooks)
+- **Framework**: React 19 (with Hooks)
 - **Build Tool**: Vite
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS v4 (configured via `@tailwindcss/vite`)
+- **Backend / Database**: Firebase (Auth, Firestore, Realtime Database)
+- **Hosting / Deployment**: Vercel
 - **Icons**: `lucide-react`
 - **Routing**: `react-router-dom`
 
@@ -15,52 +17,59 @@ Cutter's Cubing is a modern, high-performance speedcubing timer application buil
 
 ```
 src/
-├── components/         # Reusable UI components
-│   ├── Layout.tsx      # Main application shell (Sidebar + Content + Resizable Panels)
-│   ├── Topbar.tsx      # Application header
-│   ├── LeftSidebar.tsx # Primary navigation
-│   ├── RightSidebar.tsx# Secondary information panel
-│   ├── Tabs.tsx        # Reusable Tabs component
-│   └── Table.tsx       # Reusable Table component
-├── pages/              # Route components
-│   ├── Cube.tsx        # Home/Timer page
-│   ├── Daily.tsx       # Daily challenges
-│   ├── ...             # Other feature pages
-├── index.css           # Global styles & CSS Variables
-└── App.tsx             # Route definitions
+├── assets/             # Static binary assets and design files
+├── components/         # Modular UI components
+│   ├── layout/         # Shell layout, navigation, and resizable sidebars (Layout, Topbar, LeftSidebar, RightSidebar, DataSidebar, FriendSidebar)
+│   ├── ui/             # Reusable UI primitives (Tabs, Table, Toast, UserCard, ThemeProvider)
+│   ├── account/        # Account & social tabs (CubingFriendsTab, ProfileStatsTab, SocialsTab)
+│   └── index.ts        # Central component barrel export
+├── contexts/           # React context providers (Auth, Session, Solves, Settings, Confirmation)
+├── lib/                # External services & client configs (firebase.ts)
+├── pages/              # Route views (Cube, Daily, Data, Account, About, Keybinds)
+├── types/              # Central TypeScript domain interfaces (solve, auth, session, settings, liveTypes)
+├── utils/              # Calculation, time formatting, and analysis helpers
+├── index.css           # Global styles & CSS variable theme tokens
+├── App.tsx             # Route declarations and context composition
+└── main.tsx            # Application entry point
 ```
+
+## Deployment with Vercel
+
+The application is hosted on **Vercel** with Vite SPA rewrites configured in [`vercel.json`](file:///Users/christiancutter/Developer/cube-online/vercel.json).
+
+### Build Configuration
+- **Build Command**: `npm run build` (`tsc -b && vite build`)
+- **Output Directory**: `dist`
+- **Install Command**: `npm install`
+
+### Environment Variables
+Configure the following Firebase environment variables in your Vercel Project Settings:
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_STORAGE_BUCKET`
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`
+- `VITE_FIREBASE_APP_ID`
+
+Firebase rules and indexes continue to be maintained via `firestore.rules`, `firestore.indexes.json`, and `database.rules.json`.
 
 ## Styling System
 
 We use a semantic CSS variable system integrated with Tailwind. This allows for seamless Light/Dark mode switching and easy theming.
 
 ### CSS Variables (`src/index.css`)
-We define semantic colors rather than raw colors.
-- `--bg-primary`: Main background (e.g., `#0d1117` in dark)
-- `--bg-secondary`: Sidebar/Header background (e.g., `#161b22` in dark)
+Semantic color tokens:
+- `--bg-primary`: Main background
+- `--bg-secondary`: Sidebar/Header background
 - `--text-primary`: Main text color
 - `--text-secondary`: Muted text color
 - `--border-color`: Border color for dividers/inputs
 - `--accent`: Brand accent color
 
-### Tailwind Integration
-These variables are mapped to Tailwind classes in the `@theme` directive (or implicitly supported by Tailwind v4 via `var()`).
-Example usage:
-```tsx
-<div className="bg-bg-primary text-text-primary border border-border">
-  Content
-</div>
-```
-
 ### Layout Patterns
 - **Full Screen**: The root `Layout` component is fixed height `h-screen` with `overflow-hidden` to prevent body scroll.
 - **Scrollable Areas**: Individual panels (features pages) use `overflow-y-auto` to handle their own scrolling.
-- **Sidebars**: `LeftSidebar` and `RightSidebar` are resizable flex items.
+- **Sidebars**: `LeftSidebar` and `RightSidebar` are resizable flex items with persistent state.
 
 ## Routing
 Routing is handled by `react-router-dom`. The `Layout` component serves as the parent route, rendering child pages via `<Outlet />`.
-
-## Adding New Features
-1. **Create Page**: Add a new component in `src/pages/`.
-2. **Add Route**: Import and add the `<Route>` to `src/App.tsx`.
-3. **Add Navigation**: Add the link and icon to the `navItems` array in `src/components/LeftSidebar.tsx`.

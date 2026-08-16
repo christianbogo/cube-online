@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 
-interface Tab {
+export interface Tab {
     id: string;
     label: string;
     content: React.ReactNode;
 }
 
-interface TabsProps {
+export interface TabsProps {
     tabs: Tab[];
     defaultTab?: string;
 }

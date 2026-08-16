@@ -8,13 +8,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import Tabs from '../components/Tabs';
-import { FriendSidebar } from '../components/FriendSidebar';
-
-// Extracted Components
-import SocialsTab from '../components/account/SocialsTab';
-import ProfileStatsTab from '../components/account/ProfileStatsTab';
-import CubingFriendsTab from '../components/account/CubingFriendsTab';
+import { Tabs, FriendSidebar, SocialsTab, ProfileStatsTab, CubingFriendsTab } from '../components';
 
 export default function Account() {
     const { settings, updateSettings } = useSettings();

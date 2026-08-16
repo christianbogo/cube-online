@@ -2,18 +2,9 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { doc, updateDoc, increment, getDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
+import type { SessionContextType } from '../types';
 
-
-
-interface SessionContextType {
-    currentSessionId: string | null;
-    startNewSession: (resume?: boolean) => Promise<string>;
-    updateSessionActivity: (incrementCount?: boolean, overrideSessionId?: string) => void;
-    checkSessionStatus: (lastSolveTime: number) => { isNewSessionNeeded: boolean };
-    setCurrentSessionId: (id: string | null) => void;
-    viewedSessionId: string | null;
-    setViewedSessionId: (id: string | null) => void;
-}
+export type { SessionContextType };
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
 

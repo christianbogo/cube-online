@@ -8,6 +8,7 @@ import {
 } from 'firebase/auth';
 import { doc, onSnapshot, query, collection, where, getDocs, writeBatch, deleteDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import type { UserData, SocialProfile, AuthContextType } from '../types';
 
 // Helper to generate 6-char alphanumeric ID
 const generateShortId = () => {
@@ -19,47 +20,7 @@ const generateShortId = () => {
     return result;
 };
 
-interface UserData {
-    uid: string;
-    shortId?: string;
-    email: string | null;
-    username: string;
-    color: string;
-    emailVerified: boolean;
-    starredUsers?: string[];
-    blockedUsers?: string[];
-}
-
-export interface SocialProfile {
-    id: string;
-    network: 'email' | 'discord' | 'twitter' | 'instagram' | 'youtube' | 'twitch' | 'other';
-    value: string;
-    privacy: 'hidden' | 'friends' | 'public';
-}
-
-interface UserData {
-    uid: string;
-    shortId?: string;
-    email: string | null;
-    username: string;
-    color: string;
-    emailVerified: boolean;
-    starredUsers?: string[];
-    blockedUsers?: string[];
-    socials?: SocialProfile[];
-}
-
-interface AuthContextType {
-    user: UserData | null;
-    loading: boolean;
-    emailSignUp: (email: string, pass: string) => Promise<any>;
-    emailSignIn: (email: string, pass: string) => Promise<any>;
-    resendVerificationEmail: () => Promise<void>;
-    logout: () => Promise<void>;
-    deleteUserAccount?: () => Promise<void>;
-    toggleStarUser: (targetUid: string) => Promise<void>;
-    toggleBlockUser: (targetUid: string) => Promise<void>;
-}
+export type { SocialProfile };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 

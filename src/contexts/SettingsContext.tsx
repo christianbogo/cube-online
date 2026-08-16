@@ -1,26 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import type { Settings, LocalDataSettings, SettingsContextType, DataBackupOption } from '../types';
 
-interface LocalDataSettings {
-    saveAll: boolean;
-    saveLastX: number;
-    localLimit: number;
-}
-
-interface Settings {
-    solveInspection: boolean;
-    primingLength: number;
-    showLiveTimer: boolean;
-    scrambleSize: number; // in rem
-    localDataSettings: LocalDataSettings;
-    dataBackup: 'all' | 'session-bests' | 'all-time-bests' | 'local-only';
-    dailySolves: boolean;
-    scrambleType: string;
-}
-
-interface SettingsContextType {
-    settings: Settings;
-    updateSettings: (newSettings: Partial<Settings>) => void;
-}
+export type { Settings, LocalDataSettings, SettingsContextType, DataBackupOption };
 
 const defaultSettings: Settings = {
     solveInspection: false,

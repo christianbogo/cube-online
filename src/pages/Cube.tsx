@@ -8,8 +8,8 @@ import { EyeOff, Minus, Plus, Radio, Search, ChevronUp, ChevronDown } from 'luci
 import { formatTime } from '../utils/formatTime';
 import { rtdb } from '../lib/firebase';
 import { ref, onDisconnect, set, onValue, remove } from 'firebase/database';
-import type { LiveUser, SimpleSolve, TimerState } from '../types/liveTypes';
-import { UserCard } from '../components/UserCard';
+import type { LiveUser, SimpleSolve, TimerState } from '../types';
+import { UserCard } from '../components';
 
 export default function Cube() {
     const { settings, updateSettings } = useSettings();

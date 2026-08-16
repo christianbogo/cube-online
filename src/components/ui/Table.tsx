@@ -1,6 +1,6 @@
 import React from 'react';
 
-interface Column<T> {
+export interface Column<T> {
     header: React.ReactNode;
     accessor: keyof T | ((item: T, index: number) => React.ReactNode);
     className?: string;
@@ -8,7 +8,7 @@ interface Column<T> {
     key?: string; // Unique key for sorting
 }
 
-interface TableProps<T> {
+export interface TableProps<T> {
     data: T[];
     columns: Column<T>[];
     onRowClick?: (item: T) => void;
@@ -19,7 +19,16 @@ interface TableProps<T> {
     className?: string;
 }
 
-export default function Table<T extends { id: string | number }>({ data, columns, onRowClick, sortConfig, onHeaderClick, headerClassName, rowClassName, className }: TableProps<T>) {
+export default function Table<T extends { id: string | number }>({
+    data,
+    columns,
+    onRowClick,
+    sortConfig,
+    onHeaderClick,
+    headerClassName,
+    rowClassName,
+    className
+}: TableProps<T>) {
     return (
         <div className={`w-full overflow-x-auto ${className || 'border border-border rounded-lg'}`}>
             <table className="w-full text-left text-sm border-collapse">

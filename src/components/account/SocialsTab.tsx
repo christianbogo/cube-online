@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Mail, Trash2, Plus, ChevronUp, ChevronDown } from 'lucide-react';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { useAuth, type SocialProfile } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
+import type { SocialProfile } from '../../types';
 
 export default function SocialsTab() {
     const { user } = useAuth();

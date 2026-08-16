@@ -5,38 +5,9 @@ import { useAuth } from './AuthContext';
 import { useSession } from './SessionContext';
 import { doc, setDoc, deleteDoc, collection, query, where, onSnapshot, serverTimestamp, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import type { Solve, Stats, SyncStatus } from '../types';
 
-export interface Solve {
-    id: string;
-    userId?: string;
-    sessionId?: string;
-    time: number; // in milliseconds
-    scramble: string;
-    date: string; // ISO string
-    penalty: 'none' | '+2' | 'DNF';
-    inspectionTime?: number;
-    inspectionPenalty?: 'none' | '+2' | 'DNF';
-    daily?: string | null; // ID of the daily scramble if applicable
-    scrambleType?: string; // e.g. '333', '444', 'clock'
-    anomalyApproved?: boolean;
-}
-
-interface Stats {
-    current: {
-        single: number | 'DNF' | null;
-        ao5: number | 'DNF' | null;
-        ao12: number | 'DNF' | null;
-        ao100: number | 'DNF' | null;
-    };
-    best: {
-        single: number | 'DNF' | null;
-        ao5: number | 'DNF' | null;
-        ao12: number | 'DNF' | null;
-        ao100: number | 'DNF' | null;
-    };
-}
-
-export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
+export type { Solve, Stats, SyncStatus };
 
 interface SolvesContextType {
     solves: Solve[];

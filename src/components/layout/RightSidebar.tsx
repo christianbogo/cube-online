@@ -1,13 +1,12 @@
-import { useSolves, type Solve } from '../contexts/SolvesContext';
-import { useAuth } from '../contexts/AuthContext';
-import { useSession } from '../contexts/SessionContext';
-// import { useConfirm } from '../contexts/ConfirmationContext'; // Removed unused
-import { useSettings } from '../contexts/SettingsContext';
+import { useSolves, type Solve } from '../../contexts/SolvesContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useSession } from '../../contexts/SessionContext';
+import { useSettings } from '../../contexts/SettingsContext';
 import { Trash2, ChevronLeft, ChevronRight, EyeOff, ChevronDown } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage } from '../utils/calculations';
+import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage } from '../../utils/calculations';
 
-interface RightSidebarProps {
+export interface RightSidebarProps {
     onToggleCollapse?: () => void;
     collapsed?: boolean;
 }
@@ -32,11 +31,9 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
     const { solves: allSolves, updateSolve, deleteSolve, isPrivateMode, togglePrivateMode } = useSolves();
     const { user } = useAuth();
     const { currentSessionId } = useSession();
-    // const { confirm: confirmAction } = useConfirm(); // Removed unused
-    const { settings, updateSettings } = useSettings(); // Use global settings
+    const { settings, updateSettings } = useSettings();
 
     // -- Derived State --
-    // "Local Experience" (Private Mode or Signed Out) vs "Cloud Experience" (Signed In & Online)
     const isLocalExperience = !user || isPrivateMode;
 
     // Filter Solves
@@ -51,7 +48,6 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
     // -- Pagination --
     const [pageLimit, setPageLimit] = useState(100);
     const paginatedSolves = useMemo(() => {
-        // Solves are already sorted Newest -> Oldest in Context
         return displaySolves.slice(0, pageLimit);
     }, [displaySolves, pageLimit]);
 
@@ -72,11 +68,11 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
 
     const stats = useMemo(() => {
         const activeSolves = currentSessionSolves;
-        const totalSolves = displaySolves; // For "All Time Best"
+        const totalSolves = displaySolves;
 
         const cs = (size: number) => calculateAverage(activeSolves, size);
-        const cbs = (size: number) => calculateBestAverage(activeSolves, size); // Session Best
-        const bs = (size: number) => calculateBestAverage(totalSolves, size); // Global Best
+        const cbs = (size: number) => calculateBestAverage(activeSolves, size);
+        const bs = (size: number) => calculateBestAverage(totalSolves, size);
 
         return {
             current: {
@@ -112,7 +108,6 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
 
     const handleDeleteSolve = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        // Removed confirmation as requested
         deleteSolve(id);
     };
 
@@ -128,18 +123,12 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
     const copyScramble = (scramble: string, e: React.MouseEvent) => {
         e.stopPropagation();
         navigator.clipboard.writeText(scramble);
-        // Visual feedback handled in SolveItem component state if needed, 
-        // OR we can use a Toast? User asked for visual feedback.
-        // Let's pass a success callback or handle it in SolveItem.
-        // Actually copyScramble is passed to SolveItem. 
-        // I'll update SolveItem to handle the UI state.
     };
 
     if (collapsed) {
         return (
             <aside className="h-full bg-bg-secondary w-[50px] flex flex-col border-l border-border transition-all duration-300">
                 <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col items-center py-4 gap-1">
-                    {/* Stack of squares for current session */}
                     {currentSessionSolves.map(solve => {
                         let bgClass = "bg-text-secondary/20";
                         if (solve.daily) {
@@ -157,7 +146,6 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                 </div>
 
                 <div className="p-2 border-t border-border flex flex-col gap-2 items-center">
-                    {/* Private Mode Toggle (Icon Only) */}
                     <button
                         onClick={togglePrivateMode}
                         onFocus={(e) => e.target.blur()}
@@ -180,16 +168,13 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
         );
     }
 
-    // Prepare stats for display
     const bestStats = statsMode === 'session' ? stats.sessionBest : stats.allTimeBest;
 
     return (
         <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-text-secondary text-sm overflow-hidden min-w-0 font-sans relative">
-
             {/* Header Area (Stats) */}
             <div className="flex flex-col border-b border-border bg-bg-secondary sticky top-0 z-10">
-
-                {/* Event Selector - Moved Here */}
+                {/* Event Selector */}
                 <div className="p-2 border-b border-border/50 flex justify-center relative group">
                     <select
                         value={settings.scrambleType}
@@ -231,24 +216,12 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
             <div className="flex-1 overflow-y-auto custom-scrollbar">
                 <div className="flex flex-col">
                     {paginatedSolves.map((solve, index) => {
-                        // For dividers: we actually want to show the divider BEFORE the group if logic implies break.
-                        // But here we iterate Newest -> Oldest.
-                        // So if index+1 (older) is different session than current, current starts a NEW session block (visually above older).
-                        // So we render header ABOVE current if it's the start of a block (relative to older).
-                        // Wait, list is top-down. Top is newest.
-                        // If solve is start of a session (vs older neighbour), header goes ABOVE solve.
-                        // Logic: If NO newer solve (index 0) OR newer solve (index-1) belongs to different session/gap => Header.
-
-                        const newerSolve = paginatedSolves[index - 1]; // Newer
+                        const newerSolve = paginatedSolves[index - 1];
                         const showHeader = !newerSolve || (
                             (new Date(newerSolve.date).getTime() - new Date(solve.date).getTime() > 1000 * 60 * 60) ||
                             (newerSolve.sessionId !== solve.sessionId)
                         );
 
-                        // Numbering: Total - Index
-                        // Assuming allSolves is complete list.
-                        // If local experience, simple length - index.
-                        // If filtering... we filtered `displaySolves`.
                         const solveNumber = displaySolves.length - index;
 
                         return (
@@ -297,7 +270,6 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
 
             {/* Footer */}
             <div className="p-2 border-t border-border flex flex-col gap-2">
-                {/* Private Mode Toggle (Ghost) */}
                 <button
                     onClick={togglePrivateMode}
                     onFocus={(e) => e.target.blur()}
@@ -309,7 +281,6 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                     {isPrivateMode ? 'Private Session Active' : 'Private Session'}
                 </button>
 
-                {/* Collapse Toggle */}
                 <button
                     onClick={onToggleCollapse}
                     className={`w-full flex items-center justify-center p-2 rounded-md hover:bg-bg-hover transition-colors text-text-secondary hover:text-text-primary`}
@@ -322,12 +293,9 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                     )}
                 </button>
             </div>
-
         </aside>
     );
 }
-
-// -- Sub-Components --
 
 const StatItem = ({ label, current, best, show }: { label: string, current: any, best: any, show: boolean }) => {
     if (!show) return null;
@@ -385,7 +353,6 @@ const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onC
         setTimeout(() => setIsCopied(false), 2000);
     };
 
-    // Special Scramble Logic
     let badge = null;
     if (solve.daily) {
         const id = solve.daily.toLowerCase();
@@ -404,21 +371,17 @@ const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onC
                 ${expanded ? 'bg-bg-hover/30 border-accent' : 'border-transparent hover:bg-bg-hover/30'}
             `}
         >
-            {/* Top Row: # Time Badge */}
             <div className="flex items-center justify-between px-4 py-2">
                 <div className="flex items-center gap-3 min-w-0">
                     <span className="text-text-secondary/40 font-mono w-6 text-right text-[10px]">{number}</span>
                     <span className={`font-mono font-medium ${solve.penalty === 'DNF' ? 'text-red-500' : (badge ? badge.color : 'text-text-primary')}`}>
                         {formatTimeDisplay(solve)}
                     </span>
-                    {/* Badge Removed - Color applied to time */}
                 </div>
             </div>
 
-            {/* Expanded Details */}
             {expanded && (
                 <div className="px-4 pb-3 pt-1 flex flex-col gap-2 animate-in slide-in-from-top-1 duration-200">
-                    {/* Date or Special Info */}
                     <div className="text-[10px] text-text-secondary">
                         {badge ? (
                             <span className={badge.color}>
@@ -440,7 +403,6 @@ const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onC
                         )}
                     </div>
 
-                    {/* Scramble */}
                     <div
                         onClick={handleCopy}
                         className={`text-[11px] font-mono break-all leading-normal p-2 rounded cursor-pointer transition-colors
@@ -450,7 +412,6 @@ const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onC
                         {isCopied ? 'Copied to clipboard!' : solve.scramble}
                     </div>
 
-                    {/* Actions */}
                     <div className="flex items-center justify-between pt-1">
                         <div className="flex items-center gap-2">
                             <button

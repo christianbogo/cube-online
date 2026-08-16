@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 
-interface ToastProps {
+export interface ToastAction {
+    label: string;
+    onClick: () => void;
+    variant?: 'primary' | 'secondary' | 'ghost';
+}
+
+export interface ToastProps {
     message: string;
     visible: boolean;
     onClose: () => void;
-    actions?: {
-        label: string;
-        onClick: () => void;
-        variant?: 'primary' | 'secondary' | 'ghost';
-    }[];
+    actions?: ToastAction[];
 }
 
 export default function Toast({ message, visible, onClose, actions }: ToastProps) {
