@@ -29,7 +29,7 @@ import {
     addYears, subYears, isSameDay, eachDayOfInterval, getDay
 } from 'date-fns';
 
-export default function Data() {
+export default function Logs() {
     const { solves, updateSolve, deleteSolve } = useSolves();
     const { settings } = useSettings();
     const { user } = useAuth();

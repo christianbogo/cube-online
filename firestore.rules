@@ -16,6 +16,10 @@ service cloud.firestore {
       match /private/{document=**} {
       	allow read, write: if request.auth != null && request.auth.uid == userId;
       }
+      
+      match /goals/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
     }
     
     // Solves
@@ -30,6 +34,12 @@ service cloud.firestore {
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
       allow update: if request.auth != null && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+    }
+
+    // Global Stats (e.g. goal completion percentages and distribution)
+    match /global_stats/{statId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
     }
   }
 }

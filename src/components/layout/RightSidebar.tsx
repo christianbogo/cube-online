@@ -5,25 +5,12 @@ import { useSettings } from '../../contexts/SettingsContext';
 import { Trash2, ChevronLeft, ChevronRight, EyeOff, ChevronDown } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage } from '../../utils/calculations';
+import { SCRAMBLE_TYPES } from '../../utils/constants';
 
 export interface RightSidebarProps {
-    onToggleCollapse?: () => void;
-    collapsed?: boolean;
+    collapsed: boolean;
+    onToggleCollapse: () => void;
 }
-
-const SCRAMBLE_TYPES = [
-    { label: '3x3', value: '333' },
-    { label: '2x2', value: '222' },
-    { label: '4x4', value: '444' },
-    { label: '5x5', value: '555' },
-    { label: '6x6', value: '666' },
-    { label: '7x7', value: '777' },
-    { label: 'Clock', value: 'clock' },
-    { label: 'Mega', value: 'minx' },
-    { label: 'Pyra', value: 'pyram' },
-    { label: 'Skewb', value: 'skewb' },
-    { label: 'Sq-1', value: 'sq1' },
-];
 
 type StatsMode = 'best' | 'session';
 
@@ -167,7 +154,10 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                 <div className="p-2 border-b border-border/50 flex justify-center relative group">
                     <select
                         value={settings.scrambleType}
-                        onChange={(e) => updateSettings({ scrambleType: e.target.value })}
+                        onChange={(e) => {
+                            updateSettings({ scrambleType: e.target.value });
+                            e.target.blur();
+                        }}
                         className="appearance-none bg-transparent font-medium border-none hover:text-accent
                                 focus:outline-none cursor-pointer text-center text-sm w-full z-10"
                     >

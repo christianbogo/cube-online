@@ -1,15 +1,14 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
-import { EconomyProvider } from './contexts/EconomyContext';
 import { SolvesProvider } from './contexts/SolvesContext';
+import { GoalsProvider } from './contexts/GoalsContext';
 import { SessionProvider } from './contexts/SessionContext';
 import { ConfirmationProvider } from './contexts/ConfirmationContext';
 import { Layout } from './components';
 import Cube from './pages/Cube';
-import Store from './pages/Store';
-import Guide from './pages/Guide';
-import Data from './pages/Data';
+import Logs from './pages/Logs';
+import Goals from './pages/Goals';
 import Account from './pages/Account';
 import Keybinds from './pages/Keybinds';
 import type { ReactNode } from 'react';
@@ -25,28 +24,30 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <EconomyProvider>
-          <SettingsProvider>
-            <ConfirmationProvider>
-              <SessionProvider>
-                <SolvesProvider>
+        <SettingsProvider>
+          <ConfirmationProvider>
+            <SessionProvider>
+              <SolvesProvider>
+                <GoalsProvider>
                   <Routes>
                     <Route path="/" element={<Layout />}>
                       <Route index element={<Cube />} />
-                      <Route path="store" element={<Store />} />
-                      <Route path="guide" element={<Guide />} />
-                      <Route path="info" element={<Guide />} />
-                      <Route path="data" element={<ProtectedRoute><Data /></ProtectedRoute>} />
-                      <Route path="data/:type/:id" element={<ProtectedRoute><Data /></ProtectedRoute>} />
+                      <Route path="logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
+                      <Route path="logs/:type/:id" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
+                      <Route path="data" element={<Navigate to="/logs" replace />} />
+                      <Route path="data/*" element={<Navigate to="/logs" replace />} />
+                      <Route path="stats" element={<Navigate to="/logs" replace />} />
+                      <Route path="stats/*" element={<Navigate to="/logs" replace />} />
+                      <Route path="goals" element={<Goals />} />
                       <Route path="account" element={<Account />} />
                       <Route path="keybinds" element={<Keybinds />} />
                     </Route>
                   </Routes>
-                </SolvesProvider>
-              </SessionProvider>
-            </ConfirmationProvider>
-          </SettingsProvider>
-        </EconomyProvider>
+                </GoalsProvider>
+              </SolvesProvider>
+            </SessionProvider>
+          </ConfirmationProvider>
+        </SettingsProvider>
       </AuthProvider>
     </BrowserRouter>
   );

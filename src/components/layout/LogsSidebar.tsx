@@ -28,21 +28,9 @@ const COLUMN_OPTIONS: { value: StatColumn; label: string }[] = [
     { value: 'time', label: 'Accumulative Time' },
 ];
 
-const SCRAMBLE_TYPES = [
-    { label: '3x3', value: '333' },
-    { label: '2x2', value: '222' },
-    { label: '4x4', value: '444' },
-    { label: '5x5', value: '555' },
-    { label: '6x6', value: '666' },
-    { label: '7x7', value: '777' },
-    { label: 'Clock', value: 'clock' },
-    { label: 'Mega', value: 'minx' },
-    { label: 'Pyra', value: 'pyram' },
-    { label: 'Skewb', value: 'skewb' },
-    { label: 'Sq-1', value: 'sq1' },
-];
+import { SCRAMBLE_TYPES } from '../../utils/constants';
 
-export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, collapsed: _collapsed }: { onToggleCollapse?: () => void, collapsed?: boolean }) {
+export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, collapsed: _collapsed }: { onToggleCollapse?: () => void, collapsed?: boolean }) {
     const { user } = useAuth();
     const { solves } = useSolves();
     const { settings, updateSettings } = useSettings();
@@ -252,7 +240,10 @@ export default function DataSidebar({ onToggleCollapse: _onToggleCollapse, colla
                 <div className="p-2 flex items-center justify-center relative group">
                     <select
                         value={settings.scrambleType}
-                        onChange={(e) => updateSettings({ scrambleType: e.target.value })}
+                        onChange={(e) => {
+                            updateSettings({ scrambleType: e.target.value });
+                            e.target.blur();
+                        }}
                         className="appearance-none bg-transparent font-bold hover:text-accent focus:outline-none cursor-pointer text-center text-xs w-full pr-3 z-10"
                     >
                         {SCRAMBLE_TYPES.map(opt => (

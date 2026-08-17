@@ -1,23 +1,33 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-    Check, X, LogOut, Info, Trash2, Download, TriangleAlert, Loader2
+    Check, X, LogOut, Info, Trash2, Download, TriangleAlert, Loader2, RotateCcw
 } from 'lucide-react';
 
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useEconomy } from '../contexts/EconomyContext';
-import { COLOR_LADDER } from '../utils/cosmeticsData';
 import { doc, setDoc, getDoc, getDocs, collection, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Tabs, FriendSidebar, SocialsTab, ProfileStatsTab, CubingFriendsTab, Logo } from '../components';
-import { Link } from 'react-router-dom';
-import { Lock, ShoppingBag, Coins, Flame, HeartCrack } from 'lucide-react';
+import { Tabs, FriendSidebar, SocialsTab, ProfileStatsTab, CubingFriendsTab, Logo, resetKeybindTooltips } from '../components';
+
+const AVAILABLE_COLORS = [
+    { name: 'Red', hex: '#ef4444' },
+    { name: 'Orange', hex: '#f97316' },
+    { name: 'Amber', hex: '#f59e0b' },
+    { name: 'Lime', hex: '#84cc16' },
+    { name: 'Green', hex: '#10b981' },
+    { name: 'Cyan', hex: '#06b6d4' },
+    { name: 'Blue', hex: '#3b82f6' },
+    { name: 'Purple', hex: '#8b5cf6' },
+    { name: 'Fuchsia', hex: '#d946ef' },
+    { name: 'Pink', hex: '#ec4899' },
+    { name: 'Slate', hex: '#64748b' },
+    { name: 'Dark', hex: '#18181b' },
+];
 
 export default function Account() {
     const { settings, updateSettings } = useSettings();
     const { user, emailSignUp, emailSignIn, resendVerificationEmail, logout } = useAuth();
-    const { economy, equipColor } = useEconomy();
     const location = useLocation();
 
     // Profile State
@@ -48,9 +58,9 @@ export default function Account() {
     useEffect(() => {
         if (user) {
             setUsername(user.username || 'CubingUser');
-            setSelectedColor(economy.equippedColor || user.color || '#ef4444');
+            setSelectedColor(user.color || '#ef4444');
         }
-    }, [user, economy.equippedColor]);
+    }, [user]);
 
     // Color Picker Close Click Outside
     useEffect(() => {
@@ -100,11 +110,7 @@ export default function Account() {
     };
 
     const handleColorSelect = (c: string) => {
-        if (!economy.unlockedColors.includes(c)) {
-            return;
-        }
         setSelectedColor(c);
-        equipColor(c);
         saveProfileUpdate(undefined, c);
         setIsColorPickerOpen(false);
     };
@@ -188,77 +194,61 @@ export default function Account() {
         </div>
     );
 
-    const TimerSettingsTab = () => (
-        <div className="flex flex-col gap-1 p-2 max-w-lg">
-            <SettingRow label="Show Inspection" description="Enable 15s inspection timer before solving">
-                <button
-                    onClick={() => updateSettings({ solveInspection: !settings.solveInspection })}
-                    className={`relative w-10 h-5 rounded-full transition-colors ${settings.solveInspection ? 'bg-accent' : 'bg-text-secondary/20'}`}
-                >
-                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${settings.solveInspection ? 'translate-x-5' : 'translate-x-0'}`} />
-                </button>
-            </SettingRow>
+    const TimerSettingsTab = () => {
+        const [resetSuccess, setResetSuccess] = useState(false);
 
-            <SettingRow label="Show Timer" description="Show the timer while solving">
-                <button
-                    onClick={() => updateSettings({ showLiveTimer: !settings.showLiveTimer })}
-                    className={`relative w-10 h-5 rounded-full transition-colors ${settings.showLiveTimer ? 'bg-accent' : 'bg-text-secondary/20'}`}
-                >
-                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${settings.showLiveTimer ? 'translate-x-5' : 'translate-x-0'}`} />
-                </button>
-            </SettingRow>
-        </div>
-    );
+        const handleReset = () => {
+            resetKeybindTooltips();
+            setResetSuccess(true);
+            setTimeout(() => setResetSuccess(false), 2000);
+        };
 
-    const VaultStatsTab = () => (
-        <div className="p-4 flex flex-col gap-6 max-w-xl">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div className="p-4 bg-bg-secondary border border-border rounded-xl">
-                    <div className="flex items-center gap-2 text-xs font-bold text-text-secondary uppercase mb-1">
-                        <Coins className="w-3.5 h-3.5 text-amber-500" />
-                        <span>Total Won</span>
-                    </div>
-                    <div className="text-xl font-bold font-mono text-text-primary">
-                        {economy.stats.totalWon.toLocaleString()}
-                    </div>
-                </div>
+        return (
+            <div className="flex flex-col gap-1 p-2 max-w-lg">
+                <SettingRow label="Show Inspection" description="Enable 15s inspection timer before solving">
+                    <button
+                        onClick={() => updateSettings({ solveInspection: !settings.solveInspection })}
+                        className={`relative w-10 h-5 rounded-full transition-colors ${settings.solveInspection ? 'bg-accent' : 'bg-text-secondary/20'}`}
+                    >
+                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${settings.solveInspection ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                </SettingRow>
 
-                <div className="p-4 bg-bg-secondary border border-border rounded-xl">
-                    <div className="flex items-center gap-2 text-xs font-bold text-text-secondary uppercase mb-1">
-                        <Flame className="w-3.5 h-3.5 text-orange-500" />
-                        <span>Best Multiplier</span>
-                    </div>
-                    <div className="text-xl font-bold font-mono text-text-primary">
-                        {economy.stats.highestMultiplier}x
-                    </div>
-                </div>
+                <SettingRow label="Show Timer" description="Show the timer while solving">
+                    <button
+                        onClick={() => updateSettings({ showLiveTimer: !settings.showLiveTimer })}
+                        className={`relative w-10 h-5 rounded-full transition-colors ${settings.showLiveTimer ? 'bg-accent' : 'bg-text-secondary/20'}`}
+                    >
+                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${settings.showLiveTimer ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                </SettingRow>
 
-                <div className="p-4 bg-bg-secondary border border-border rounded-xl">
-                    <div className="flex items-center gap-2 text-xs font-bold text-text-secondary uppercase mb-1">
-                        <HeartCrack className="w-3.5 h-3.5 text-rose-500" />
-                        <span>Near Misses</span>
-                    </div>
-                    <div className="text-xl font-bold font-mono text-text-primary">
-                        {economy.stats.nearMissesCount}
-                    </div>
-                </div>
+                <SettingRow label="Keybind & Feature Tooltips" description="Reset dismissed tooltips on the practice timer">
+                    <button
+                        onClick={handleReset}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                            resetSuccess
+                                ? 'bg-green-500/10 text-green-500 border-green-500/30'
+                                : 'bg-bg-primary text-text-secondary hover:text-text-primary hover:bg-bg-hover border-border'
+                        }`}
+                        title="Reset dismissed timer tooltips"
+                    >
+                        {resetSuccess ? (
+                            <>
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Reset!</span>
+                            </>
+                        ) : (
+                            <>
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                <span>Reset Tooltips</span>
+                            </>
+                        )}
+                    </button>
+                </SettingRow>
             </div>
-
-            <div className="p-4 bg-bg-secondary border border-border rounded-xl flex items-center justify-between">
-                <div>
-                    <h4 className="text-sm font-bold text-text-primary mb-0.5">Visit the Store</h4>
-                    <p className="text-xs text-text-secondary">Unlock exponential color palettes, themes, and gacha loot boxes.</p>
-                </div>
-                <Link
-                    to="/store"
-                    className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white font-bold text-xs rounded-lg hover:opacity-90 transition-opacity"
-                >
-                    <ShoppingBag className="w-4 h-4" />
-                    <span>Go to Store</span>
-                </Link>
-            </div>
-        </div>
-    );
+        );
+    };
 
     const DangerZoneTab = () => (
         <div className="p-4 flex flex-col items-start gap-4 max-w-lg">
@@ -297,28 +287,30 @@ export default function Account() {
     return (
         <div className="flex h-full w-full bg-bg-primary overflow-hidden relative">
             <div className="flex-1 flex flex-col h-full bg-bg-primary min-w-0 transition-all duration-300 relative z-0">
-                {/* Header (Mobile) */}
-                <header className="h-14 border-b border-border flex items-center justify-between px-4 bg-bg-secondary md:hidden shrink-0">
-                    <h1 className="text-xl font-bold text-text-primary">Account</h1>
-                </header>
+                {/* Header (Mobile) - only when logged in */}
+                {user && (
+                    <header className="h-14 border-b border-border flex items-center justify-between px-4 bg-bg-secondary md:hidden shrink-0">
+                        <h1 className="text-xl font-bold text-text-primary">Account</h1>
+                    </header>
+                )}
 
-                <main className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto p-4 md:p-8">
+                <main className={`flex-1 overflow-y-auto w-full ${user ? 'max-w-3xl mx-auto p-4 md:p-8' : 'p-4 sm:p-6'}`}>
                     {!user ? (
                         // Not Signed In
-                        <div className="flex flex-col items-center justify-center p-4 w-full h-full pb-32">
-                            <div className="mb-12 w-full animate-in fade-in duration-500 max-w-md mx-auto">
-                                <div className="flex flex-col items-center text-center gap-2 mb-8">
-                                    <Logo className="w-12 h-12 mb-2" />
-                                    <h1 className="text-3xl font-bold text-text-primary">
+                        <div className="min-h-full flex flex-col items-center justify-center py-4 sm:py-8">
+                            <div className="w-full max-w-md my-auto animate-in fade-in duration-300 bg-bg-secondary/40 border border-border/60 rounded-2xl p-6 sm:p-8 shadow-sm">
+                                <div className="flex flex-col items-center text-center gap-1.5 mb-6">
+                                    <Logo className="w-10 h-10 mb-1" />
+                                    <h1 className="text-2xl sm:text-3xl font-bold text-text-primary tracking-tight">
                                         {isSignUpMode ? 'Create Account' : 'Welcome Back'}
                                     </h1>
-                                    <p className="text-text-secondary text-sm">
+                                    <p className="text-text-secondary text-xs sm:text-sm">
                                         {isSignUpMode ? 'Join the community and track your progress.' : 'Sign in to access your stats and settings.'}
                                     </p>
                                 </div>
                                 {/* Auth Form Container */}
                                 <div className="flex flex-col w-full">
-                                    <div className="flex gap-4 border-b border-border mb-6">
+                                    <div className="flex gap-4 border-b border-border mb-5">
                                         <button
                                             type="button"
                                             className={`pb-2 text-sm font-medium px-4 flex-1 transition-colors relative cursor-pointer ${!isSignUpMode ? 'text-accent' : 'text-text-secondary hover:text-text-primary'}`}
@@ -338,7 +330,7 @@ export default function Account() {
                                     </div>
 
                                     <form onSubmit={(e) => { e.preventDefault(); handleAuthAction(); }} className="flex flex-col gap-4 w-full">
-                                        <div className="space-y-4">
+                                        <div className="space-y-3.5">
                                             <div>
                                                 <label htmlFor="auth-email" className="text-xs font-bold text-text-secondary uppercase mb-1 block">Email</label>
                                                 <input
@@ -348,7 +340,7 @@ export default function Account() {
                                                     autoComplete="email"
                                                     value={email}
                                                     onChange={e => setEmail(e.target.value)}
-                                                    className="w-full bg-bg-secondary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent transition-all"
+                                                    className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent transition-all text-sm"
                                                     placeholder="hello@example.com"
                                                     required
                                                 />
@@ -362,7 +354,7 @@ export default function Account() {
                                                     autoComplete={isSignUpMode ? "new-password" : "current-password"}
                                                     value={password}
                                                     onChange={e => setPassword(e.target.value)}
-                                                    className="w-full bg-bg-secondary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent transition-all"
+                                                    className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent transition-all text-sm"
                                                     placeholder="••••••••"
                                                     required
                                                 />
@@ -377,7 +369,7 @@ export default function Account() {
                                                         autoComplete="new-password"
                                                         value={confirmPassword}
                                                         onChange={e => setConfirmPassword(e.target.value)}
-                                                        className="w-full bg-bg-secondary border border-border rounded px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent transition-all"
+                                                        className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent transition-all text-sm"
                                                         placeholder="••••••••"
                                                         required
                                                     />
@@ -386,7 +378,7 @@ export default function Account() {
                                         </div>
 
                                         {authError && (
-                                            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded text-sm text-red-500 flex items-center gap-2">
+                                            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-500 flex items-center gap-2">
                                                 <TriangleAlert className="w-4 h-4 shrink-0" />
                                                 {authError}
                                             </div>
@@ -395,13 +387,13 @@ export default function Account() {
                                         <button
                                             type="submit"
                                             disabled={authLoading}
-                                            className="mt-2 bg-text-primary text-bg-primary hover:opacity-90 px-6 py-2.5 rounded-md font-bold w-full transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-black/5 cursor-pointer"
+                                            className="mt-1 bg-text-primary text-bg-primary hover:opacity-90 px-6 py-2.5 rounded-lg font-bold w-full transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-sm cursor-pointer text-sm"
                                         >
                                             {authLoading ? 'Please Wait...' : (isSignUpMode ? 'Create Account' : 'Sign In')}
                                         </button>
                                     </form>
                                 </div>
-                                <div className="text-xs text-text-secondary mt-6 text-center max-w-xs mx-auto opacity-70">
+                                <div className="text-[11px] text-text-secondary mt-4 text-center max-w-xs mx-auto opacity-70 leading-relaxed">
                                     By continuing, you acknowledge that local solves are wiped upon signing in/out to ensure data consistency.
                                 </div>
                             </div>
@@ -417,10 +409,10 @@ export default function Account() {
                                         className="w-24 h-24 rounded-2xl shadow-lg cursor-pointer transition-transform hover:scale-105 active:scale-95 flex items-center justify-center"
                                         style={{ backgroundColor: selectedColor }}
                                         onClick={() => setIsColorPickerOpen(!isColorPickerOpen)}
-                                        title="Click to select unlocked color"
+                                        title="Click to change profile color"
                                     />
 
-                                    {/* Color Picker Popover (Restricted to Unlocked Colors) */}
+                                    {/* Color Picker Popover */}
                                     {isColorPickerOpen && (
                                         <div
                                             ref={colorPickerRef}
@@ -428,44 +420,30 @@ export default function Account() {
                                             onClick={(e) => e.stopPropagation()}
                                         >
                                             <div className="text-[11px] font-bold uppercase text-text-secondary mb-2 tracking-wider">
-                                                Unlocked Colors
+                                                Select Color
                                             </div>
 
-                                            <div className="grid grid-cols-4 gap-2 mb-3">
-                                                {COLOR_LADDER.map(item => {
-                                                    const isUnlocked = economy.unlockedColors.includes(item.hex);
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {AVAILABLE_COLORS.map(item => {
                                                     const isSelected = selectedColor.toLowerCase() === item.hex.toLowerCase();
 
                                                     return (
                                                         <button
-                                                            key={item.id}
-                                                            onClick={() => isUnlocked && handleColorSelect(item.hex)}
-                                                            disabled={!isUnlocked}
-                                                            title={isUnlocked ? `${item.name} (${item.hex})` : `Locked (${item.name} - ${item.price} coins)`}
-                                                            className={`w-9 h-9 rounded-xl border-2 transition-all flex items-center justify-center relative ${
+                                                            key={item.hex}
+                                                            onClick={() => handleColorSelect(item.hex)}
+                                                            title={item.name}
+                                                            className={`w-9 h-9 rounded-xl border-2 transition-all flex items-center justify-center relative cursor-pointer ${
                                                                 isSelected
                                                                     ? 'border-text-primary scale-110 shadow-md ring-2 ring-accent/30'
-                                                                    : isUnlocked
-                                                                    ? 'border-transparent hover:scale-105 cursor-pointer'
-                                                                    : 'border-transparent opacity-40 cursor-not-allowed'
+                                                                    : 'border-transparent hover:scale-105'
                                                             }`}
                                                             style={{ backgroundColor: item.hex }}
                                                         >
-                                                            {!isUnlocked && <Lock className="w-3.5 h-3.5 text-white/90 drop-shadow" />}
                                                             {isSelected && <Check className="w-4 h-4 text-white stroke-[3] drop-shadow" />}
                                                         </button>
                                                     );
                                                 })}
                                             </div>
-
-                                            <Link
-                                                to="/store"
-                                                onClick={() => setIsColorPickerOpen(false)}
-                                                className="w-full py-1.5 px-2 bg-bg-hover hover:bg-border rounded-lg text-xs font-bold text-accent flex items-center justify-center gap-1.5 transition-colors"
-                                            >
-                                                <ShoppingBag className="w-3.5 h-3.5" />
-                                                <span>Buy Colors in Store</span>
-                                            </Link>
                                         </div>
                                     )}
                                 </div>
@@ -499,13 +477,6 @@ export default function Account() {
                                             >
                                                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
                                             </button>
-                                        </div>
-                                    )}
-
-                                    {/* Equipped Title */}
-                                    {economy.equippedCosmetics.title && (
-                                        <div className="text-xs font-mono text-accent font-semibold mt-0.5">
-                                            {economy.equippedCosmetics.title}
                                         </div>
                                     )}
 
@@ -547,7 +518,6 @@ export default function Account() {
                                 <Tabs
                                     tabs={[
                                         { label: "Profile Statistics", id: "stats", content: <ProfileStatsTab /> },
-                                        { label: "Vault & Gambling", id: "vault", content: <VaultStatsTab /> },
                                         { label: "Social Media Links", id: "socials", content: <SocialsTab /> },
                                         { label: "Cubing Friends", id: "friends", content: <CubingFriendsTab /> },
                                         { label: "Timer Settings", id: "timer", content: <TimerSettingsTab /> },

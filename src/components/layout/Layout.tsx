@@ -3,7 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import Topbar from './Topbar';
 import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
-import DataSidebar from './DataSidebar';
+import LogsSidebar from './LogsSidebar';
 import { useSolves } from '../../contexts/SolvesContext';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -25,7 +25,7 @@ export default function Layout() {
     const [rightWidth, setRightWidth] = useState(() => getStoredWidth('sidebar_right_width', 240));
     const [lastOpenRightWidth, setLastOpenRightWidth] = useState(() => getStoredWidth('sidebar_right_last_width', 240));
 
-    // Data Sidebar State
+    // Data / Logs Sidebar State
     const [dataWidth, setDataWidth] = useState(() => getStoredWidth('sidebar_data_width', 300));
     const [isResizingData, setIsResizingData] = useState(false);
 
@@ -43,14 +43,14 @@ export default function Layout() {
     const [consoleInfo, setConsoleInfo] = useState<string | null>(null);
     const layoutRef = useRef<HTMLDivElement>(null);
 
-    // Constants
-    const COLLAPSED_WIDTH = 64;
+    // Resizing Constants
     const MIN_EXPANDED_WIDTH = 180;
-    const MAX_WIDTH = 500;
+    const COLLAPSED_WIDTH = 50;
     const RIGHT_COLLAPSED_WIDTH = 50;
+    const MAX_WIDTH = 480;
 
-    const isLeftCollapsed = leftWidth < MIN_EXPANDED_WIDTH;
-    const isRightCollapsed = rightWidth < MIN_EXPANDED_WIDTH;
+    const isLeftCollapsed = leftWidth <= COLLAPSED_WIDTH;
+    const isRightCollapsed = rightWidth <= RIGHT_COLLAPSED_WIDTH;
 
     // Console interceptor
     useEffect(() => {
@@ -67,6 +67,7 @@ export default function Layout() {
         };
     }, []);
 
+    // Sidebar Toggles
     const toggleLeftSidebar = useCallback(() => {
         if (isLeftCollapsed) {
             setLeftWidth(lastOpenLeftWidth < MIN_EXPANDED_WIDTH ? 240 : lastOpenLeftWidth);
@@ -110,20 +111,31 @@ export default function Layout() {
             }
 
             if (e.key === 'Escape') navigate('/');
-            if (e.key === '?') navigate('/keybinds');
 
             if (e.code === 'Space') {
-                if (target.tagName === 'BUTTON') {
+                if (target.tagName === 'BUTTON' || target.tagName === 'SELECT') {
                     e.preventDefault();
                     target.blur();
                 }
             }
 
-            if (e.key === 's') { if (!isPrivateMode) navigate('/data'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/data'); } }
-            if (e.key === 'a') { if (!isPrivateMode) navigate('/account'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/account'); } }
-            if (e.key === 'c') { if (!isPrivateMode) navigate('/'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/'); } }
-            if (e.key === 'e' || e.key === 'd') { if (!isPrivateMode) navigate('/store'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/store'); } }
-            if (e.key === 'g') { if (!isPrivateMode) navigate('/guide'); else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/guide'); } }
+            // Keybinds Navigation Hotkeys
+            if (e.key === 'b' || e.key === 'B' || e.key === '?') {
+                if (!isPrivateMode) navigate('/keybinds');
+                else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/keybinds'); }
+            }
+            if (e.key === 'g' || e.key === 'G') {
+                if (!isPrivateMode) navigate('/goals');
+                else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/goals'); }
+            }
+            if (e.key === 'l' || e.key === 'L') {
+                if (!isPrivateMode) navigate('/logs');
+                else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/logs'); }
+            }
+            if (e.key === 'a' || e.key === 'A') {
+                if (!isPrivateMode) navigate('/account');
+                else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/account'); }
+            }
         };
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
@@ -213,10 +225,10 @@ export default function Layout() {
                     </div>
                 )}
 
-                {/* Data Sidebar */}
-                {location.pathname.startsWith('/data') && (
+                {/* Logs Sidebar */}
+                {location.pathname.startsWith('/logs') && (
                     <div style={{ width: dataWidth }} className="flex-shrink-0 relative flex flex-col border-r border-border backdrop-blur-sm bg-bg-secondary will-change-[width] z-20">
-                        <DataSidebar onToggleCollapse={() => setDataCollapsed(!dataCollapsed)} collapsed={dataCollapsed} />
+                        <LogsSidebar onToggleCollapse={() => setDataCollapsed(!dataCollapsed)} collapsed={dataCollapsed} />
                         <div className="absolute top-0 right-[-5px] w-2.5 h-full cursor-col-resize z-50 group flex justify-center" onMouseDown={startResizingData}>
                             <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
                         </div>
@@ -225,10 +237,10 @@ export default function Layout() {
 
                 {/* Main Content */}
                 <main className="flex-1 flex flex-col relative bg-bg-primary min-w-0 overflow-hidden">
-                    <div className={`flex-1 w-full ${(location.pathname.startsWith('/data') || location.pathname === '/account') ? 'overflow-hidden p-0 flex flex-col' : 'p-6 overflow-y-auto custom-scrollbar'}`}>
+                    <div className={`flex-1 w-full ${(location.pathname.startsWith('/logs') || location.pathname === '/account') ? 'overflow-hidden p-0 flex flex-col' : 'p-6 overflow-y-auto custom-scrollbar'}`}>
                         <Outlet />
                     </div>
-                    {(!location.pathname.startsWith('/data') && location.pathname !== '/account') && (
+                    {(!location.pathname.startsWith('/logs') && location.pathname !== '/account') && (
                         <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8 shrink-0">
                             <div className="flex gap-2 items-center">
                                 <span>Online • v0.1.0</span>
@@ -245,7 +257,7 @@ export default function Layout() {
                 </main>
 
                 {/* Right Sidebar */}
-                {!['/account', '/data', '/keybinds', '/store', '/guide', '/info'].some(p => location.pathname.startsWith(p)) && (
+                {!['/account', '/logs', '/keybinds', '/goals'].some(p => location.pathname.startsWith(p)) && (
                     <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col backdrop-blur-sm will-change-[width] border-l border-border z-20">
                         <div className="absolute top-0 left-[-5px] w-2.5 h-full cursor-col-resize z-50 group flex justify-center" onMouseDown={startResizingRight}>
                             <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />

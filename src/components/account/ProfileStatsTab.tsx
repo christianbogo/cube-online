@@ -2,6 +2,7 @@
 import { useSolves } from '../../contexts/SolvesContext';
 import { useMemo } from 'react';
 import { calculateBestSingle, formatTime, calculateBestAverage } from '../../utils/calculations';
+import { SCRAMBLE_TYPES, SUPPORTED_EVENT_IDS } from '../../utils/constants';
 
 export default function ProfileStatsTab() {
     const { solves } = useSolves();
@@ -21,7 +22,6 @@ export default function ProfileStatsTab() {
         const activeDays = uniqueDays.size;
 
         // Group by Event
-        const validEvents = ['333', '222', '444', '555', '666', '777', 'clock', 'minx', 'pyram', 'skewb', 'sq1'];
         const grouped: Record<string, typeof solves> = {};
 
         solves.forEach(s => {
@@ -32,7 +32,7 @@ export default function ProfileStatsTab() {
 
         // Filter events with > 0 solves
         const eventsData = Object.entries(grouped)
-            .filter(([type, list]) => list.length > 0 && validEvents.includes(type))
+            .filter(([type, list]) => list.length > 0 && SUPPORTED_EVENT_IDS.includes(type))
             .map(([type, list]) => {
                 // Calculate per-event totals
                 const eventTotalTime = list.reduce((acc, curr) => {
@@ -106,10 +106,11 @@ export default function ProfileStatsTab() {
                     </thead>
                     <tbody className="divide-y divide-border/50">
                         {stats.events.map(event => {
-                            const eventName = event.type.replace(/(\d)(\d)(\d)/, '$1x$2');
+                            const opt = SCRAMBLE_TYPES.find(o => o.value === event.type);
+                            const eventName = opt ? opt.label : event.type;
                             return (
                                 <tr key={event.type} className="hover:bg-bg-hover/50 transition-colors">
-                                    <td className="px-4 py-3 font-medium text-text-primary capitalize">
+                                    <td className="px-4 py-3 font-medium text-text-primary">
                                         {eventName}
                                     </td>
                                     <td className="px-4 py-3 text-right text-text-secondary font-mono">{event.count}</td>

@@ -3,7 +3,7 @@ export { default as Layout } from './layout/Layout';
 export { default as Topbar } from './layout/Topbar';
 export { default as LeftSidebar } from './layout/LeftSidebar';
 export { default as RightSidebar } from './layout/RightSidebar';
-export { default as DataSidebar } from './layout/DataSidebar';
+export { default as LogsSidebar } from './layout/LogsSidebar';
 export { FriendSidebar } from './layout/FriendSidebar';
 
 // UI Components
@@ -17,6 +17,7 @@ export { UserCard } from './ui/UserCard';
 export type { UserCardProps } from './ui/UserCard';
 export { Logo } from './ui/Logo';
 export type { LogoProps } from './ui/Logo';
+export { default as KeybindTooltip, resetKeybindTooltips } from './ui/KeybindTooltip';
 export { ThemeProvider, useTheme } from './ui/ThemeProvider';
 export type { Theme, ThemeProviderProps, ThemeProviderState } from './ui/ThemeProvider';
 
