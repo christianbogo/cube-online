@@ -2,9 +2,18 @@ import type { Solve } from '../types/solve';
 import type { GoalDefinition, GoalProgress, GoalCategory } from '../types/goals';
 import { calculateBestAverage } from './calculations';
 import { SUPPORTED_EVENT_IDS, AVERAGEABLE_EVENT_IDS } from './constants';
+import { format } from 'date-fns';
 
 export const GOAL_DEFINITIONS: GoalDefinition[] = [
     // Category 1: Time Spent Solving
+    {
+        id: 'time-create-account',
+        category: 'time',
+        title: 'Join the Community',
+        description: 'Create and sign in to a Cube Online account.',
+        targetValue: 1,
+        unit: 'account'
+    },
     {
         id: 'time-warm-hands',
         category: 'time',
@@ -458,6 +467,14 @@ export const GOAL_DEFINITIONS: GoalDefinition[] = [
         description: 'Establish a valid Ao12 in every supported event that supports average rankings.',
         targetValue: 11,
         unit: 'events'
+    },
+    {
+        id: 'diversity-all-keybinds',
+        category: 'diversity',
+        title: 'Keybind Virtuoso',
+        description: 'Use all navigation, timer, and scrambler keybinds at least once.',
+        targetValue: 21,
+        unit: 'keybinds'
     }
 ];
 
@@ -480,6 +497,12 @@ export const CATEGORY_METADATA: Record<GoalCategory, { label: string; descriptio
     }
 };
 
+export const ALL_TRACKED_KEYBINDS = [
+    'Escape', 'b', 'g', 'l', 'a', 'Tab', 'Shift',
+    'Space', 'd', 'f',
+    '1', '2', '3', '4', '5', '6', '7', 'c', 'm', 'p', 's'
+] as const;
+
 export function formatTimeMs(ms: number): string {
     const totalMinutes = Math.floor(ms / (60 * 1000));
     const hours = Math.floor(totalMinutes / 60);
@@ -493,37 +516,72 @@ export function formatTimeMs(ms: number): string {
     return `${minutes}m`;
 }
 
-function calculateMaxStreak(dateCounts: Map<string, number>, minSolvesPerDay: number): number {
+export interface StreakResult {
+    maxStreak: number;
+    startDate: string | null;
+    endDate: string | null;
+}
+
+export function formatStreakDate(dateStr: string | null): string | null {
+    if (!dateStr) return null;
+    try {
+        const d = new Date(dateStr + 'T12:00:00');
+        return format(d, 'MMM d, yyyy');
+    } catch {
+        return dateStr;
+    }
+}
+
+function calculateMaxStreak(dateCounts: Map<string, number>, minSolvesPerDay: number): StreakResult {
     const qualifyingDates = Array.from(dateCounts.entries())
         .filter(([, count]) => count >= minSolvesPerDay)
-        .map(([dateStr]) => new Date(dateStr + 'T00:00:00Z').getTime())
-        .sort((a, b) => a - b);
+        .map(([dateStr]) => ({
+            dateStr,
+            time: new Date(dateStr + 'T00:00:00Z').getTime()
+        }))
+        .sort((a, b) => a.time - b.time);
 
-    if (qualifyingDates.length === 0) return 0;
+    if (qualifyingDates.length === 0) {
+        return { maxStreak: 0, startDate: null, endDate: null };
+    }
 
     const oneDayMs = 24 * 60 * 60 * 1000;
     let maxStreak = 1;
+    let bestStartStr = qualifyingDates[0].dateStr;
+    let bestEndStr = qualifyingDates[0].dateStr;
+
     let currentStreak = 1;
+    let currentStartStr = qualifyingDates[0].dateStr;
+    let currentEndStr = qualifyingDates[0].dateStr;
 
     for (let i = 1; i < qualifyingDates.length; i++) {
         const prev = qualifyingDates[i - 1];
         const curr = qualifyingDates[i];
-        const diffDays = Math.round((curr - prev) / oneDayMs);
+        const diffDays = Math.round((curr.time - prev.time) / oneDayMs);
 
         if (diffDays === 1) {
             currentStreak++;
+            currentEndStr = curr.dateStr;
             if (currentStreak > maxStreak) {
                 maxStreak = currentStreak;
+                bestStartStr = currentStartStr;
+                bestEndStr = currentEndStr;
             }
         } else if (diffDays > 1) {
             currentStreak = 1;
+            currentStartStr = curr.dateStr;
+            currentEndStr = curr.dateStr;
         }
     }
 
-    return maxStreak;
+    return {
+        maxStreak,
+        startDate: formatStreakDate(bestStartStr),
+        endDate: formatStreakDate(bestEndStr)
+    };
 }
 
-export function evaluateUserGoals(solves: Solve[]): GoalProgress[] {
+export function evaluateUserGoals(solves: Solve[], user?: any | null, usedKeybinds: string[] = []): GoalProgress[] {
     // 1. Total Solve Time (ms) from non-DNF solves
     const totalSolveTimeMs = solves.reduce((acc, curr) => {
         if (curr.penalty === 'DNF' || curr.inspectionPenalty === 'DNF') return acc;
@@ -544,9 +602,14 @@ export function evaluateUserGoals(solves: Solve[]): GoalProgress[] {
         dailySolvesCount.set(key, (dailySolvesCount.get(key) || 0) + 1);
     });
 
-    const maxSolvesInSingleDay = dailySolvesCount.size > 0
-        ? Math.max(...Array.from(dailySolvesCount.values()))
-        : 0;
+    let maxSolvesInSingleDay = 0;
+    let maxDayDate: string | null = null;
+    dailySolvesCount.forEach((count, dateStr) => {
+        if (count > maxSolvesInSingleDay) {
+            maxSolvesInSingleDay = count;
+            maxDayDate = dateStr;
+        }
+    });
 
     // 4. Solves grouped by event
     const solvesByEvent: Record<string, Solve[]> = {};
@@ -611,14 +674,24 @@ export function evaluateUserGoals(solves: Solve[]): GoalProgress[] {
     // Averageable events Ao12 count
     const averageableAo12Count = AVERAGEABLE_EVENT_IDS.filter(id => hasAo12PerEvent[id]).length;
 
+    // Unique keybind count
+    const uniqueKeybindsCount = new Set(usedKeybinds).size;
+
     // Map each definition to progress
     return GOAL_DEFINITIONS.map(def => {
         let currentValue = 0;
         let displayCurrent = '';
         let displayTarget = '';
+        let streakStartDate: string | null = null;
+        let streakEndDate: string | null = null;
 
         switch (def.id) {
             // Category 1: Time Spent
+            case 'time-create-account':
+                currentValue = user ? 1 : 0;
+                displayCurrent = user ? '1' : '0';
+                displayTarget = '1';
+                break;
             case 'time-warm-hands':
             case 'time-first-session':
             case 'time-deep-focus':
@@ -661,54 +734,87 @@ export function evaluateUserGoals(solves: Solve[]): GoalProgress[] {
                 break;
 
             // Category 3: Streaks & Daily Volume
-            case 'streak-habit-former':
-                currentValue = calculateMaxStreak(dailySolvesCount, 1);
+            case 'streak-habit-former': {
+                const res = calculateMaxStreak(dailySolvesCount, 1);
+                currentValue = res.maxStreak;
+                streakStartDate = res.startDate;
+                streakEndDate = res.endDate;
                 displayCurrent = `${currentValue} days`;
                 displayTarget = `${def.targetValue} days`;
                 break;
+            }
             case 'streak-two-week-spark':
             case 'streak-monthly-ritual':
             case 'streak-quarterly-routine':
-            case 'streak-half-year-habit':
-                currentValue = calculateMaxStreak(dailySolvesCount, 5);
+            case 'streak-half-year-habit': {
+                const res = calculateMaxStreak(dailySolvesCount, 5);
+                currentValue = res.maxStreak;
+                streakStartDate = res.startDate;
+                streakEndDate = res.endDate;
                 displayCurrent = `${currentValue} days`;
                 displayTarget = `${def.targetValue} days`;
                 break;
+            }
             case 'streak-dedicated-daily':
-            case 'streak-unbroken-year':
-                currentValue = calculateMaxStreak(dailySolvesCount, 10);
+            case 'streak-unbroken-year': {
+                const res = calculateMaxStreak(dailySolvesCount, 10);
+                currentValue = res.maxStreak;
+                streakStartDate = res.startDate;
+                streakEndDate = res.endDate;
                 displayCurrent = `${currentValue} days`;
                 displayTarget = `${def.targetValue} days`;
                 break;
-            case 'streak-year-in-twists':
-                currentValue = calculateMaxStreak(dailySolvesCount, 1);
+            }
+            case 'streak-year-in-twists': {
+                const res = calculateMaxStreak(dailySolvesCount, 1);
+                currentValue = res.maxStreak;
+                streakStartDate = res.startDate;
+                streakEndDate = res.endDate;
                 displayCurrent = `${currentValue} days`;
                 displayTarget = `${def.targetValue} days`;
                 break;
+            }
             case 'streak-weekend-blitz':
-            case 'streak-grind-week':
-                currentValue = calculateMaxStreak(dailySolvesCount, 50);
+            case 'streak-grind-week': {
+                const res = calculateMaxStreak(dailySolvesCount, 50);
+                currentValue = res.maxStreak;
+                streakStartDate = res.startDate;
+                streakEndDate = res.endDate;
                 displayCurrent = `${currentValue} days`;
                 displayTarget = `${def.targetValue} days`;
                 break;
+            }
             case 'streak-century-run':
             case 'streak-fortnight-forge':
-            case 'streak-iron-fingers':
-                currentValue = calculateMaxStreak(dailySolvesCount, 100);
+            case 'streak-iron-fingers': {
+                const res = calculateMaxStreak(dailySolvesCount, 100);
+                currentValue = res.maxStreak;
+                streakStartDate = res.startDate;
+                streakEndDate = res.endDate;
                 displayCurrent = `${currentValue} days`;
                 displayTarget = `${def.targetValue} days`;
                 break;
+            }
             case 'streak-hardcore-session':
-            case 'streak-marathon-maniac':
+            case 'streak-marathon-maniac': {
                 currentValue = maxSolvesInSingleDay;
+                if (maxSolvesInSingleDay > 0 && maxDayDate) {
+                    streakStartDate = formatStreakDate(maxDayDate);
+                    streakEndDate = formatStreakDate(maxDayDate);
+                }
                 displayCurrent = `${currentValue.toLocaleString()} solves`;
                 displayTarget = `${def.targetValue.toLocaleString()} solves`;
                 break;
-            case 'streak-extreme-focus':
-                currentValue = calculateMaxStreak(dailySolvesCount, 200);
+            }
+            case 'streak-extreme-focus': {
+                const res = calculateMaxStreak(dailySolvesCount, 200);
+                currentValue = res.maxStreak;
+                streakStartDate = res.startDate;
+                streakEndDate = res.endDate;
                 displayCurrent = `${currentValue} days`;
                 displayTarget = `${def.targetValue} days`;
                 break;
+            }
 
             // Category 4: Diversity & Event Breadth
             case 'diversity-branching-out':
@@ -766,6 +872,11 @@ export function evaluateUserGoals(solves: Solve[]): GoalProgress[] {
                 displayCurrent = `${currentValue} / 11`;
                 displayTarget = '11 events';
                 break;
+            case 'diversity-all-keybinds':
+                currentValue = Math.min(21, uniqueKeybindsCount);
+                displayCurrent = `${currentValue} / 21`;
+                displayTarget = '21 keybinds';
+                break;
             default:
                 break;
         }
@@ -784,7 +895,9 @@ export function evaluateUserGoals(solves: Solve[]): GoalProgress[] {
             completed,
             percentCompleted,
             displayCurrent,
-            displayTarget
+            displayTarget,
+            streakStartDate,
+            streakEndDate
         };
     });
 }

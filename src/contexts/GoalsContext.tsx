@@ -4,7 +4,9 @@ import { useSolves } from './SolvesContext';
 import { doc, setDoc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { GoalProgress, GoalCategory, GlobalGoalsStats, UserGoalsDoc } from '../types/goals';
-import { GOAL_DEFINITIONS, evaluateUserGoals } from '../utils/goalsCalculations';
+import { GOAL_DEFINITIONS, evaluateUserGoals, ALL_TRACKED_KEYBINDS } from '../utils/goalsCalculations';
+import { Award, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 interface GoalsContextType {
     goalsProgress: GoalProgress[];
@@ -15,6 +17,13 @@ interface GoalsContextType {
     totalCompletedCount: number;
     overallCompletionPercent: number;
     globalStats: GlobalGoalsStats | null;
+    recentlyEarnedGoal: GoalProgress | null;
+    selectedCategory: GoalCategory | 'all';
+    setSelectedCategory: (category: GoalCategory | 'all') => void;
+    statusFilter: 'all' | 'completed' | 'in-progress';
+    setStatusFilter: (status: 'all' | 'completed' | 'in-progress') => void;
+    recordKeybind: (key: string) => void;
+    dismissRecentlyEarnedGoal: () => void;
     getGoalGlobalPercentage: (goalId: string) => number;
     getGoalProgress: (goalId: string) => GoalProgress | undefined;
     pinGoal: (goalId: string) => Promise<boolean>;
@@ -29,15 +38,81 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
     const { user } = useAuth();
     const { solves, isPrivateMode } = useSolves();
 
+    const [selectedCategory, setSelectedCategoryState] = useState<GoalCategory | 'all'>(() => {
+        const stored = localStorage.getItem('cutter-cubing-goals-category');
+        return (stored as GoalCategory | 'all') || 'all';
+    });
+
+    const [statusFilter, setStatusFilterState] = useState<'all' | 'completed' | 'in-progress'>(() => {
+        const stored = localStorage.getItem('cutter-cubing-goals-status');
+        return (stored as 'all' | 'completed' | 'in-progress') || 'all';
+    });
+
+    const setSelectedCategory = useCallback((cat: GoalCategory | 'all') => {
+        setSelectedCategoryState(cat);
+        localStorage.setItem('cutter-cubing-goals-category', cat);
+        if (user) {
+            const userGoalsRef = doc(db, 'users', user.uid, 'goals', 'progress');
+            setDoc(userGoalsRef, { categoryFilter: cat, updatedAt: new Date().toISOString() }, { merge: true }).catch(err => {
+                console.warn("Error saving category filter to account:", err);
+            });
+        }
+    }, [user]);
+
+    const setStatusFilter = useCallback((status: 'all' | 'completed' | 'in-progress') => {
+        setStatusFilterState(status);
+        localStorage.setItem('cutter-cubing-goals-status', status);
+        if (user) {
+            const userGoalsRef = doc(db, 'users', user.uid, 'goals', 'progress');
+            setDoc(userGoalsRef, { statusFilter: status, updatedAt: new Date().toISOString() }, { merge: true }).catch(err => {
+                console.warn("Error saving status filter to account:", err);
+            });
+        }
+    }, [user]);
+
     const [pinnedGoalIds, setPinnedGoalIds] = useState<string[]>(() => {
         const stored = localStorage.getItem('cutter-cubing-pinned-goals');
         return stored ? JSON.parse(stored) : [];
     });
 
+    const [usedKeybinds, setUsedKeybinds] = useState<string[]>(() => {
+        const stored = localStorage.getItem('cutter-cubing-used-keybinds');
+        return stored ? JSON.parse(stored) : [];
+    });
+
+    const recordKeybind = useCallback((key: string) => {
+        const match = ALL_TRACKED_KEYBINDS.find(k => k.toLowerCase() === key.toLowerCase());
+        if (!match) return;
+
+        setUsedKeybinds(prev => {
+            if (prev.includes(match)) return prev;
+            const updated = [...prev, match];
+            localStorage.setItem('cutter-cubing-used-keybinds', JSON.stringify(updated));
+            return updated;
+        });
+    }, []);
+
+    // Global Keydown listener for keybind tracking
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement | null;
+            if (target && (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable)) {
+                return;
+            }
+            if (e.code === 'Space') {
+                recordKeybind('Space');
+            } else if (e.key) {
+                recordKeybind(e.key);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [recordKeybind]);
+
     const [globalStats, setGlobalStats] = useState<GlobalGoalsStats | null>(null);
     const lastSyncedGoalsRef = useRef<{ completedIds: string[]; completedCount: number } | null>(null);
 
-    // Compute user goals progress from solves
+    // Compute user goals progress from solves, user, and keybinds
     const userSolves = useMemo(() => {
         if (!user || isPrivateMode) return [];
         return solves.filter(s => s.userId === user.uid);
@@ -46,10 +121,10 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
     const goalsProgress = useMemo(() => {
         if (!user) {
             // When not signed in, evaluate with empty solves so definitions are available
-            return evaluateUserGoals([]);
+            return evaluateUserGoals([], null, usedKeybinds);
         }
-        return evaluateUserGoals(userSolves);
-    }, [user, userSolves]);
+        return evaluateUserGoals(userSolves, user, usedKeybinds);
+    }, [user, userSolves, usedKeybinds]);
 
     const completedGoalIds = useMemo(() => {
         const set = new Set<string>();
@@ -58,6 +133,36 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
         });
         return set;
     }, [goalsProgress]);
+
+    // Visual cue for earned goals
+    const [recentlyEarnedGoal, setRecentlyEarnedGoal] = useState<GoalProgress | null>(null);
+    const prevCompletedIdsRef = useRef<Set<string> | null>(null);
+    const isInitialLoadRef = useRef(true);
+
+    useEffect(() => {
+        if (isInitialLoadRef.current) {
+            isInitialLoadRef.current = false;
+            prevCompletedIdsRef.current = new Set(completedGoalIds);
+            return;
+        }
+
+        const prev = prevCompletedIdsRef.current || new Set<string>();
+        for (const goalId of completedGoalIds) {
+            if (!prev.has(goalId)) {
+                const goal = goalsProgress.find(g => g.goalId === goalId);
+                if (goal) {
+                    setRecentlyEarnedGoal(goal);
+                    prevCompletedIdsRef.current = new Set(completedGoalIds);
+                    break;
+                }
+            }
+        }
+        prevCompletedIdsRef.current = new Set(completedGoalIds);
+    }, [completedGoalIds, goalsProgress]);
+
+    const dismissRecentlyEarnedGoal = useCallback(() => {
+        setRecentlyEarnedGoal(null);
+    }, []);
 
     const totalGoalsCount = GOAL_DEFINITIONS.length;
     const totalCompletedCount = completedGoalIds.size;
@@ -86,6 +191,14 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
                 if (Array.isArray(data.pinnedGoalIds)) {
                     setPinnedGoalIds(data.pinnedGoalIds);
                     localStorage.setItem('cutter-cubing-pinned-goals', JSON.stringify(data.pinnedGoalIds));
+                }
+                if (data.categoryFilter) {
+                    setSelectedCategoryState(data.categoryFilter);
+                    localStorage.setItem('cutter-cubing-goals-category', data.categoryFilter);
+                }
+                if (data.statusFilter) {
+                    setStatusFilterState(data.statusFilter);
+                    localStorage.setItem('cutter-cubing-goals-status', data.statusFilter);
                 }
             }
         }, (err) => {
@@ -136,6 +249,8 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
                     pinnedGoalIds,
                     totalCompleted: currentCompletedCount,
                     completionPercentage: overallCompletionPercent,
+                    categoryFilter: selectedCategory,
+                    statusFilter: statusFilter,
                     updatedAt: new Date().toISOString()
                 };
                 await setDoc(userGoalsRef, userDocPayload, { merge: true });
@@ -284,6 +399,13 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
                 totalCompletedCount,
                 overallCompletionPercent,
                 globalStats,
+                recentlyEarnedGoal,
+                selectedCategory,
+                setSelectedCategory,
+                statusFilter,
+                setStatusFilter,
+                recordKeybind,
+                dismissRecentlyEarnedGoal,
                 getGoalGlobalPercentage,
                 getGoalProgress,
                 pinGoal,
@@ -293,6 +415,45 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
             }}
         >
             {children}
+
+            {/* Visual Cue when user earns a goal */}
+            {recentlyEarnedGoal && (
+                <div className="fixed top-16 right-6 z-50 animate-in slide-in-from-top-4 fade-in duration-300 pointer-events-auto">
+                    <div className="bg-bg-secondary/95 backdrop-blur-md border border-amber-500/40 shadow-2xl rounded-xl p-3.5 flex items-start gap-3 min-w-[280px] max-w-sm">
+                        <div className="w-9 h-9 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 shrink-0 mt-0.5">
+                            <Award className="w-5 h-5 animate-bounce" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-1">
+                                <span className="text-[10px] uppercase font-bold text-amber-500 tracking-wider">
+                                    Goal Unlocked!
+                                </span>
+                                <button
+                                    onClick={dismissRecentlyEarnedGoal}
+                                    className="text-text-secondary hover:text-text-primary p-0.5"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                            <h4 className="text-xs font-bold text-text-primary truncate mt-0.5">
+                                {recentlyEarnedGoal.title}
+                            </h4>
+                            <p className="text-[11px] text-text-secondary line-clamp-1 mt-0.5">
+                                {recentlyEarnedGoal.description}
+                            </p>
+                            <div className="mt-2 flex items-center justify-between">
+                                <Link
+                                    to="/goals"
+                                    onClick={dismissRecentlyEarnedGoal}
+                                    className="text-[10px] text-accent hover:underline font-semibold"
+                                >
+                                    View in Goals →
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </GoalsContext.Provider>
     );
 }

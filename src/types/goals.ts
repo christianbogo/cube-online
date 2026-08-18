@@ -21,6 +21,8 @@ export interface GoalProgress {
     percentCompleted: number; // 0 to 100
     displayCurrent: string;
     displayTarget: string;
+    streakStartDate?: string | null;
+    streakEndDate?: string | null;
 }
 
 export interface UserGoalsDoc {
@@ -28,6 +30,8 @@ export interface UserGoalsDoc {
     pinnedGoalIds: string[];
     totalCompleted: number;
     completionPercentage: number;
+    categoryFilter?: GoalCategory | 'all';
+    statusFilter?: 'all' | 'completed' | 'in-progress';
     updatedAt: string;
 }
 

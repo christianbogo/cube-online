@@ -3,8 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Table } from '../components';
 import {
     AlertTriangle, X, Trash, Check,
-    TrendingUp, Calendar as CalendarIcon, BarChart2, ListFilter,
-    ChevronLeft, ChevronRight, ChevronDown, Copy
+    ChevronLeft, ChevronRight, Copy
 } from 'lucide-react';
 import { type Solve, useSolves } from '../contexts/SolvesContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -21,12 +20,12 @@ import {
     Tooltip,
     ResponsiveContainer
 } from 'recharts';
-import { calculateAverage } from '../utils/calculations';
+import { calculateAverage, calculateBestSingle, calculateBestAverage } from '../utils/calculations';
 
 import {
     startOfYear, startOfMonth, endOfMonth, startOfWeek,
     startOfDay, format, addMonths, subMonths,
-    addYears, subYears, isSameDay, eachDayOfInterval, getDay
+    isSameDay, eachDayOfInterval, getDay
 } from 'date-fns';
 
 export default function Logs() {
@@ -44,6 +43,33 @@ export default function Logs() {
     useEffect(() => {
         localStorage.setItem('data_table_sort', JSON.stringify(sortConfig));
     }, [sortConfig]);
+
+    const { updateSettings } = useSettings();
+
+    // Scramble hotkeys on Logs page to switch active event filter
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement | null;
+            if (target && (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName) || target.isContentEditable)) {
+                return;
+            }
+
+            if (e.key === '1') { updateSettings({ scrambleType: 'sq1' }); return; }
+            if (e.key === '2') { updateSettings({ scrambleType: '222' }); return; }
+            if (e.key === '3') { updateSettings({ scrambleType: '333' }); return; }
+            if (e.key === '4') { updateSettings({ scrambleType: '444' }); return; }
+            if (e.key === '5') { updateSettings({ scrambleType: '555' }); return; }
+            if (e.key === '6') { updateSettings({ scrambleType: '666' }); return; }
+            if (e.key === '7') { updateSettings({ scrambleType: '777' }); return; }
+            if (e.key === 'c' || e.key === 'C') { updateSettings({ scrambleType: 'clock' }); return; }
+            if (e.key === 'm' || e.key === 'M') { updateSettings({ scrambleType: 'minx' }); return; }
+            if (e.key === 'p' || e.key === 'P') { updateSettings({ scrambleType: 'pyram' }); return; }
+            if (e.key === 's' || e.key === 'S') { updateSettings({ scrambleType: 'skewb' }); return; }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [updateSettings]);
 
     // -- Filter Solves based on Sidebar Selection and Event --
     const filteredSolves = useMemo(() => {
@@ -243,43 +269,38 @@ export default function Logs() {
                 <div className="flex items-center gap-1.5 min-w-max">
                     <button
                         onClick={() => scrollToSection('section-progression')}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors cursor-pointer"
+                        className="flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors cursor-pointer"
                     >
-                        <TrendingUp className="w-3.5 h-3.5 text-accent" />
                         <span>Progression</span>
                     </button>
 
                     <button
                         onClick={() => scrollToSection('section-activity')}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors cursor-pointer"
+                        className="flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors cursor-pointer"
                     >
-                        <CalendarIcon className="w-3.5 h-3.5 text-emerald-500" />
                         <span>Activity</span>
                     </button>
 
                     <button
                         onClick={() => scrollToSection('section-distribution')}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors cursor-pointer"
+                        className="flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors cursor-pointer"
                     >
-                        <BarChart2 className="w-3.5 h-3.5 text-blue-500" />
                         <span>Distribution</span>
                     </button>
 
                     {anomalySolves.length > 0 && (
                         <button
                             onClick={() => scrollToSection('section-anomalies')}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-yellow-500 hover:bg-yellow-500/10 transition-colors cursor-pointer"
+                            className="flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-yellow-500 hover:bg-yellow-500/10 transition-colors cursor-pointer"
                         >
-                            <AlertTriangle className="w-3.5 h-3.5 text-yellow-500" />
                             <span>Anomalies ({anomalySolves.length})</span>
                         </button>
                     )}
 
                     <button
                         onClick={() => scrollToSection('section-solves')}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors cursor-pointer"
+                        className="flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors cursor-pointer"
                     >
-                        <ListFilter className="w-3.5 h-3.5 text-purple-500" />
                         <span>Solves ({filteredSolves.length})</span>
                     </button>
                 </div>
@@ -296,10 +317,7 @@ export default function Logs() {
                     {/* Section 1: Progression Chart */}
                     <section id="section-progression" className="scroll-mt-4 w-full bg-bg-secondary/40 border border-border/50 rounded-xl p-5 flex flex-col gap-4">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2.5">
-                                <TrendingUp className="w-4 h-4 text-accent" />
-                                <h3 className="text-base font-bold text-text-primary">Solve Time Progression</h3>
-                            </div>
+                            <h3 className="text-base font-bold text-text-primary">Solve Time Progression</h3>
                             <div className="flex items-center gap-4 text-xs font-medium text-text-secondary">
                                 <span className="flex items-center gap-1.5">
                                     <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" /> Solve Time
@@ -384,10 +402,7 @@ export default function Logs() {
                     {/* Section 2: Activity Calendar */}
                     <section id="section-activity" className="scroll-mt-4 w-full bg-bg-secondary/40 border border-border/50 rounded-xl p-5 flex flex-col gap-4 overflow-visible">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2.5">
-                                <CalendarIcon className="w-4 h-4 text-emerald-500" />
-                                <h3 className="text-base font-bold text-text-primary">Activity & Consistency</h3>
-                            </div>
+                            <h3 className="text-base font-bold text-text-primary">Activity & Consistency</h3>
                         </div>
                         <ActivityCalendar solves={filteredSolves} />
                     </section>
@@ -395,10 +410,7 @@ export default function Logs() {
                     {/* Section 3: Distribution Box Plot */}
                     {boxPlotStats && (
                         <section id="section-distribution" className="scroll-mt-4 w-full bg-bg-secondary/40 border border-border/50 rounded-xl p-5 flex flex-col gap-2">
-                            <div className="flex items-center gap-2.5">
-                                <BarChart2 className="w-4 h-4 text-blue-500" />
-                                <h3 className="text-base font-bold text-text-primary">Time Distribution & Quartiles</h3>
-                            </div>
+                            <h3 className="text-base font-bold text-text-primary">Time Distribution & Quartiles</h3>
                             <p className="text-xs text-text-secondary">Summary of minimum, 25th percentile, median, 75th percentile, and maximum solve times.</p>
                             <div className="w-full py-4">
                                 <BoxPlot stats={boxPlotStats} />
@@ -409,10 +421,7 @@ export default function Logs() {
                     {/* Section 4: Anomalies */}
                     {anomalySolves.length > 0 && (
                         <section id="section-anomalies" className="scroll-mt-4 w-full bg-bg-secondary/40 border border-border/50 rounded-xl p-5 flex flex-col gap-4">
-                            <div className="flex items-center gap-2.5">
-                                <AlertTriangle className="w-4 h-4 text-yellow-500" />
-                                <h3 className="text-base font-bold text-text-primary">Detected Anomalies ({anomalySolves.length})</h3>
-                            </div>
+                            <h3 className="text-base font-bold text-text-primary">Detected Anomalies ({anomalySolves.length})</h3>
                             <Table
                                 data={anomalySolves}
                                 sortConfig={{ key: 'date', direction: 'desc' }}
@@ -469,10 +478,7 @@ export default function Logs() {
                     {/* Section 5: Solves History Table (without actions column) */}
                     <section id="section-solves" className="scroll-mt-4 w-full bg-bg-secondary/40 border border-border/50 rounded-xl p-5 flex flex-col gap-4">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2.5">
-                                <ListFilter className="w-4 h-4 text-purple-500" />
-                                <h3 className="text-base font-bold text-text-primary">Solves History ({filteredSolves.length})</h3>
-                            </div>
+                            <h3 className="text-base font-bold text-text-primary">Solves History ({filteredSolves.length})</h3>
                         </div>
 
                         <Table
@@ -638,9 +644,7 @@ function SidebarPane({ solve, onClose, allSolves, onAction, selectedSolveId }: {
     );
 }
 
-// -- Calendar View Types & Helpers --
-type CalendarViewMode = 'month' | 'quarter' | 'year';
-
+// -- Calendar View Helpers --
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 function getHeatmapColor(count: number) {
@@ -651,51 +655,48 @@ function getHeatmapColor(count: number) {
     return 'bg-emerald-700 text-white border border-emerald-400 font-bold shadow-sm shadow-emerald-950/40 hover:brightness-110';
 }
 
+function formatDuration(ms: number) {
+    const secs = Math.floor(ms / 1000);
+    const mins = Math.floor(secs / 60);
+    const hrs = Math.floor(mins / 60);
+    if (hrs > 0) return `${hrs}h ${mins % 60}m`;
+    if (mins > 0) return `${mins}m ${secs % 60}s`;
+    return `${secs}s`;
+}
+
 function ActivityCalendar({ solves }: { solves: Solve[] }) {
-    const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
     const [currentAnchorDate, setCurrentAnchorDate] = useState<Date>(() => startOfDay(new Date()));
 
-    // Map of 'yyyy-MM-dd' -> Solve Count
-    const counts = useMemo(() => {
-        const map: Record<string, number> = {};
+    // Map of 'yyyy-MM-dd' -> Solves list
+    const daySolvesMap = useMemo(() => {
+        const map: Record<string, Solve[]> = {};
         solves.forEach(s => {
             const key = format(startOfDay(new Date(s.date)), 'yyyy-MM-dd');
-            map[key] = (map[key] || 0) + 1;
+            if (!map[key]) map[key] = [];
+            map[key].push(s);
         });
         return map;
     }, [solves]);
 
     // Navigation handlers
     const handlePrev = () => {
-        if (viewMode === 'month') setCurrentAnchorDate(prev => subMonths(prev, 1));
-        else if (viewMode === 'quarter') setCurrentAnchorDate(prev => subMonths(prev, 3));
-        else setCurrentAnchorDate(prev => subYears(prev, 1));
+        setCurrentAnchorDate(prev => subMonths(prev, 1));
     };
 
     const handleNext = () => {
-        if (viewMode === 'month') setCurrentAnchorDate(prev => addMonths(prev, 1));
-        else if (viewMode === 'quarter') setCurrentAnchorDate(prev => addMonths(prev, 3));
-        else setCurrentAnchorDate(prev => addYears(prev, 1));
+        setCurrentAnchorDate(prev => addMonths(prev, 1));
     };
 
     const handleToday = () => {
         setCurrentAnchorDate(startOfDay(new Date()));
     };
 
-    // Label for current range
     const headerTitle = useMemo(() => {
-        if (viewMode === 'month') {
-            return format(currentAnchorDate, 'MMMM yyyy');
-        }
-        if (viewMode === 'quarter') {
-            const startM = subMonths(currentAnchorDate, 2);
-            return `${format(startM, 'MMM yyyy')} - ${format(currentAnchorDate, 'MMM yyyy')}`;
-        }
-        return format(currentAnchorDate, 'yyyy');
-    }, [viewMode, currentAnchorDate]);
+        return format(currentAnchorDate, 'MMMM yyyy');
+    }, [currentAnchorDate]);
 
-    // Render Clean Month Grid
-    const renderMonthGrid = (monthDate: Date, showCardBorder = true) => {
+    // Render Month Grid
+    const renderMonthGrid = (monthDate: Date) => {
         const monthStart = startOfMonth(monthDate);
         const monthEnd = endOfMonth(monthDate);
         const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
@@ -705,15 +706,8 @@ function ActivityCalendar({ solves }: { solves: Solve[] }) {
         return (
             <div
                 key={format(monthDate, 'yyyy-MM')}
-                className={`w-full max-w-xl mx-auto flex flex-col gap-2.5 p-4 rounded-xl transition-all overflow-visible
-                    ${showCardBorder ? 'bg-bg-secondary/30 border border-border/40' : ''}
-                `}
+                className="w-full max-w-xl mx-auto flex flex-col gap-2.5 transition-all overflow-visible"
             >
-                {/* Month Title */}
-                <div className="text-sm font-bold text-text-primary text-center pb-1">
-                    {format(monthDate, 'MMMM yyyy')}
-                </div>
-
                 {/* Weekday Headers */}
                 <div className="grid grid-cols-7 gap-2 text-[11px] font-bold text-text-secondary text-center pb-1 border-b border-border/20">
                     {WEEKDAYS.map(w => (
@@ -731,8 +725,21 @@ function ActivityCalendar({ solves }: { solves: Solve[] }) {
                     {/* Actual month days */}
                     {daysInMonth.map(d => {
                         const dateKey = format(d, 'yyyy-MM-dd');
-                        const count = counts[dateKey] || 0;
+                        const daySolves = (daySolvesMap[dateKey] || []).slice().sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                        const count = daySolves.length;
                         const isToday = isSameDay(d, new Date());
+
+                        const bestSingle = count > 0 ? calculateBestSingle(daySolves) : null;
+                        const bestAo5 = count >= 5 ? calculateBestAverage(daySolves, 5) : null;
+                        const bestAo12 = count >= 12 ? calculateBestAverage(daySolves, 12) : null;
+                        const bestAo100 = count >= 100 ? calculateBestAverage(daySolves, 100) : null;
+                        const totalPracticeTime = daySolves.reduce((acc, s) => {
+                            if (s.penalty === 'DNF' || s.inspectionPenalty === 'DNF') return acc;
+                            let t = s.time;
+                            if (s.penalty === '+2') t += 2000;
+                            if (s.inspectionPenalty === '+2') t += 2000;
+                            return acc + t;
+                        }, 0);
 
                         return (
                             <div
@@ -749,11 +756,54 @@ function ActivityCalendar({ solves }: { solves: Solve[] }) {
                                 )}
 
                                 {/* Hover Tooltip: Solid High-Z Popover with arrow */}
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 hidden group-hover:flex flex-col items-center bg-zinc-950 text-white text-[11px] px-3 py-1.5 rounded-md border border-zinc-700 whitespace-nowrap z-[999] shadow-2xl pointer-events-none">
-                                    <span className="font-semibold">{format(d, 'EEEE, MMM d, yyyy')}</span>
-                                    <span className="text-[10px] text-zinc-300 font-mono mt-0.5">{count} {count === 1 ? 'solve' : 'solves'}</span>
-                                    <div className="w-2 h-2 bg-zinc-950 border-r border-b border-zinc-700 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2" />
-                                </div>
+                                {count > 0 ? (
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 hidden group-hover:flex flex-col gap-1.5 bg-zinc-950 text-white text-[11px] px-3.5 py-2.5 rounded-lg border border-zinc-700 whitespace-nowrap z-[999] shadow-2xl pointer-events-none min-w-[175px]">
+                                        <div className="font-semibold text-center border-b border-zinc-800 pb-1">
+                                            {format(d, 'EEEE, MMM d, yyyy')}
+                                        </div>
+                                        <div className="flex flex-col gap-0.5 text-zinc-300 font-mono text-[10px]">
+                                            <div className="flex justify-between items-center gap-3">
+                                                <span className="text-zinc-400 font-sans">Solves:</span>
+                                                <span className="font-bold text-white">{count}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center gap-3">
+                                                <span className="text-zinc-400 font-sans">Practice Time:</span>
+                                                <span className="font-bold text-white">{formatDuration(totalPracticeTime)}</span>
+                                            </div>
+                                            {bestSingle !== null && (
+                                                <div className="flex justify-between items-center gap-3">
+                                                    <span className="text-zinc-400 font-sans">Best Single:</span>
+                                                    <span className="font-bold text-white">{formatTime(bestSingle)}</span>
+                                                </div>
+                                            )}
+                                            {bestAo5 !== null && bestAo5 !== 'DNF' && (
+                                                <div className="flex justify-between items-center gap-3">
+                                                    <span className="text-zinc-400 font-sans">Best Ao5:</span>
+                                                    <span className="font-bold text-white">{formatTime(bestAo5)}</span>
+                                                </div>
+                                            )}
+                                            {bestAo12 !== null && bestAo12 !== 'DNF' && (
+                                                <div className="flex justify-between items-center gap-3">
+                                                    <span className="text-zinc-400 font-sans">Best Ao12:</span>
+                                                    <span className="font-bold text-white">{formatTime(bestAo12)}</span>
+                                                </div>
+                                            )}
+                                            {bestAo100 !== null && bestAo100 !== 'DNF' && (
+                                                <div className="flex justify-between items-center gap-3">
+                                                    <span className="text-zinc-400 font-sans">Best Ao100:</span>
+                                                    <span className="font-bold text-white">{formatTime(bestAo100)}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="w-2 h-2 bg-zinc-950 border-r border-b border-zinc-700 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2" />
+                                    </div>
+                                ) : (
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 hidden group-hover:flex flex-col items-center bg-zinc-950 text-white text-[11px] px-3 py-1.5 rounded-md border border-zinc-700 whitespace-nowrap z-[999] shadow-2xl pointer-events-none">
+                                        <span className="font-semibold">{format(d, 'EEEE, MMM d, yyyy')}</span>
+                                        <span className="text-[10px] text-zinc-400 font-mono mt-0.5">0 solves</span>
+                                        <div className="w-2 h-2 bg-zinc-950 border-r border-b border-zinc-700 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2" />
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
@@ -764,14 +814,14 @@ function ActivityCalendar({ solves }: { solves: Solve[] }) {
 
     return (
         <div className="flex flex-col gap-4 w-full overflow-visible">
-            {/* Top Toolbar: Navigation Controls & View Mode Dropdown */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pb-2 border-b border-border/40">
+            {/* Top Toolbar: Navigation Controls */}
+            <div className="flex items-center justify-between gap-3 pb-2 border-b border-border/40">
                 {/* Period Navigation */}
                 <div className="flex items-center gap-2">
                     <button
                         onClick={handlePrev}
                         className="p-1.5 rounded-md hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
-                        title="Previous period"
+                        title="Previous month"
                     >
                         <ChevronLeft className="w-4 h-4" />
                     </button>
@@ -781,7 +831,7 @@ function ActivityCalendar({ solves }: { solves: Solve[] }) {
                     <button
                         onClick={handleNext}
                         className="p-1.5 rounded-md hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
-                        title="Next period"
+                        title="Next month"
                     >
                         <ChevronRight className="w-4 h-4" />
                     </button>
@@ -792,51 +842,11 @@ function ActivityCalendar({ solves }: { solves: Solve[] }) {
                         Today
                     </button>
                 </div>
-
-                {/* View Mode Dropdown */}
-                <div className="relative group min-w-[130px]">
-                    <select
-                        value={viewMode}
-                        onChange={(e) => setViewMode(e.target.value as CalendarViewMode)}
-                        className="appearance-none bg-bg-secondary border border-border hover:border-accent text-text-primary text-xs font-semibold rounded-lg px-3 py-1.5 pr-8 cursor-pointer focus:outline-none focus:ring-1 focus:ring-accent w-full"
-                    >
-                        <option value="month" className="bg-bg-secondary text-text-primary">Month</option>
-                        <option value="quarter" className="bg-bg-secondary text-text-primary">3 Months</option>
-                        <option value="year" className="bg-bg-secondary text-text-primary">Year</option>
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60 text-text-secondary" />
-                </div>
             </div>
 
-            {/* Calendar View Container (Vertically Stacked) */}
-            <div className="w-full overflow-visible">
-                {/* 1. SINGLE MONTH VIEW */}
-                {viewMode === 'month' && (
-                    <div className="py-2 overflow-visible">
-                        {renderMonthGrid(currentAnchorDate, true)}
-                    </div>
-                )}
-
-                {/* 2. THREE MONTHS VIEW (Vertically Stacked) */}
-                {viewMode === 'quarter' && (
-                    <div className="flex flex-col gap-6 py-2 overflow-visible">
-                        {renderMonthGrid(subMonths(currentAnchorDate, 2), true)}
-                        {renderMonthGrid(subMonths(currentAnchorDate, 1), true)}
-                        {renderMonthGrid(currentAnchorDate, true)}
-                    </div>
-                )}
-
-                {/* 3. YEAR VIEW (12 Months Vertically Stacked) */}
-                {viewMode === 'year' && (() => {
-                    const yearStart = startOfYear(currentAnchorDate);
-                    const months = Array.from({ length: 12 }, (_, i) => addMonths(yearStart, i));
-
-                    return (
-                        <div className="flex flex-col gap-6 py-2 overflow-visible">
-                            {months.map(m => renderMonthGrid(m, true))}
-                        </div>
-                    );
-                })()}
+            {/* Calendar View Container */}
+            <div className="w-full overflow-visible py-2">
+                {renderMonthGrid(currentAnchorDate)}
             </div>
 
             {/* Legend */}

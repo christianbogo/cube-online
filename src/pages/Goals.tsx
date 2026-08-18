@@ -10,7 +10,6 @@ import {
     PinOff,
     CheckCircle2,
     Lock,
-    Search,
     TrendingUp,
     Users
 } from 'lucide-react';
@@ -19,7 +18,7 @@ import { useGoals } from '../contexts/GoalsContext';
 import type { GoalCategory } from '../types/goals';
 import { CATEGORY_METADATA } from '../utils/goalsCalculations';
 
-type StatusFilter = 'all' | 'completed' | 'in-progress' | 'pinned';
+type StatusFilter = 'all' | 'completed' | 'in-progress';
 
 export default function Goals() {
     const { user } = useAuth();
@@ -33,14 +32,15 @@ export default function Goals() {
         getGoalGlobalPercentage,
         pinGoal,
         unpinGoal,
-        isGoalPinned
+        isGoalPinned,
+        selectedCategory,
+        setSelectedCategory,
+        statusFilter,
+        setStatusFilter
     } = useGoals();
 
     const navigate = useNavigate();
 
-    const [selectedCategory, setSelectedCategory] = useState<GoalCategory | 'all'>('all');
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-    const [searchQuery, setSearchQuery] = useState('');
     const [pinNotice, setPinNotice] = useState<string | null>(null);
 
     const handlePinToggle = async (goalId: string) => {
@@ -71,19 +71,10 @@ export default function Goals() {
             // Status filter
             if (statusFilter === 'completed' && !goal.completed) return false;
             if (statusFilter === 'in-progress' && goal.completed) return false;
-            if (statusFilter === 'pinned' && !isGoalPinned(goal.goalId)) return false;
-
-            // Search query
-            if (searchQuery.trim()) {
-                const q = searchQuery.toLowerCase();
-                const matchTitle = goal.title.toLowerCase().includes(q);
-                const matchDesc = goal.description.toLowerCase().includes(q);
-                if (!matchTitle && !matchDesc) return false;
-            }
 
             return true;
         });
-    }, [goalsProgress, selectedCategory, statusFilter, searchQuery, isGoalPinned]);
+    }, [goalsProgress, selectedCategory, statusFilter]);
 
     // Category progress breakdown
     const categoryStats = useMemo(() => {
@@ -350,30 +341,16 @@ export default function Goals() {
                         ))}
                     </div>
 
-                    {/* Search & Status Filters */}
+                    {/* Status Filter */}
                     <div className="flex items-center gap-2">
-                        {/* Search Input */}
-                        <div className="relative flex-1 sm:w-48">
-                            <Search className="w-3.5 h-3.5 text-text-secondary absolute left-2.5 top-1/2 -translate-y-1/2" />
-                            <input
-                                type="text"
-                                placeholder="Search goals..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full bg-surface-elevation-1 border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:border-accent"
-                            />
-                        </div>
-
-                        {/* Status Select */}
                         <select
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-                            className="bg-surface-elevation-1 border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary focus:outline-none focus:border-accent cursor-pointer"
+                            className="bg-surface-elevation-1 border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary focus:outline-none focus:border-accent cursor-pointer font-medium"
                         >
                             <option value="all">All Status</option>
-                            <option value="completed">Completed</option>
                             <option value="in-progress">In Progress</option>
-                            <option value="pinned">Pinned</option>
+                            <option value="completed">Complete</option>
                         </select>
                     </div>
                 </div>
@@ -422,6 +399,16 @@ export default function Goals() {
                                     </button>
                                 </div>
 
+                                {/* Streak Date Range */}
+                                {goal.category === 'streak' && goal.streakStartDate && goal.streakEndDate && goal.currentValue > 0 && (
+                                    <div className="flex items-center gap-1.5 text-[11px] font-mono text-text-secondary bg-bg-secondary/60 px-2.5 py-1 rounded-md border border-border/40 w-fit">
+                                        <Flame className="w-3 h-3 text-amber-500 shrink-0" />
+                                        <span>
+                                            Best streak: {goal.streakStartDate === goal.streakEndDate ? goal.streakStartDate : `${goal.streakStartDate} – ${goal.streakEndDate}`}
+                                        </span>
+                                    </div>
+                                )}
+
                                 {/* Progress Bar & Metrics */}
                                 <div className="flex flex-col gap-1.5 pt-1">
                                     <div className="flex items-center justify-between text-xs">
@@ -463,9 +450,8 @@ export default function Goals() {
                                 onClick={() => {
                                     setSelectedCategory('all');
                                     setStatusFilter('all');
-                                    setSearchQuery('');
                                 }}
-                                className="text-xs text-accent underline mt-1"
+                                className="text-xs text-accent underline mt-1 cursor-pointer"
                             >
                                 Clear filters
                             </button>

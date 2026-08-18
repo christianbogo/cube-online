@@ -15,8 +15,7 @@ import {
     ChevronUp,
     ChevronDown,
     SkipForward,
-    CheckCircle2,
-    Pin
+    CheckCircle2
 } from 'lucide-react';
 import { formatTime } from '../utils/formatTime';
 import { rtdb } from '../lib/firebase';
@@ -368,10 +367,14 @@ export default function Cube() {
         }
 
         if (e.key === 'Escape') {
-            if (timerState === 'INSPECTION') {
-                setTimerState('IDLE');
-                setInspectionTime(15);
-            }
+            e.preventDefault();
+            setTimerState('IDLE');
+            setTime(0);
+            setInspectionTime(15);
+            setPrimingProgress(0);
+            primingStartRef.current = null;
+            inspectionStartTimeRef.current = null;
+            setPenaltyFeedback(null);
             return;
         }
 
@@ -541,43 +544,55 @@ export default function Cube() {
                 className="flex-1 flex flex-col items-center justify-center select-none min-h-0 relative z-10"
                 style={{ opacity: (timerState === 'PRIMING' && primingProgress < 1) ? 0.6 : 1 }}
             >
-                {/* PINNED GOALS BANNER */}
-                {user && pinnedGoals.length > 0 && timerState === 'IDLE' && (
-                    <div className="mb-6 w-full max-w-2xl px-4 animate-in fade-in duration-200">
-                        <div className="bg-surface-elevation-1 border border-border/80 rounded-xl p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
-                            <div className="flex items-center gap-1.5 px-1 text-text-secondary">
-                                <Pin className="w-3.5 h-3.5 text-accent" />
-                                <span className="text-[11px] font-semibold uppercase tracking-wider">Goals</span>
-                            </div>
-                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                {pinnedGoals.map(goal => (
+                {/* PINNED GOALS BANNER (Always Rendered & Interactive) */}
+                {user && pinnedGoals.length > 0 && (
+                    <div className="mb-4 w-full max-w-lg px-2 opacity-65 hover:opacity-100 transition-opacity animate-in fade-in duration-200 overflow-visible">
+                        <div className="flex items-center justify-center gap-2 flex-wrap overflow-visible">
+                            {pinnedGoals.map(goal => (
+                                <div key={goal.goalId} className="relative group/goal flex-1 min-w-[120px] max-w-[170px] overflow-visible">
                                     <Link
-                                        key={goal.goalId}
                                         to="/goals"
-                                        className="bg-bg-secondary hover:bg-bg-hover border border-border/60 rounded-lg px-2.5 py-1.5 flex flex-col justify-between gap-1 transition-colors"
-                                        title={`${goal.title}: ${goal.displayCurrent} / ${goal.displayTarget}`}
+                                        className="w-full bg-transparent border border-border/40 hover:border-border/80 rounded-lg px-2.5 py-1.5 flex flex-col gap-1 transition-colors cursor-pointer block"
                                     >
                                         <div className="flex items-center justify-between gap-1">
-                                            <span className="text-xs font-medium text-text-primary truncate">
+                                            <span className="text-[11px] font-medium text-text-secondary group-hover/goal:text-text-primary truncate">
                                                 {goal.title}
                                             </span>
                                             {goal.completed ? (
-                                                <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
+                                                <CheckCircle2 className="w-3 h-3 text-text-secondary shrink-0" />
                                             ) : (
-                                                <span className="text-[10px] font-mono text-text-secondary">
+                                                <span className="text-[9px] font-mono text-text-secondary/70">
                                                     {goal.percentCompleted}%
                                                 </span>
                                             )}
                                         </div>
-                                        <div className="w-full h-1 bg-bg-primary rounded-full overflow-hidden">
+                                        <div className="w-full h-1 bg-text-secondary/15 rounded-full overflow-hidden">
                                             <div
-                                                className={`h-full transition-all duration-300 ${goal.completed ? 'bg-green-500' : 'bg-accent'}`}
+                                                className="h-full bg-text-secondary transition-all duration-300 rounded-full"
                                                 style={{ width: `${goal.percentCompleted}%` }}
                                             />
                                         </div>
                                     </Link>
-                                ))}
-                            </div>
+
+                                    {/* Hover Tooltip: Solid Popover showing what the goal is */}
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/goal:flex flex-col gap-1 bg-zinc-950 text-white text-[11px] p-2.5 rounded-lg border border-zinc-700 whitespace-normal w-56 z-[999] shadow-2xl pointer-events-none text-left animate-in fade-in zoom-in-95">
+                                        <div className="font-semibold text-white text-xs flex items-center justify-between gap-2 border-b border-zinc-800 pb-1">
+                                            <span className="truncate">{goal.title}</span>
+                                            <span className={`text-[10px] font-mono shrink-0 ${goal.completed ? 'text-green-400' : 'text-zinc-400'}`}>
+                                                {goal.completed ? 'Completed' : `${goal.percentCompleted}%`}
+                                            </span>
+                                        </div>
+                                        <p className="text-[11px] text-zinc-300 leading-snug">
+                                            {goal.description}
+                                        </p>
+                                        <div className="text-[10px] font-mono text-zinc-400 pt-0.5 flex items-center justify-between border-t border-zinc-800/60">
+                                            <span>Progress:</span>
+                                            <span className="text-zinc-200">{goal.displayCurrent} / {goal.displayTarget}</span>
+                                        </div>
+                                        <div className="w-2 h-2 bg-zinc-950 border-r border-b border-zinc-700 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2" />
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}
@@ -625,7 +640,13 @@ export default function Cube() {
                         </div>
 
                         {/* Scramble Text */}
-                        <div className="mb-8 text-center max-w-2xl min-h-[4rem] flex flex-col items-center justify-center">
+                        <div className="mb-8 text-center max-w-2xl min-h-[4rem] flex flex-col items-center justify-center relative">
+                            {isCopied && (
+                                <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-700 text-white text-[11px] font-medium px-2.5 py-0.5 rounded shadow-lg animate-in fade-in zoom-in-95 pointer-events-none whitespace-nowrap z-20 flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3 text-green-400" />
+                                    <span>Scramble copied!</span>
+                                </div>
+                            )}
                             <p
                                 onClick={handleCopyScramble}
                                 className="font-mono text-text-secondary leading-relaxed text-center cursor-pointer hover:text-text-primary active:scale-95"

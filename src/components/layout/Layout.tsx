@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { ref, onValue } from 'firebase/database';
+import { rtdb } from '../../lib/firebase';
 import Topbar from './Topbar';
 import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
@@ -13,6 +15,36 @@ export default function Layout() {
     const { isPrivateMode, togglePrivateMode, syncStatus } = useSolves();
     const { user } = useAuth();
     const isSignInPage = location.pathname === '/account' && !user;
+
+    // Online presence and network status
+    const [onlineCubersCount, setOnlineCubersCount] = useState<number>(0);
+    const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+    useEffect(() => {
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
+
+    useEffect(() => {
+        const presenceRef = ref(rtdb, 'presence');
+        const unsubscribe = onValue(presenceRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                setOnlineCubersCount(Object.keys(data).length);
+            } else {
+                setOnlineCubersCount(0);
+            }
+        });
+        return () => unsubscribe();
+    }, []);
 
     // Persistence Helpers
     const getStoredWidth = (key: string, defaultWidth: number) => {
@@ -243,7 +275,7 @@ export default function Layout() {
                     {(!location.pathname.startsWith('/logs') && location.pathname !== '/account') && (
                         <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8 shrink-0">
                             <div className="flex gap-2 items-center">
-                                <span>Online • v0.1.0</span>
+                                <span>{isOnline ? 'Online' : 'Offline'} • v0.3.1</span>
                                 <SyncIndicator status={syncStatus} />
                                 {isPrivateMode && (
                                     <button onClick={() => { if (confirm('Leave private mode?')) togglePrivateMode(); }} className="ml-2 bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20 uppercase font-bold text-[9px]">
@@ -251,7 +283,13 @@ export default function Layout() {
                                     </button>
                                 )}
                             </div>
-                            {consoleInfo && <div className="text-[10px] text-yellow-500/70 truncate max-w-xs font-mono ml-auto" title={consoleInfo}>{consoleInfo}</div>}
+                            <div className="flex items-center gap-3">
+                                {consoleInfo && <div className="text-[10px] text-yellow-500/70 truncate max-w-xs font-mono" title={consoleInfo}>{consoleInfo}</div>}
+                                <div className="flex items-center gap-1.5 font-mono text-[11px] text-text-secondary">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block animate-pulse" />
+                                    <span>{onlineCubersCount} cuber{onlineCubersCount === 1 ? '' : 's'} online</span>
+                                </div>
+                            </div>
                         </footer>
                     )}
                 </main>
