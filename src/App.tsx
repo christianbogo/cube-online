@@ -5,6 +5,7 @@ import { SolvesProvider } from './contexts/SolvesContext';
 import { GoalsProvider } from './contexts/GoalsContext';
 import { SessionProvider } from './contexts/SessionContext';
 import { ConfirmationProvider } from './contexts/ConfirmationContext';
+import { LiveProvider } from './contexts/LiveContext';
 import { Layout } from './components';
 import Cube from './pages/Cube';
 import Logs from './pages/Logs';
@@ -28,22 +29,24 @@ function App() {
           <ConfirmationProvider>
             <SessionProvider>
               <SolvesProvider>
-                <GoalsProvider>
-                  <Routes>
-                    <Route path="/" element={<Layout />}>
-                      <Route index element={<Cube />} />
-                      <Route path="logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
-                      <Route path="logs/:type/:id" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
-                      <Route path="data" element={<Navigate to="/logs" replace />} />
-                      <Route path="data/*" element={<Navigate to="/logs" replace />} />
-                      <Route path="stats" element={<Navigate to="/logs" replace />} />
-                      <Route path="stats/*" element={<Navigate to="/logs" replace />} />
-                      <Route path="goals" element={<Goals />} />
-                      <Route path="account" element={<Account />} />
-                      <Route path="keybinds" element={<Keybinds />} />
-                    </Route>
-                  </Routes>
-                </GoalsProvider>
+                <LiveProvider>
+                  <GoalsProvider>
+                    <Routes>
+                      <Route path="/" element={<Layout />}>
+                        <Route index element={<Cube />} />
+                        <Route path="logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
+                        <Route path="logs/:type/:id" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
+                        <Route path="data" element={<Navigate to="/logs" replace />} />
+                        <Route path="data/*" element={<Navigate to="/logs" replace />} />
+                        <Route path="stats" element={<Navigate to="/logs" replace />} />
+                        <Route path="stats/*" element={<Navigate to="/logs" replace />} />
+                        <Route path="goals" element={<Goals />} />
+                        <Route path="account" element={<Account />} />
+                        <Route path="keybinds" element={<Keybinds />} />
+                      </Route>
+                    </Routes>
+                  </GoalsProvider>
+                </LiveProvider>
               </SolvesProvider>
             </SessionProvider>
           </ConfirmationProvider>

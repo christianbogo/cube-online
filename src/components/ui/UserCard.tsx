@@ -1,21 +1,19 @@
-import { Star, Ban } from 'lucide-react';
 import { formatTime } from '../../utils/formatTime';
 import type { TimerState, LiveUser, SimpleSolve } from '../../types';
 
 export interface UserCardProps {
     user: LiveUser;
-    isStarred: boolean;
-    onStar: (id: string, e: React.MouseEvent) => void;
-    onBlock: (id: string, e: React.MouseEvent) => void;
+    isStarred?: boolean;
+    onStar?: (id: string, e: React.MouseEvent) => void;
+    onBlock?: (id: string, e: React.MouseEvent) => void;
 }
 
-export const UserCard = ({ user, isStarred, onStar, onBlock }: UserCardProps) => {
+export const UserCard = ({ user }: UserCardProps) => {
     // Determine Border Color based on Status
     const getBorderColor = (status: TimerState) => {
         switch (status) {
             case 'RUNNING': return 'border-green-500';
             case 'INSPECTION': return 'border-orange-500';
-            case 'SOLVED': return 'border-blue-500';
             case 'PRIMING': return 'border-red-500';
             default: return 'border-border';
         }
@@ -24,7 +22,7 @@ export const UserCard = ({ user, isStarred, onStar, onBlock }: UserCardProps) =>
     // Format Solves Display
     const solves = user.recentSolves || [];
     const recent = solves[0];
-    const history = solves.slice(1, 4);
+    const history = solves.slice(1, 3);
 
     const formatTimeStr = (s: SimpleSolve) => {
         if (s.penalty === 'DNF' || s.inspectionPenalty === 'DNF') return 'DNF';
@@ -37,33 +35,17 @@ export const UserCard = ({ user, isStarred, onStar, onBlock }: UserCardProps) =>
     };
 
     return (
-        <div className={`flex-shrink-0 w-44 h-32 bg-surface-elevation-1 rounded-xl border-2 flex flex-col relative group hover:shadow-lg transition-all
+        <div className={`flex-shrink-0 w-44 h-32 bg-surface-elevation-1 rounded-xl border-2 flex flex-col relative group hover:shadow-lg transition-all outline-none focus:outline-none
             ${getBorderColor(user.status)}`}
         >
-            {/* Header: Avatar + Name + Actions */}
+            {/* Header: Rounded Square Avatar + Name */}
             <div className="flex items-center justify-between p-2 pl-3 pb-1">
-                <div className="flex items-center gap-2 overflow-hidden">
-                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: user.color }} />
+                <div className="flex items-center gap-2 overflow-hidden w-full">
+                    <div
+                        className="w-3 h-3 rounded-md flex-shrink-0 shadow-xs"
+                        style={{ backgroundColor: user.color }}
+                    />
                     <span className="font-semibold text-text-primary truncate text-xs">{user.username}</span>
-                    {isStarred && <Star className="w-3 h-3 text-yellow-500 fill-yellow-500 flex-shrink-0" />}
-                </div>
-
-                {/* Actions (Visible on Hover) */}
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                        onClick={(e) => onStar(user.uid, e)}
-                        className="text-text-secondary hover:text-yellow-500 p-0.5"
-                        title={isStarred ? "Unstar" : "Star User"}
-                    >
-                        <Star className={`w-3.5 h-3.5 ${isStarred ? 'fill-yellow-500 text-yellow-500' : ''}`} />
-                    </button>
-                    <button
-                        onClick={(e) => onBlock(user.uid, e)}
-                        className="text-text-secondary hover:text-red-500 p-0.5"
-                        title="Block User"
-                    >
-                        <Ban className="w-3.5 h-3.5" />
-                    </button>
                 </div>
             </div>
 
@@ -80,14 +62,14 @@ export const UserCard = ({ user, isStarred, onStar, onBlock }: UserCardProps) =>
                     <div className="text-2xl text-text-secondary/20 font-mono">--.--</div>
                 )}
 
-                {/* History (Small) */}
+                {/* History (2 solves after most recent, no background color) */}
                 <div className="flex gap-2 mt-1">
-                    {[0, 1, 2].map(i => {
+                    {[0, 1].map(i => {
                         const s = history[i];
-                        if (!s) return <div key={i} className="w-8 h-4 bg-black/10 rounded" />;
+                        if (!s) return <div key={i} className="text-[10px] font-mono text-text-secondary/25 px-1">--.--</div>;
                         return (
-                            <div key={i} className={`text-[10px] font-mono px-1 rounded
-                                ${s.penalty === 'DNF' ? 'text-red-500' : 'text-text-secondary bg-black/20'}
+                            <div key={i} className={`text-[10px] font-mono px-1
+                                ${s.penalty === 'DNF' ? 'text-red-500' : 'text-text-secondary'}
                             `}>
                                 {formatTimeStr(s)}
                             </div>

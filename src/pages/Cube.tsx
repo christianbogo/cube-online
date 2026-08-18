@@ -5,6 +5,7 @@ import { useSolves, type Solve } from '../contexts/SolvesContext';
 import { useSession } from '../contexts/SessionContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useGoals } from '../contexts/GoalsContext';
+import { useLive } from '../contexts/LiveContext';
 import { Link } from 'react-router-dom';
 import {
     EyeOff,
@@ -12,23 +13,20 @@ import {
     Plus,
     Radio,
     Search,
-    ChevronUp,
-    ChevronDown,
     SkipForward,
     CheckCircle2
 } from 'lucide-react';
 import { formatTime } from '../utils/formatTime';
-import { rtdb } from '../lib/firebase';
-import { ref, onDisconnect, set, onValue, remove } from 'firebase/database';
-import type { LiveUser, SimpleSolve, TimerState } from '../types';
+import type { LiveUser, TimerState } from '../types';
 import { UserCard, KeybindTooltip } from '../components';
 
 export default function Cube() {
     const { settings, updateSettings } = useSettings();
     const { solves, addSolve, updateSolve, currentScramble, setCurrentScramble } = useSolves();
     const { startNewSession, currentSessionId } = useSession();
-    const { user, toggleStarUser, toggleBlockUser } = useAuth();
+    const { user, toggleStarUser } = useAuth();
     const { pinnedGoals } = useGoals();
+    const { isLiveMode, setIsLiveMode, connectedUsers, setLiveTimerState } = useLive();
 
     const scrambleType = settings.scrambleType;
 
@@ -37,10 +35,9 @@ export default function Cube() {
     const [penaltyFeedback, setPenaltyFeedback] = useState<{ text: string; type: string } | null>(null);
 
     // Live Mode State
-    const [isLiveMode, setIsLiveMode] = useState(false);
-    const [connectedUsers, setConnectedUsers] = useState<LiveUser[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
-    const [bottomBarCollapsed, setBottomBarCollapsed] = useState(false);
+    const bottomContainerRef = useRef<HTMLDivElement>(null);
+    const [isBottomOverflowing, setIsBottomOverflowing] = useState(false);
 
     // Session consistency
     const checkSessionConsistency = useCallback(async () => {
@@ -73,6 +70,11 @@ export default function Cube() {
     const [scrambleVisible, setScrambleVisible] = useState(true);
     const [isCopied, setIsCopied] = useState(false);
 
+    // Sync timerState with LiveContext for RTDB broadcast
+    useEffect(() => {
+        setLiveTimerState(timerState);
+    }, [timerState, setLiveTimerState]);
+
     const startTimeRef = useRef<number>(0);
     const primingStartRef = useRef<number | null>(null);
     const initialPenaltyRef = useRef<Solve['penalty']>('none');
@@ -93,70 +95,10 @@ export default function Cube() {
         setVisualScrambleType(settings.scrambleType);
     }, [scramble, settings.scrambleType]);
 
-    // Helper for live solves broadcast
-    const formatRecentSolves = useCallback((): SimpleSolve[] => {
-        return solves.slice(0, 4).map(s => ({
-            time: s.time,
-            penalty: s.penalty,
-            inspectionPenalty: s.inspectionPenalty,
-            timestamp: new Date(s.date).getTime()
-        }));
-    }, [solves]);
-
-    // Firebase Presence Logic
-    useEffect(() => {
-        if (!user || !isLiveMode) return;
-
-        const userPresenceRef = ref(rtdb, `presence/${user.uid}`);
-        const currentRecent = formatRecentSolves();
-
-        const updatePresence = () => {
-            const data: LiveUser = {
-                uid: user.uid,
-                username: user.username || 'CubingUser',
-                color: user.color || '#ef4444',
-                status: timerState,
-                lastSolveTime: (solves.length > 0 && typeof solves[0]?.time === 'number') ? solves[0].time : null,
-                recentSolves: currentRecent,
-                timestamp: Date.now()
-            };
-            set(userPresenceRef, data);
-        };
-
-        updatePresence();
-        onDisconnect(userPresenceRef).remove();
-
-        return () => {
-            remove(userPresenceRef);
-        };
-    }, [user, timerState, solves, formatRecentSolves, isLiveMode]);
-
-    // Listen for other users
-    useEffect(() => {
-        if (!isLiveMode) {
-            setConnectedUsers([]);
-            return;
-        }
-
-        const presenceRef = ref(rtdb, 'presence');
-        const unsubscribe = onValue(presenceRef, (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                const users: LiveUser[] = Object.values(data);
-                const others = users.filter(u => u.uid !== user?.uid);
-                setConnectedUsers(others);
-            } else {
-                setConnectedUsers([]);
-            }
-        });
-
-        return () => unsubscribe();
-    }, [user, isLiveMode]);
-
     // Filter connected users
     const { favoriteUsers, communityUsers } = useMemo(() => {
         if (!user) return { favoriteUsers: [], communityUsers: [] };
-        const starred = user.starredUsers || [];
+        const starred = user.following || user.starredUsers || [];
         const blocked = user.blockedUsers || [];
         const q = searchQuery.toLowerCase();
 
@@ -167,7 +109,7 @@ export default function Cube() {
         const filterFn = (u: LiveUser) => u.username.toLowerCase().includes(q);
 
         return {
-            favoriteUsers: favs.filter(filterFn),
+            favoriteUsers: favs,
             communityUsers: comms.filter(filterFn)
         };
     }, [connectedUsers, user, searchQuery]);
@@ -499,18 +441,18 @@ export default function Cube() {
         }
     };
 
-    // Live Actions
-    const handleStar = (targetUid: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        toggleStarUser(targetUid);
-    };
-
-    const handleBlock = (targetUid: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (confirm("Block this user? You won't see them on Live anymore.")) {
-            toggleBlockUser(targetUid);
-        }
-    };
+    // Overflow tracking for community chips at the bottom
+    useEffect(() => {
+        const check = () => {
+            if (bottomContainerRef.current) {
+                const { scrollWidth, clientWidth } = bottomContainerRef.current;
+                setIsBottomOverflowing(scrollWidth > clientWidth);
+            }
+        };
+        check();
+        window.addEventListener('resize', check);
+        return () => window.removeEventListener('resize', check);
+    }, [communityUsers]);
 
     const formatRunningTime = (ms: number) => {
         const seconds = Math.floor(ms / 1000);
@@ -523,17 +465,13 @@ export default function Cube() {
     return (
         <div className="flex flex-col h-full relative overflow-hidden">
 
-            {/* LIVE BAR (Top) */}
+            {/* LIVE BAR (Top - Followed Cubers) */}
             {isLiveMode && favoriteUsers.length > 0 && (
-                <div className="flex-shrink-0 border-b border-border bg-bg-secondary/50 backdrop-blur-sm p-4 flex gap-4 overflow-x-auto items-center h-40 animate-in slide-in-from-top-4 fade-in duration-300">
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500/20" />
+                <div className="flex-shrink-0 p-4 flex justify-center items-center gap-4 overflow-x-auto h-40 animate-in slide-in-from-top-4 fade-in duration-300 z-10">
                     {favoriteUsers.map(u => (
                         <UserCard
                             key={u.uid}
                             user={u}
-                            isStarred={true}
-                            onStar={handleStar}
-                            onBlock={handleBlock}
                         />
                     ))}
                 </div>
@@ -716,47 +654,81 @@ export default function Cube() {
                 </div>
             </div>
 
-            {/* COMMUNITY BAR (Bottom) */}
+            {/* LIVE BAR (Bottom - Non-Following Active Cubers) */}
             {isLiveMode && (
-                <div className="flex-shrink-0 border-t border-border bg-bg-secondary/70 backdrop-blur-sm relative z-10">
-                    <div className="px-4 py-1.5 border-b border-border/40 flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2 text-text-secondary">
-                            <Search className="w-3.5 h-3.5" />
-                            <input
-                                type="text"
-                                placeholder="Filter active solvers..."
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                                className="bg-transparent text-xs text-text-primary focus:outline-none placeholder:text-text-secondary/50 w-36 sm:w-48"
-                            />
+                <div className="flex-shrink-0 w-full pb-3 pt-1 px-4 z-10 flex flex-col items-center justify-end">
+                    {/* Subtle Search Input - only visible if there are enough bottom chips to justify scrolling, or search is active */}
+                    {(isBottomOverflowing || searchQuery.length > 0) && (
+                        <div className="flex items-center justify-center mb-2 animate-in fade-in duration-200">
+                            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-bg-secondary/30 hover:bg-bg-secondary/60 focus-within:bg-bg-secondary/80 transition-colors">
+                                <Search className="w-3 h-3 text-text-secondary/50" />
+                                <input
+                                    type="text"
+                                    placeholder="Search active cubers..."
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                    className="bg-transparent text-xs text-text-primary focus:outline-none placeholder:text-text-secondary/40 w-36 focus:w-52 transition-all"
+                                />
+                            </div>
                         </div>
-                        <button
-                            onClick={() => setBottomBarCollapsed(prev => !prev)}
-                            className="flex items-center gap-1 text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
-                        >
-                            <span>{bottomBarCollapsed ? 'Expand Community' : 'Collapse'}</span>
-                            {bottomBarCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                        </button>
-                    </div>
+                    )}
 
+                    {/* Chips Container */}
                     <div
-                        className={`flex gap-4 overflow-x-auto items-center transition-all duration-300 ease-in-out
-                        ${bottomBarCollapsed ? 'h-0 opacity-0 p-0 overflow-hidden' : 'h-40 p-4'}`}
+                        ref={bottomContainerRef}
+                        className="w-full overflow-hidden flex items-center justify-center min-h-[32px]"
                     >
-                        {communityUsers.length === 0 && (
-                            <div className="text-text-secondary text-sm italic w-full text-center opacity-50">
-                                {searchQuery ? 'No matching users found.' : 'No other users connected...'}
+                        {communityUsers.length === 0 ? (
+                            searchQuery ? (
+                                <div className="text-text-secondary/50 text-xs italic text-center py-1">
+                                    No cubers matching &quot;{searchQuery}&quot;
+                                </div>
+                            ) : null
+                        ) : isBottomOverflowing ? (
+                            <div className="animate-marquee-slow flex items-center gap-2 py-0.5">
+                                {[...communityUsers, ...communityUsers].map((u, idx) => (
+                                    <button
+                                        key={`${u.uid}-${idx}`}
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            toggleStarUser(u.uid);
+                                        }}
+                                        className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border/40 hover:border-border bg-bg-secondary/30 hover:bg-bg-secondary text-xs text-text-secondary hover:text-text-primary transition-all cursor-pointer group select-none shadow-2xs outline-none focus:outline-none"
+                                        title={`Follow ${u.username}`}
+                                    >
+                                        <div
+                                            className="w-2.5 h-2.5 rounded-sm flex-shrink-0 transition-transform group-hover:scale-110 shadow-2xs"
+                                            style={{ backgroundColor: u.color }}
+                                        />
+                                        <span className="font-medium truncate max-w-[120px]">{u.username}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex flex-wrap justify-center items-center gap-2 py-0.5 max-w-full">
+                                {communityUsers.map(u => (
+                                    <button
+                                        key={u.uid}
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            toggleStarUser(u.uid);
+                                        }}
+                                        className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border/40 hover:border-border bg-bg-secondary/30 hover:bg-bg-secondary text-xs text-text-secondary hover:text-text-primary transition-all cursor-pointer group select-none shadow-2xs outline-none focus:outline-none"
+                                        title={`Follow ${u.username}`}
+                                    >
+                                        <div
+                                            className="w-2.5 h-2.5 rounded-sm flex-shrink-0 transition-transform group-hover:scale-110 shadow-2xs"
+                                            style={{ backgroundColor: u.color }}
+                                        />
+                                        <span className="font-medium truncate max-w-[120px]">{u.username}</span>
+                                    </button>
+                                ))}
                             </div>
                         )}
-                        {communityUsers.map(u => (
-                            <UserCard
-                                key={u.uid}
-                                user={u}
-                                isStarred={false}
-                                onStar={handleStar}
-                                onBlock={handleBlock}
-                            />
-                        ))}
                     </div>
                 </div>
             )}

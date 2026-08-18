@@ -23,6 +23,7 @@ export interface UserData {
     username: string;
     color: string;
     emailVerified: boolean;
+    following?: string[];
     starredUsers?: string[];
     blockedUsers?: string[];
     socials?: SocialProfile[];
@@ -38,6 +39,7 @@ export interface AuthContextType {
     resendVerificationEmail: () => Promise<void>;
     logout: () => Promise<void>;
     deleteUserAccount?: () => Promise<void>;
+    toggleFollowUser: (targetUid: string) => Promise<void>;
     toggleStarUser: (targetUid: string) => Promise<void>;
     toggleBlockUser: (targetUid: string) => Promise<void>;
 }

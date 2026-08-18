@@ -42,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     console.log("AuthContext: Doc Snapshot", { exists: docSnap.exists() });
                     if (docSnap.exists()) {
                         const data = docSnap.data();
+                        const followingList = data.following || data.starredUsers || [];
                         const userData: UserData = {
                             uid: firebaseUser.uid,
                             shortId: data.shortId,
@@ -49,7 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             emailVerified: firebaseUser.emailVerified,
                             username: data.username || 'CubingUser',
                             color: data.color || '#3b82f6',
-                            starredUsers: data.starredUsers || [],
+                            following: followingList,
+                            starredUsers: followingList,
                             blockedUsers: data.blockedUsers || [],
                             socials: data.socials || [],
                             lastSeenAt: data.lastSeenAt,
@@ -131,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email: email,
             username: 'CubingUser',
             color: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'][Math.floor(Math.random() * 10)],
+            following: [],
             starredUsers: [],
             blockedUsers: []
         });
@@ -184,34 +187,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const toggleStarUser = async (targetUid: string) => {
+    const toggleFollowUser = async (targetUid: string) => {
         if (!user) return;
-        const currentStarred = user.starredUsers || [];
-        const isStarred = currentStarred.includes(targetUid);
-        let newStarred;
-        if (isStarred) {
-            newStarred = currentStarred.filter(id => id !== targetUid);
+        const currentFollowing = user.following || user.starredUsers || [];
+        const isFollowing = currentFollowing.includes(targetUid);
+        let newFollowing: string[];
+        if (isFollowing) {
+            newFollowing = currentFollowing.filter(id => id !== targetUid);
         } else {
-            newStarred = [...currentStarred, targetUid];
+            newFollowing = [...currentFollowing, targetUid];
         }
-        await updateDoc(doc(db, 'users', user.uid), { starredUsers: newStarred });
+
+        // Optimistic local state update
+        const updatedUser: UserData = {
+            ...user,
+            following: newFollowing,
+            starredUsers: newFollowing
+        };
+        setUser(updatedUser);
+        localStorage.setItem('cached_user_profile', JSON.stringify(updatedUser));
+
+        try {
+            await updateDoc(doc(db, 'users', user.uid), {
+                following: newFollowing,
+                starredUsers: newFollowing
+            });
+        } catch (err) {
+            console.error("Error updating following list:", err);
+            try {
+                await setDoc(doc(db, 'users', user.uid), {
+                    following: newFollowing,
+                    starredUsers: newFollowing
+                }, { merge: true });
+            } catch (e2) {
+                console.error("Failed setDoc fallback for following:", e2);
+            }
+        }
     };
+
+    const toggleStarUser = toggleFollowUser;
 
     const toggleBlockUser = async (targetUid: string) => {
         if (!user) return;
         const currentBlocked = user.blockedUsers || [];
         const isBlocked = currentBlocked.includes(targetUid);
-        let newBlocked;
+        let newBlocked: string[];
         if (isBlocked) {
             newBlocked = currentBlocked.filter(id => id !== targetUid);
         } else {
             newBlocked = [...currentBlocked, targetUid];
         }
-        await updateDoc(doc(db, 'users', user.uid), { blockedUsers: newBlocked });
+
+        // Optimistic local state update
+        const updatedUser: UserData = {
+            ...user,
+            blockedUsers: newBlocked
+        };
+        setUser(updatedUser);
+        localStorage.setItem('cached_user_profile', JSON.stringify(updatedUser));
+
+        try {
+            await updateDoc(doc(db, 'users', user.uid), { blockedUsers: newBlocked });
+        } catch (err) {
+            console.error("Error updating blocked list:", err);
+            try {
+                await setDoc(doc(db, 'users', user.uid), { blockedUsers: newBlocked }, { merge: true });
+            } catch (e2) {
+                console.error("Failed setDoc fallback for blocked:", e2);
+            }
+        }
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, emailSignUp, emailSignIn, resendVerificationEmail, logout, deleteUserAccount, toggleStarUser, toggleBlockUser }}>
+        <AuthContext.Provider value={{ user, loading, emailSignUp, emailSignIn, resendVerificationEmail, logout, deleteUserAccount, toggleFollowUser, toggleStarUser, toggleBlockUser }}>
             {children}
         </AuthContext.Provider>
     );

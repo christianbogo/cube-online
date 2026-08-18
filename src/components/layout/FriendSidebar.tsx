@@ -55,15 +55,15 @@ export function FriendSidebar() {
     const [rawFriendsData, setRawFriendsData] = useState<Record<string, any>>({});
 
     useEffect(() => {
-        if (!user || !user.starredUsers || user.starredUsers.length === 0) {
+        const followingIds = user?.following || user?.starredUsers || [];
+        if (!user || followingIds.length === 0) {
             setRawFriendsData({});
             return;
         }
 
-        const starredIds = user.starredUsers;
         const unsubscribers: (() => void)[] = [];
 
-        starredIds.forEach((friendUid) => {
+        followingIds.forEach((friendUid) => {
             const unsub = onSnapshot(doc(db, 'users', friendUid), (docSnap) => {
                 if (docSnap.exists()) {
                     setRawFriendsData(prev => ({
@@ -80,7 +80,7 @@ export function FriendSidebar() {
         return () => {
             unsubscribers.forEach(unsub => unsub());
         };
-    }, [user?.starredUsers]);
+    }, [user?.following, user?.starredUsers, user?.uid]);
 
     // Format relative time helper
     const getRelativeLastSeen = (isoString?: string) => {

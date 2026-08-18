@@ -1,4 +1,4 @@
-import { Box, BarChart2, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Keyboard, Target } from 'lucide-react';
+import { Box, BarChart2, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Keyboard, Target, Users, Lock } from 'lucide-react';
 import { useTheme } from '../ui/ThemeProvider';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useSolves } from '../../contexts/SolvesContext';
@@ -14,6 +14,7 @@ const navItems = [
     { name: 'Cube', icon: Box, path: '/' },
     { name: 'Logs', icon: BarChart2, path: '/logs' },
     { name: 'Goals', icon: Target, path: '/goals' },
+    { name: 'Social', icon: Users, path: '/social', locked: true },
     { name: 'Binds', icon: Keyboard, path: '/keybinds' },
 ];
 
@@ -40,7 +41,7 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
             {/* Navigation Items */}
             <ul className="flex flex-col gap-1 px-2 pt-2 flex-1">
                 {navItems.map((item) => {
-                    const isItemLocked = (!user && ['Logs'].includes(item.name));
+                    const isItemLocked = !!item.locked || (!user && ['Logs'].includes(item.name));
 
                     return (
                         <li key={item.name}>
@@ -53,12 +54,13 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
                                     }
                                     handleNavClick(e, item.path);
                                 }}
+                                title={item.locked ? `${item.name} (Coming Soon)` : item.name}
                                 className={({ isActive }) => `
                                 w-full flex items-center gap-3 p-2 rounded-md transition-colors text-left
                                 ${(isActive && !isItemLocked)
                                         ? 'bg-accent/10 text-accent'
                                         : isItemLocked
-                                            ? 'opacity-30 cursor-not-allowed text-text-secondary'
+                                            ? 'opacity-40 cursor-not-allowed text-text-secondary select-none'
                                             : 'hover:bg-bg-hover text-text-secondary hover:text-text-primary'
                                     }
                                 ${collapsed ? 'justify-center' : ''}
@@ -68,9 +70,14 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
                                     <>
                                         <item.icon className={`w-5 h-5 ${(isActive && !isItemLocked) ? 'text-accent' : 'text-text-secondary'}`} />
                                         {!collapsed && (
-                                            <span className={`text-sm font-medium ${(isActive && !isItemLocked) ? 'text-accent' : 'text-text-primary'}`}>
-                                                {item.name}
-                                            </span>
+                                            <div className="flex-1 flex items-center justify-between min-w-0">
+                                                <span className={`text-sm font-medium ${(isActive && !isItemLocked) ? 'text-accent' : 'text-text-primary'} truncate`}>
+                                                    {item.name}
+                                                </span>
+                                                {item.locked && (
+                                                    <Lock className="w-3.5 h-3.5 text-text-secondary/70 shrink-0 ml-1.5" />
+                                                )}
+                                            </div>
                                         )}
                                     </>
                                 )}
