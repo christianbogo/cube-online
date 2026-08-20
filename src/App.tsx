@@ -12,6 +12,8 @@ import Logs from './pages/Logs';
 import Goals from './pages/Goals';
 import Account from './pages/Account';
 import Keybinds from './pages/Keybinds';
+import Records from './pages/Records';
+import Dev from './pages/Dev';
 import type { ReactNode } from 'react';
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
@@ -40,9 +42,11 @@ function App() {
                         <Route path="data/*" element={<Navigate to="/logs" replace />} />
                         <Route path="stats" element={<Navigate to="/logs" replace />} />
                         <Route path="stats/*" element={<Navigate to="/logs" replace />} />
+                        <Route path="records" element={<Records />} />
                         <Route path="goals" element={<Goals />} />
                         <Route path="account" element={<Account />} />
                         <Route path="keybinds" element={<Keybinds />} />
+                        <Route path="dev" element={<Dev />} />
                       </Route>
                     </Routes>
                   </GoalsProvider>

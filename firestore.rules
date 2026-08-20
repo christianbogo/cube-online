@@ -6,9 +6,12 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == userId;
     }
 
+    // Helper function to check if the user is the admin
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email.lower() == 'christianbcutter@yahoo.com';
+    }
+
     // User profiles and subcollections
-    // User profiles
-    // User profiles
     match /users/{userId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == userId;
@@ -25,21 +28,35 @@ service cloud.firestore {
     // Solves
     match /solves/{solveId} {
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow update: if request.auth != null && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null;
+      allow delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     // Sessions
     match /sessions/{sessionId} {
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow update: if request.auth != null && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     // Global Stats (e.g. goal completion percentages and distribution)
     match /global_stats/{statId} {
-      allow read: if request.auth != null;
+      allow read: if true;
       allow write: if request.auth != null;
+    }
+
+    // Feedback & Bug Reports
+    match /feedback/{feedbackId} {
+      allow create: if request.auth != null;
+      allow read: if isAdmin() || (request.auth != null && resource.data.userId == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    // Changelog Posts
+    match /changelog/{entryId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }

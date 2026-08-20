@@ -167,10 +167,8 @@ export default function Logs() {
     const handleAction = async (e: React.MouseEvent, action: 'delete' | 'approve', solve: Solve) => {
         e.stopPropagation();
         if (action === 'delete') {
-            if (confirm('Are you sure you want to delete this solve?')) {
-                deleteSolve(solve.id);
-                if (selectedSolveId === solve.id) setSelectedSolveId(null);
-            }
+            deleteSolve(solve.id);
+            if (selectedSolveId === solve.id) setSelectedSolveId(null);
         } else if (action === 'approve') {
             updateSolve(solve.id, { anomalyApproved: true });
         }
@@ -267,6 +265,15 @@ export default function Logs() {
             {/* Top Sub-Navigation Header */}
             <nav className="sticky top-0 z-20 bg-bg-primary/95 backdrop-blur border-b border-border px-6 py-2.5 flex items-center justify-between gap-2 overflow-x-auto shrink-0">
                 <div className="flex items-center gap-1.5 min-w-max">
+                    {anomalySolves.length > 0 && (
+                        <button
+                            onClick={() => scrollToSection('section-anomalies')}
+                            className="flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-yellow-500 hover:bg-yellow-500/10 transition-colors cursor-pointer"
+                        >
+                            <span>Anomalies ({anomalySolves.length})</span>
+                        </button>
+                    )}
+
                     <button
                         onClick={() => scrollToSection('section-progression')}
                         className="flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors cursor-pointer"
@@ -288,15 +295,6 @@ export default function Logs() {
                         <span>Distribution</span>
                     </button>
 
-                    {anomalySolves.length > 0 && (
-                        <button
-                            onClick={() => scrollToSection('section-anomalies')}
-                            className="flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-yellow-500 hover:bg-yellow-500/10 transition-colors cursor-pointer"
-                        >
-                            <span>Anomalies ({anomalySolves.length})</span>
-                        </button>
-                    )}
-
                     <button
                         onClick={() => scrollToSection('section-solves')}
                         className="flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors cursor-pointer"
@@ -313,6 +311,63 @@ export default function Logs() {
             <div className="flex-1 flex flex-row overflow-hidden relative">
                 {/* Main Scrollable Content */}
                 <div className="flex-1 flex flex-col gap-8 w-full min-w-0 pb-24 overflow-y-auto px-6 py-6 custom-scrollbar">
+
+                    {/* Section: Anomalies (Rendered first when detected) */}
+                    {anomalySolves.length > 0 && (
+                        <section id="section-anomalies" className="scroll-mt-4 w-full bg-bg-secondary/40 border border-border/50 rounded-xl p-5 flex flex-col gap-4">
+                            <h3 className="text-base font-bold text-text-primary">Detected Anomalies ({anomalySolves.length})</h3>
+                            <Table
+                                data={anomalySolves}
+                                sortConfig={{ key: 'date', direction: 'desc' }}
+                                onHeaderClick={() => { }}
+                                className="w-full"
+                                headerClassName="bg-bg-secondary border border-border"
+                                rowClassName="border-none hover:bg-yellow-500/5 text-text-secondary"
+                                columns={[
+                                    { header: '#', accessor: (_: any, i: number) => anomalySolves.length - i, className: 'w-12 text-center text-text-secondary/50' },
+                                    {
+                                        header: 'Time',
+                                        accessor: (s: Solve) => (
+                                            <span className={`font-mono font-medium ${s.penalty === 'DNF' ? 'text-red-500' : 'text-yellow-500'}`}>
+                                                {formatTime(s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0))}
+                                            </span>
+                                        )
+                                    },
+                                    {
+                                        header: 'Issue',
+                                        accessor: (s: Solve) => {
+                                            const { reason } = detectOutliers(s, filteredSolves);
+                                            return (
+                                                <span className="text-xs text-text-secondary">
+                                                    {reason === 'suspected_misclick' ? 'Unusually Fast' : 'Unusually Slow'}
+                                                </span>
+                                            );
+                                        },
+                                        className: 'text-text-secondary'
+                                    },
+                                    {
+                                        header: 'Date',
+                                        accessor: (s: Solve) => new Date(s.date).toLocaleDateString(),
+                                        className: 'text-text-secondary text-right w-40'
+                                    },
+                                    {
+                                        header: 'Actions',
+                                        accessor: (s: Solve) => (
+                                            <div className="flex items-center gap-2 justify-end pr-1">
+                                                <button onClick={(e) => handleAction(e, 'approve', s)} className="px-3 py-1 bg-bg-tertiary hover:bg-green-500/20 rounded text-xs font-medium text-text-primary hover:text-green-500 flex items-center gap-1 transition-colors cursor-pointer">
+                                                    <Check className="w-3 h-3" /> Approve
+                                                </button>
+                                                <button onClick={(e) => handleAction(e, 'delete', s)} className="px-3 py-1 bg-bg-tertiary hover:bg-red-500/20 rounded text-xs font-medium text-text-primary hover:text-red-500 flex items-center gap-1 transition-colors cursor-pointer">
+                                                    <Trash className="w-3 h-3" /> Delete
+                                                </button>
+                                            </div>
+                                        ),
+                                        className: 'w-48 text-right'
+                                    }
+                                ]}
+                            />
+                        </section>
+                    )}
 
                     {/* Section 1: Progression Chart */}
                     <section id="section-progression" className="scroll-mt-4 w-full bg-bg-secondary/40 border border-border/50 rounded-xl p-5 flex flex-col gap-4">
@@ -418,64 +473,7 @@ export default function Logs() {
                         </section>
                     )}
 
-                    {/* Section 4: Anomalies */}
-                    {anomalySolves.length > 0 && (
-                        <section id="section-anomalies" className="scroll-mt-4 w-full bg-bg-secondary/40 border border-border/50 rounded-xl p-5 flex flex-col gap-4">
-                            <h3 className="text-base font-bold text-text-primary">Detected Anomalies ({anomalySolves.length})</h3>
-                            <Table
-                                data={anomalySolves}
-                                sortConfig={{ key: 'date', direction: 'desc' }}
-                                onHeaderClick={() => { }}
-                                className="w-full"
-                                headerClassName="bg-bg-secondary border border-border"
-                                rowClassName="border-none hover:bg-yellow-500/5 text-text-secondary"
-                                columns={[
-                                    { header: '#', accessor: (_: any, i: number) => anomalySolves.length - i, className: 'w-12 text-center text-text-secondary/50' },
-                                    {
-                                        header: 'Time',
-                                        accessor: (s: Solve) => (
-                                            <span className={`font-mono font-medium ${s.penalty === 'DNF' ? 'text-red-500' : 'text-yellow-500'}`}>
-                                                {formatTime(s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0))}
-                                            </span>
-                                        )
-                                    },
-                                    {
-                                        header: 'Issue',
-                                        accessor: (s: Solve) => {
-                                            const { reason } = detectOutliers(s, filteredSolves);
-                                            return (
-                                                <span className="text-xs text-text-secondary">
-                                                    {reason === 'suspected_misclick' ? 'Unusually Fast' : 'Unusually Slow'}
-                                                </span>
-                                            );
-                                        },
-                                        className: 'text-text-secondary'
-                                    },
-                                    {
-                                        header: 'Date',
-                                        accessor: (s: Solve) => new Date(s.date).toLocaleDateString(),
-                                        className: 'text-text-secondary text-right w-40'
-                                    },
-                                    {
-                                        header: 'Actions',
-                                        accessor: (s: Solve) => (
-                                            <div className="flex items-center gap-2 justify-end pr-1">
-                                                <button onClick={(e) => handleAction(e, 'approve', s)} className="px-3 py-1 bg-bg-tertiary hover:bg-green-500/20 rounded text-xs font-medium text-text-primary hover:text-green-500 flex items-center gap-1 transition-colors cursor-pointer">
-                                                    <Check className="w-3 h-3" /> Approve
-                                                </button>
-                                                <button onClick={(e) => handleAction(e, 'delete', s)} className="px-3 py-1 bg-bg-tertiary hover:bg-red-500/20 rounded text-xs font-medium text-text-primary hover:text-red-500 flex items-center gap-1 transition-colors cursor-pointer">
-                                                    <Trash className="w-3 h-3" /> Delete
-                                                </button>
-                                            </div>
-                                        ),
-                                        className: 'w-48 text-right'
-                                    }
-                                ]}
-                            />
-                        </section>
-                    )}
-
-                    {/* Section 5: Solves History Table (without actions column) */}
+                    {/* Section 4: Solves History Table (without actions column) */}
                     <section id="section-solves" className="scroll-mt-4 w-full bg-bg-secondary/40 border border-border/50 rounded-xl p-5 flex flex-col gap-4">
                         <div className="flex items-center justify-between">
                             <h3 className="text-base font-bold text-text-primary">Solves History ({filteredSolves.length})</h3>

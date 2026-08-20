@@ -1,4 +1,4 @@
-import { Box, BarChart2, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Keyboard, Target, Users, Lock } from 'lucide-react';
+import { Box, BarChart2, Trophy, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Keyboard, Target, Users, Lock, Terminal } from 'lucide-react';
 import { useTheme } from '../ui/ThemeProvider';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useSolves } from '../../contexts/SolvesContext';
@@ -13,9 +13,11 @@ export interface LeftSidebarProps {
 const navItems = [
     { name: 'Cube', icon: Box, path: '/' },
     { name: 'Logs', icon: BarChart2, path: '/logs' },
+    { name: 'Records', icon: Trophy, path: '/records' },
     { name: 'Goals', icon: Target, path: '/goals' },
     { name: 'Social', icon: Users, path: '/social', locked: true },
     { name: 'Binds', icon: Keyboard, path: '/keybinds' },
+    { name: 'Dev', icon: Terminal, path: '/dev' },
 ];
 
 export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebarProps) {

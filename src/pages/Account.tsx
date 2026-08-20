@@ -27,7 +27,7 @@ const AVAILABLE_COLORS = [
 
 export default function Account() {
     const { settings, updateSettings } = useSettings();
-    const { user, emailSignUp, emailSignIn, resendVerificationEmail, logout } = useAuth();
+    const { user, emailSignUp, emailSignIn, resendVerificationEmail, logout, updateGhostMode } = useAuth();
     const location = useLocation();
 
     // Profile State
@@ -220,6 +220,17 @@ export default function Account() {
                         className={`relative w-10 h-5 rounded-full transition-colors ${settings.showLiveTimer ? 'bg-accent' : 'bg-text-secondary/20'}`}
                     >
                         <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${settings.showLiveTimer ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                </SettingRow>
+
+                <SettingRow label="Ghost Mode" description="Disable live timing broadcasts and hide live active cubers (live is on by default)">
+                    <button
+                        onClick={() => updateGhostMode(!user?.isGhostMode)}
+                        className={`relative w-10 h-5 rounded-full transition-colors ${user?.isGhostMode ? '' : 'bg-text-secondary/20'}`}
+                        style={user?.isGhostMode ? { backgroundColor: user.color || '#ef4444' } : undefined}
+                        title={user?.isGhostMode ? "Disable Ghost Mode (Go Live)" : "Enable Ghost Mode"}
+                    >
+                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${user?.isGhostMode ? 'translate-x-5' : 'translate-x-0'}`} />
                     </button>
                 </SettingRow>
 

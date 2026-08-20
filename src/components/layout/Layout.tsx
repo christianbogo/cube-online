@@ -160,6 +160,10 @@ export default function Layout() {
                 if (!isPrivateMode) navigate('/goals');
                 else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/goals'); }
             }
+            if (e.key === 'r' || e.key === 'R') {
+                if (!isPrivateMode) navigate('/records');
+                else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/records'); }
+            }
             if (e.key === 'l' || e.key === 'L') {
                 if (!isPrivateMode) navigate('/logs');
                 else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/logs'); }
@@ -269,10 +273,10 @@ export default function Layout() {
 
                 {/* Main Content */}
                 <main className="flex-1 flex flex-col relative bg-bg-primary min-w-0 overflow-hidden">
-                    <div className={`flex-1 w-full ${(location.pathname.startsWith('/logs') || location.pathname === '/account') ? 'overflow-hidden p-0 flex flex-col' : 'p-6 overflow-y-auto custom-scrollbar'}`}>
+                    <div className={`flex-1 w-full ${(location.pathname.startsWith('/logs') || location.pathname === '/account' || location.pathname === '/records') ? 'overflow-hidden p-0 flex flex-col' : 'p-6 overflow-y-auto custom-scrollbar'}`}>
                         <Outlet />
                     </div>
-                    {(!location.pathname.startsWith('/logs') && location.pathname !== '/account') && (
+                    {(!location.pathname.startsWith('/logs') && location.pathname !== '/account' && location.pathname !== '/records') && (
                         <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8 shrink-0">
                             <div className="flex gap-2 items-center">
                                 <span>{isOnline ? 'Online' : 'Offline'} • v0.3.1</span>
@@ -295,7 +299,7 @@ export default function Layout() {
                 </main>
 
                 {/* Right Sidebar */}
-                {!['/account', '/logs', '/keybinds', '/goals'].some(p => location.pathname.startsWith(p)) && (
+                {!['/account', '/logs', '/keybinds', '/goals', '/records', '/dev'].some(p => location.pathname.startsWith(p)) && (
                     <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col backdrop-blur-sm will-change-[width] border-l border-border z-20">
                         <div className="absolute top-0 left-[-5px] w-2.5 h-full cursor-col-resize z-50 group flex justify-center" onMouseDown={startResizingRight}>
                             <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />

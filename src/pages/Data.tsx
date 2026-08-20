@@ -157,10 +157,8 @@ export default function Data() {
             const newPenalty = solve.penalty === 'DNF' ? 'none' : 'DNF';
             updateSolve(solve.id, { penalty: newPenalty });
         } else if (action === 'delete') {
-            if (confirm('Are you sure you want to delete this solve?')) {
-                deleteSolve(solve.id);
-                if (selectedSolveId === solve.id) setSelectedSolveId(null);
-            }
+            deleteSolve(solve.id);
+            if (selectedSolveId === solve.id) setSelectedSolveId(null);
         } else if (action === 'approve') {
             updateSolve(solve.id, { anomalyApproved: true });
         } else if (action === 'share') {

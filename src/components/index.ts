@@ -25,3 +25,8 @@ export type { Theme, ThemeProviderProps, ThemeProviderState } from './ui/ThemePr
 export { default as CubingFriendsTab } from './account/CubingFriendsTab';
 export { default as ProfileStatsTab } from './account/ProfileStatsTab';
 export { default as SocialsTab } from './account/SocialsTab';
+
+// Dev Components
+export { default as FirebaseStatusTab } from './dev/FirebaseStatusTab';
+export { default as FeedbackTab } from './dev/FeedbackTab';
+export { default as ChangelogTab } from './dev/ChangelogTab';

@@ -1,8 +1,9 @@
-// Removed unused BarChart3 import
 import { useSolves } from '../../contexts/SolvesContext';
 import { useMemo } from 'react';
 import { calculateBestSingle, formatTime, calculateBestAverage } from '../../utils/calculations';
 import { SCRAMBLE_TYPES, SUPPORTED_EVENT_IDS } from '../../utils/constants';
+import { Link } from 'react-router-dom';
+import { Trophy, ArrowRight } from 'lucide-react';
 
 export default function ProfileStatsTab() {
     const { solves } = useSolves();
@@ -132,8 +133,16 @@ export default function ProfileStatsTab() {
                     </tbody>
                 </table>
             </div>
-            <div className="text-xs text-text-secondary italic text-center">
-                * Only events with &gt;0 solves are shown. Averages calculated from all-time data.
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-text-secondary">
+                <span className="italic">* Only events with &gt;0 solves are shown. Averages calculated from all-time data.</span>
+                <Link
+                    to="/records"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-secondary hover:bg-bg-hover text-text-primary border border-border text-xs font-semibold transition-colors group"
+                >
+                    <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                    <span>View Detailed Records Page</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-text-secondary group-hover:translate-x-0.5 transition-transform" />
+                </Link>
             </div>
         </div>
     );

@@ -11,7 +11,7 @@ import {
     EyeOff,
     Minus,
     Plus,
-    Radio,
+    Ghost,
     Search,
     SkipForward,
     CheckCircle2
@@ -23,10 +23,10 @@ import { UserCard, KeybindTooltip } from '../components';
 export default function Cube() {
     const { settings, updateSettings } = useSettings();
     const { solves, addSolve, updateSolve, currentScramble, setCurrentScramble } = useSolves();
-    const { startNewSession, currentSessionId } = useSession();
+    const { currentSessionId, setCurrentSessionId, checkSessionStatus } = useSession();
     const { user, toggleStarUser } = useAuth();
     const { pinnedGoals } = useGoals();
-    const { isLiveMode, setIsLiveMode, connectedUsers, setLiveTimerState } = useLive();
+    const { isLiveMode, isGhostMode, toggleGhostMode, connectedUsers, setLiveTimerState } = useLive();
 
     const scrambleType = settings.scrambleType;
 
@@ -40,27 +40,46 @@ export default function Cube() {
     const [isBottomOverflowing, setIsBottomOverflowing] = useState(false);
 
     // Session consistency
-    const checkSessionConsistency = useCallback(async () => {
-        if (!currentSessionId) return;
-        const sessionSolves = solves.filter(s => s.sessionId === currentSessionId);
-        if (sessionSolves.length === 0) return;
+    const checkSessionConsistency = useCallback(() => {
+        const targetScrambleType = scrambleType || '333';
+        const eventSolves = solves.filter(s =>
+            (!user || s.userId === user.uid) &&
+            (s.scrambleType || '333') === targetScrambleType
+        );
 
-        const lastSolve = sessionSolves[0];
-        const lastType = lastSolve.scrambleType || '333';
-        if (lastType !== scrambleType) {
-            await startNewSession(false);
+        if (eventSolves.length > 0) {
+            const lastSolve = eventSolves[0];
+            const lastSolveTime = new Date(lastSolve.date).getTime();
+            const { isNewSessionNeeded } = checkSessionStatus(lastSolveTime);
+
+            if (!isNewSessionNeeded && lastSolve.sessionId) {
+                // Last solve was within 10 minutes - keep current session going
+                if (currentSessionId !== lastSolve.sessionId) {
+                    setCurrentSessionId(lastSolve.sessionId);
+                }
+                return;
+            }
         }
-    }, [currentSessionId, solves, scrambleType, startNewSession]);
+
+        // If no solve within 10 minutes for this scramble type,
+        // and current session is either from a different scramble type or timed out, reset currentSessionId
+        if (currentSessionId) {
+            const currentSessionSolves = solves.filter(s => s.sessionId === currentSessionId);
+            if (currentSessionSolves.length > 0) {
+                const sessionScrambleType = currentSessionSolves[0].scrambleType || '333';
+                const lastSessionSolveTime = new Date(currentSessionSolves[0].date).getTime();
+                const { isNewSessionNeeded } = checkSessionStatus(lastSessionSolveTime);
+
+                if (sessionScrambleType !== targetScrambleType || isNewSessionNeeded) {
+                    setCurrentSessionId(null);
+                }
+            }
+        }
+    }, [currentSessionId, solves, scrambleType, user, checkSessionStatus, setCurrentSessionId]);
 
     useEffect(() => {
         checkSessionConsistency();
     }, [scrambleType, checkSessionConsistency]);
-
-    useEffect(() => {
-        if (user && !currentSessionId) {
-            startNewSession(false);
-        }
-    }, [user, currentSessionId, startNewSession]);
 
     const [scramble, setScramble] = useState<string>(currentScramble || 'Generating scramble...');
     const [timerState, setTimerState] = useState<TimerState>('IDLE');
@@ -73,9 +92,11 @@ export default function Cube() {
     // Sync timerState with LiveContext for RTDB broadcast
     useEffect(() => {
         setLiveTimerState(timerState);
+        timerStateRef.current = timerState;
     }, [timerState, setLiveTimerState]);
 
     const startTimeRef = useRef<number>(0);
+    const timerStateRef = useRef<TimerState>('IDLE');
     const primingStartRef = useRef<number | null>(null);
     const initialPenaltyRef = useRef<Solve['penalty']>('none');
     const [prevTimerState, setPrevTimerState] = useState<TimerState>('IDLE');
@@ -154,7 +175,7 @@ export default function Cube() {
         let animationFrameId: number;
 
         const animate = () => {
-            if (timerState === 'RUNNING') {
+            if (timerStateRef.current === 'RUNNING') {
                 const now = performance.now();
                 setTime(now - startTimeRef.current);
                 animationFrameId = requestAnimationFrame(animate);
@@ -162,6 +183,7 @@ export default function Cube() {
         };
 
         if (timerState === 'RUNNING') {
+            timerStateRef.current = 'RUNNING';
             startTimeRef.current = performance.now();
             animationFrameId = requestAnimationFrame(animate);
         }
@@ -218,6 +240,9 @@ export default function Cube() {
 
     // Finish Solve
     const finishSolve = useCallback(() => {
+        const finalTime = startTimeRef.current ? (performance.now() - startTimeRef.current) : time;
+        timerStateRef.current = 'SOLVED';
+        setTime(finalTime);
         setTimerState('SOLVED');
         setPrimingProgress(0);
 
@@ -229,7 +254,7 @@ export default function Cube() {
 
         addSolve({
             id: solveId,
-            time: time,
+            time: finalTime,
             scramble: scramble,
             date: new Date().toISOString(),
             penalty: 'none',
@@ -542,12 +567,12 @@ export default function Cube() {
                             {user && user.emailVerified && (
                                 <div className="flex items-center gap-6">
                                     <button
-                                        onClick={() => setIsLiveMode(!isLiveMode)}
-                                        className={`flex items-center gap-1 transition-colors ${isLiveMode ? 'text-red-500 hover:text-red-400' : 'hover:text-accent'}`}
-                                        title={isLiveMode ? "Disable Live Mode" : "Enable Live Mode"}
+                                        onClick={toggleGhostMode}
+                                        className="flex items-center transition-all cursor-pointer"
+                                        style={{ color: isGhostMode ? (user.color || '#ef4444') : undefined }}
+                                        title={isGhostMode ? "Ghost Mode Active (Live Disabled) — Click to go Live" : "Ghost Mode (Disable Live Timing)"}
                                     >
-                                        <Radio className={`w-5 h-5 ${isLiveMode ? 'animate-pulse' : ''}`} />
-                                        {isLiveMode && <span className="text-xs font-bold uppercase tracking-widest">LIVE</span>}
+                                        <Ghost className={`w-5 h-5 transition-transform hover:scale-110 ${isGhostMode ? 'opacity-100 drop-shadow-sm' : 'text-text-secondary hover:text-text-primary'}`} />
                                     </button>
                                     <div className="w-[1px] h-5 bg-border/50" />
                                 </div>

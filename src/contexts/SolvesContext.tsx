@@ -280,8 +280,14 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
         }
 
         // Check for session break requirement (Main Mode)
-        if (user && solves.length > 0) {
-            const lastSolve = solves[0];
+        const targetScrambleType = solve.scrambleType || '333';
+        const eventSolves = solves.filter(s =>
+            (!user || s.userId === user.uid) &&
+            (s.scrambleType || '333') === targetScrambleType
+        );
+
+        if (eventSolves.length > 0) {
+            const lastSolve = eventSolves[0];
             const { isNewSessionNeeded } = checkSessionStatus(new Date(lastSolve.date).getTime());
             if (isNewSessionNeeded) {
                 console.log("Auto-starting new session due to gap/stats.");

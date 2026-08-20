@@ -56,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             socials: data.socials || [],
                             lastSeenAt: data.lastSeenAt,
                             status: data.status,
+                            isGhostMode: data.isGhostMode ?? false,
                         };
                         console.log("AuthContext: Setting User", userData);
                         setUser(userData);
@@ -135,7 +136,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             color: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'][Math.floor(Math.random() * 10)],
             following: [],
             starredUsers: [],
-            blockedUsers: []
+            blockedUsers: [],
+            isGhostMode: false
         });
 
         return result;
@@ -258,8 +260,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
+    const updateGhostMode = async (isGhost: boolean) => {
+        if (!user) return;
+
+        const updatedUser: UserData = {
+            ...user,
+            isGhostMode: isGhost
+        };
+        setUser(updatedUser);
+        localStorage.setItem('cached_user_profile', JSON.stringify(updatedUser));
+        localStorage.setItem('cube-online-ghost-mode', String(isGhost));
+
+        try {
+            await updateDoc(doc(db, 'users', user.uid), { isGhostMode: isGhost });
+        } catch (err) {
+            console.error("Error updating ghost mode in firestore:", err);
+            try {
+                await setDoc(doc(db, 'users', user.uid), { isGhostMode: isGhost }, { merge: true });
+            } catch (e2) {
+                console.error("Failed setDoc fallback for ghost mode:", e2);
+            }
+        }
+    };
+
     return (
-        <AuthContext.Provider value={{ user, loading, emailSignUp, emailSignIn, resendVerificationEmail, logout, deleteUserAccount, toggleFollowUser, toggleStarUser, toggleBlockUser }}>
+        <AuthContext.Provider value={{ user, loading, emailSignUp, emailSignIn, resendVerificationEmail, logout, deleteUserAccount, toggleFollowUser, toggleStarUser, toggleBlockUser, updateGhostMode }}>
             {children}
         </AuthContext.Provider>
     );

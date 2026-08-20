@@ -6,6 +6,9 @@ import { useSolves } from './SolvesContext';
 import type { LiveUser, SimpleSolve, TimerState } from '../types';
 
 interface LiveContextType {
+    isGhostMode: boolean;
+    setIsGhostMode: (val: boolean | ((prev: boolean) => boolean)) => void;
+    toggleGhostMode: () => void;
     isLiveMode: boolean;
     setIsLiveMode: (val: boolean | ((prev: boolean) => boolean)) => void;
     connectedUsers: LiveUser[];
@@ -18,31 +21,57 @@ const LiveContext = createContext<LiveContextType | undefined>(undefined);
 const TEN_MINUTES_MS = 10 * 60 * 1000;
 
 export function LiveProvider({ children }: { children: ReactNode }) {
-    const { user } = useAuth();
+    const { user, updateGhostMode } = useAuth();
     const { solves } = useSolves();
 
-    const [isLiveMode, setIsLiveModeState] = useState<boolean>(() => {
-        return localStorage.getItem('cube-online-live-mode') === 'true';
+    const [isGhostMode, setIsGhostModeState] = useState<boolean>(() => {
+        if (user && typeof user.isGhostMode === 'boolean') {
+            return user.isGhostMode;
+        }
+        return localStorage.getItem('cube-online-ghost-mode') === 'true';
     });
+
+    const isLiveMode = !isGhostMode;
 
     const [connectedUsers, setConnectedUsers] = useState<LiveUser[]>([]);
     const [liveTimerState, setLiveTimerState] = useState<TimerState>('IDLE');
 
-    // Last solve timestamp tracking for the 10-minute inactivity timeout
+    // Last solve timestamp tracking
     const lastSolveTimestampRef = useRef<number>(Date.now());
     const prevFirstSolveIdRef = useRef<string | null>(null);
 
-    const setIsLiveMode = useCallback((val: boolean | ((prev: boolean) => boolean)) => {
-        setIsLiveModeState(prev => {
+    // Sync with user profile isGhostMode when user data loads/changes
+    useEffect(() => {
+        if (user && typeof user.isGhostMode === 'boolean') {
+            setIsGhostModeState(user.isGhostMode);
+            localStorage.setItem('cube-online-ghost-mode', String(user.isGhostMode));
+        }
+    }, [user?.isGhostMode]);
+
+    const setIsGhostMode = useCallback((val: boolean | ((prev: boolean) => boolean)) => {
+        setIsGhostModeState(prev => {
             const next = typeof val === 'function' ? val(prev) : val;
-            localStorage.setItem('cube-online-live-mode', String(next));
-            if (next) {
-                // Reset inactivity timer when entering live mode
+            localStorage.setItem('cube-online-ghost-mode', String(next));
+            if (user) {
+                updateGhostMode(next);
+            }
+            if (!next) {
                 lastSolveTimestampRef.current = Date.now();
             }
             return next;
         });
-    }, []);
+    }, [user, updateGhostMode]);
+
+    const toggleGhostMode = useCallback(() => {
+        setIsGhostMode(prev => !prev);
+    }, [setIsGhostMode]);
+
+    const setIsLiveMode = useCallback((val: boolean | ((prev: boolean) => boolean)) => {
+        setIsGhostMode(prev => {
+            const nextLive = typeof val === 'function' ? val(!prev) : val;
+            return !nextLive;
+        });
+    }, [setIsGhostMode]);
 
     // Track solve additions to update lastSolveTimestampRef
     useEffect(() => {
@@ -54,23 +83,6 @@ export function LiveProvider({ children }: { children: ReactNode }) {
             }
         }
     }, [solves]);
-
-    // 10-Minute Solve Inactivity Timer:
-    // Keeps user live when visiting other pages or switching browser tabs,
-    // but automatically turns off live if 10 minutes pass without completing a solve.
-    useEffect(() => {
-        if (!isLiveMode) return;
-
-        const interval = setInterval(() => {
-            const elapsed = Date.now() - lastSolveTimestampRef.current;
-            if (elapsed >= TEN_MINUTES_MS) {
-                console.log('Auto-disabling Live Mode: 10 minutes elapsed without a solve.');
-                setIsLiveMode(false);
-            }
-        }, 10000);
-
-        return () => clearInterval(interval);
-    }, [isLiveMode, setIsLiveMode]);
 
     // Helper for live solves broadcast
     const formatRecentSolves = useCallback((): SimpleSolve[] => {
@@ -84,7 +96,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
 
     // Firebase Presence Sync
     useEffect(() => {
-        if (!user || !isLiveMode) {
+        if (!user || isGhostMode) {
             if (user) {
                 const userPresenceRef = ref(rtdb, `presence/${user.uid}`);
                 remove(userPresenceRef).catch(() => {});
@@ -120,11 +132,11 @@ export function LiveProvider({ children }: { children: ReactNode }) {
             clearInterval(heartbeatInterval);
             remove(userPresenceRef).catch(() => {});
         };
-    }, [user, isLiveMode, liveTimerState, solves, formatRecentSolves]);
+    }, [user, isGhostMode, liveTimerState, solves, formatRecentSolves]);
 
     // Listen for other live users
     useEffect(() => {
-        if (!isLiveMode) {
+        if (isGhostMode) {
             setConnectedUsers([]);
             return;
         }
@@ -144,10 +156,19 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         });
 
         return () => unsubscribe();
-    }, [user?.uid, isLiveMode]);
+    }, [user?.uid, isGhostMode]);
 
     return (
-        <LiveContext.Provider value={{ isLiveMode, setIsLiveMode, connectedUsers, liveTimerState, setLiveTimerState }}>
+        <LiveContext.Provider value={{
+            isGhostMode,
+            setIsGhostMode,
+            toggleGhostMode,
+            isLiveMode,
+            setIsLiveMode,
+            connectedUsers,
+            liveTimerState,
+            setLiveTimerState
+        }}>
             {children}
         </LiveContext.Provider>
     );

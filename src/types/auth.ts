@@ -29,6 +29,7 @@ export interface UserData {
     socials?: SocialProfile[];
     lastSeenAt?: string;
     status?: string;
+    isGhostMode?: boolean;
 }
 
 export interface AuthContextType {
@@ -42,4 +43,5 @@ export interface AuthContextType {
     toggleFollowUser: (targetUid: string) => Promise<void>;
     toggleStarUser: (targetUid: string) => Promise<void>;
     toggleBlockUser: (targetUid: string) => Promise<void>;
+    updateGhostMode: (isGhost: boolean) => Promise<void>;
 }

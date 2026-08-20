@@ -22,11 +22,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }, [currentSessionId]);
 
     const startNewSession = async (resume = false) => {
-        if (!user) return '';
-
         if (!resume) {
             // Check if current session is empty (0 solves) and delete it if so
-            if (currentSessionId && !currentSessionId.startsWith('local_')) {
+            if (user && currentSessionId && !currentSessionId.startsWith('local_')) {
                 try {
                     const sessionDoc = await getDoc(doc(db, 'sessions', currentSessionId));
                     if (sessionDoc.exists()) {
@@ -76,12 +74,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const now = Date.now();
         const diffMinutes = (now - lastSolveTime) / (1000 * 60);
 
-        // New Day Check - Removed strict enforcement
-        // const lastDate = new Date(lastSolveTime);
-        // const currentDate = new Date(now);
-        // const isDifferentDay = ...
-
-        if (diffMinutes > 60) {
+        if (diffMinutes > 10) {
             return { isNewSessionNeeded: true };
         }
         return { isNewSessionNeeded: false };

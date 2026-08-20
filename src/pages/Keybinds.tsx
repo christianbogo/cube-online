@@ -17,6 +17,7 @@ export default function Keybinds() {
                 { key: 'Esc', action: 'Home / Reset Timer' },
                 { key: 'b', action: 'Go to Keybinds' },
                 { key: 'g', action: 'Go to Goals' },
+                { key: 'r', action: 'Go to Records' },
                 { key: 'l', action: 'Go to Logs' },
                 { key: 'a', action: 'Go to Account' },
                 { key: 'Tab', action: 'Toggle Right Sidebar' },
@@ -58,8 +59,8 @@ export default function Keybinds() {
     ];
 
     return (
-        <div className="max-w-5xl mx-auto py-10 px-4 select-none">
-            <div className="mb-8">
+        <div className="max-w-6xl w-full mx-auto p-4 md:p-6 flex flex-col gap-6 select-none">
+            <div className="mb-2">
                 <h1 className="text-3xl font-bold text-text-primary mb-2 flex items-center gap-3">
                     <div className="p-2 bg-accent/10 text-accent rounded-xl">
                         <Keyboard className="w-8 h-8" />
