@@ -1,0 +1,718 @@
+import { useMemo, useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Table } from '../components';
+import { AlertTriangle, X, Trash, Save, Share2, Copy, Check } from 'lucide-react';
+import { type Solve, useSolves } from '../contexts/SolvesContext';
+import { useSettings } from '../contexts/SettingsContext';
+import { detectOutliers } from '../utils/analysis';
+import { useAuth } from '../contexts/AuthContext';
+import { formatTime } from '../utils/formatTime';
+import {
+    ComposedChart,
+    Line,
+    Scatter,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer
+} from 'recharts';
+import { calculateAverage } from '../utils/calculations';
+
+import { startOfYear, startOfMonth, startOfWeek, startOfDay, format } from 'date-fns';
+
+export default function Data() {
+    const { solves, updateSolve, deleteSolve } = useSolves();
+    const { settings } = useSettings();
+    const { user } = useAuth();
+    const [searchParams] = useSearchParams();
+
+    // -- State: Sorting --
+    const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>(() => {
+        const saved = localStorage.getItem('data_table_sort');
+        return saved ? JSON.parse(saved) : { key: 'date', direction: 'desc' };
+    });
+
+    useEffect(() => {
+        localStorage.setItem('data_table_sort', JSON.stringify(sortConfig));
+    }, [sortConfig]);
+
+    // -- State: Graph Mounting --
+    // const [isGraphMounted, setIsGraphMounted] = useState(false);
+    // useEffect(() => {
+    //     // Small delay to ensure container size is calculated
+    //     const t = setTimeout(() => setIsGraphMounted(true), 100);
+    //     return () => clearTimeout(t);
+    // }, []);
+
+    // -- Filter Solves based on Sidebar Selection and Event --
+    const filteredSolves = useMemo(() => {
+        // 1. Base Filter (User & Event)
+        let base = solves;
+        if (user) {
+            base = solves.filter(s => s.userId === user.uid);
+        }
+        base = base.filter(s => (s.scrambleType || '333') === settings.scrambleType);
+
+        // 2. Selection Filter (from URL)
+        const selectedStr = searchParams.get('selected');
+        const grouping = searchParams.get('grouping') || 'sessions'; // Default to match sidebar
+
+        if (!selectedStr) {
+            // "No specific grouping is selected, assume all solves for the event are selected."
+            return base.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Sort for graphs (Oldest to Newest)
+        }
+
+        const selectedKeys = new Set(selectedStr.split(','));
+
+        return base.filter(s => {
+            const date = new Date(s.date);
+            let key = '';
+            // Replicate grouping logic from Sidebar to match keys
+            // This duplication isn't ideal but avoids prop drilling or complex context for now.
+            switch (grouping) {
+                case 'years':
+                    key = format(startOfYear(date), 'yyyy');
+                    break;
+                case 'months':
+                    key = format(startOfMonth(date), 'yyyy-MM');
+                    break;
+                case 'weeks':
+                    const weekStart = startOfWeek(date, { weekStartsOn: 1 });
+                    key = format(weekStart, 'yyyy-Iw');
+                    break;
+                case 'days':
+                    key = format(startOfDay(date), 'yyyy-MM-dd');
+                    break;
+                case 'sessions':
+                    key = s.sessionId || 'unknown';
+                    break;
+            }
+            return selectedKeys.has(key);
+        }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Keep old to new for graphs
+
+    }, [solves, user, settings.scrambleType, searchParams]);
+
+    // -- Anomalies --
+    const anomalySolves = useMemo(() => {
+        return filteredSolves.filter(s => {
+            if (s.anomalyApproved) return false; // Already approved
+            const { isOutlier } = detectOutliers(s.time, filteredSolves);
+            return isOutlier;
+        });
+    }, [filteredSolves]);
+
+
+    // -- Table Data (Sorted) --
+    const tableSolves = useMemo(() => {
+        const data = [...filteredSolves];
+        // Sort based on config
+        data.sort((a, b) => {
+            let valA, valB;
+
+            if (sortConfig.key === 'time') {
+                // Handle DNFs for sorting (push to bottom? or treat as infinity)
+                const getSolveTime = (s: Solve) => {
+                    if (s.penalty === 'DNF') return Infinity;
+                    let t = s.time;
+                    if (s.penalty === '+2') t += 2000;
+                    if (s.inspectionPenalty === '+2') t += 2000;
+                    return t;
+                };
+                valA = getSolveTime(a);
+                valB = getSolveTime(b);
+            } else {
+                // Date
+                valA = new Date(a.date).getTime();
+                valB = new Date(b.date).getTime();
+            }
+
+            if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+        return data;
+    }, [filteredSolves, sortConfig]);
+
+    const handleHeaderClick = (key: string) => {
+        setSortConfig(prev => ({
+            key,
+            direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
+        }));
+    };
+
+    // -- Actions --
+    const handleCopyScramble = (e: React.MouseEvent, scramble: string) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(scramble);
+        // Could show toast here
+    };
+
+    const handleAction = async (e: React.MouseEvent, action: 'plus2' | 'dnf' | 'delete' | 'share' | 'save' | 'approve', solve: Solve) => {
+        e.stopPropagation();
+        if (action === 'plus2') {
+            const newPenalty = solve.penalty === '+2' ? 'none' : '+2';
+            updateSolve(solve.id, { penalty: newPenalty });
+        } else if (action === 'dnf') {
+            const newPenalty = solve.penalty === 'DNF' ? 'none' : 'DNF';
+            updateSolve(solve.id, { penalty: newPenalty });
+        } else if (action === 'delete') {
+            if (confirm('Are you sure you want to delete this solve?')) {
+                deleteSolve(solve.id);
+                if (selectedSolveId === solve.id) setSelectedSolveId(null);
+            }
+        } else if (action === 'approve') {
+            updateSolve(solve.id, { anomalyApproved: true });
+        } else if (action === 'share') {
+            // Placeholder
+            alert("Sharing not yet implemented");
+        } else if (action === 'save') {
+            // Placeholder
+            alert("Saving not yet implemented");
+        }
+    };
+
+
+    // -- Prepare Data for Charts --
+    const chartData = useMemo(() => {
+        return filteredSolves.map((s, i) => {
+            // Calculate Moving Ao5
+            // Get previous 4 + current
+            let ao5Current: number | null = null;
+            if (i >= 4) {
+                const window = filteredSolves.slice(i - 4, i + 1);
+                const avg = calculateAverage(window, 5); // Uses shared calculation
+                if (typeof avg === 'number') ao5Current = avg;
+            }
+
+            const timeVal = (s.penalty === 'DNF' || s.inspectionPenalty === 'DNF') ? null : (s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0));
+
+            return {
+                id: s.id,
+                index: i + 1,
+                date: new Date(s.date).toLocaleDateString(),
+                time: timeVal, // filtered out DNFs for scatter y-axis usually? or check if Recharts handles null
+                ao5: ao5Current,
+                solve: s
+            };
+        });
+    }, [filteredSolves]);
+
+    // -- Downsample Chart Data for Performance --
+    const displayedChartData = useMemo(() => {
+        const MAX_POINTS = 300;
+        let data = chartData;
+
+        // Downsample if too many points
+        if (chartData.length > MAX_POINTS) {
+            const step = Math.ceil(chartData.length / MAX_POINTS);
+            data = chartData.filter((_, i) => i % step === 0);
+        }
+
+        // Always sanitize data for Recharts to prevent rendering crashes
+        return data.map(d => ({
+            ...d,
+            time: (typeof d.time === 'number' && isFinite(d.time)) ? d.time : null,
+            ao5: (typeof d.ao5 === 'number' && isFinite(d.ao5)) ? d.ao5 : null
+        }));
+    }, [chartData]);
+
+    // -- Box Plot Data Calculation --
+    const boxPlotStats = useMemo(() => {
+        const validTimes = filteredSolves
+            .filter(s => s.penalty !== 'DNF' && s.inspectionPenalty !== 'DNF')
+            .map(s => s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0))
+            .sort((a, b) => a - b);
+
+        if (validTimes.length === 0) return null;
+
+        const min = validTimes[0];
+        const max = validTimes[validTimes.length - 1];
+        const q1 = validTimes[Math.floor(validTimes.length * 0.25)];
+        const median = validTimes[Math.floor(validTimes.length * 0.5)];
+        const q3 = validTimes[Math.floor(validTimes.length * 0.75)];
+
+        return { min, q1, median, q3, max };
+    }, [filteredSolves]);
+
+
+    // -- Detail Pane State --
+    const [selectedSolveId, setSelectedSolveId] = useState<string | null>(null);
+
+    const handleSolveClick = (solve: Solve) => {
+        setSelectedSolveId(solve.id);
+    };
+
+    const selectedSolve = useMemo(() => {
+        return solves.find(s => s.id === selectedSolveId);
+    }, [solves, selectedSolveId]);
+
+    // -- Render --
+    if (!user) {
+        return <div className="p-8 text-center text-text-secondary">Please sign in to view data analysis.</div>;
+    }
+
+    if (filteredSolves.length === 0) {
+        return <div className="p-8 text-center text-text-secondary">No solves selected or available.</div>;
+    }
+
+    return (
+        <div className="w-full h-full flex flex-row overflow-hidden relative">
+            {/* Main Content */}
+            <div className={`flex-1 flex flex-col gap-6 w-full min-w-0 pb-20 overflow-y-auto px-6 py-6`}>
+
+                {/* Graphs Container */}
+                {filteredSolves.length < 12 ? (
+                    <div className="w-full bg-bg-secondary p-8 rounded-lg border border-border flex flex-col items-center justify-center text-center h-64">
+                        <AlertTriangle className="w-8 h-8 text-text-secondary mb-3 opacity-50" />
+                        <h3 className="text-sm font-medium text-text-primary">Not Enough Data</h3>
+                        <p className="text-xs text-text-secondary mt-1 max-w-[250px]">
+                            Need at least 12 solves to generate meaningful analysis graphs.
+                        </p>
+                    </div>
+                ) : (
+                    <>
+
+                        {/* 1. Scatter Plot with Trendline (Moved to Top) */}
+                        <div className="w-full h-48 flex flex-col relative min-w-0">
+                            <div className="mt-2 w-full h-[180px] min-w-0">
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={180} initialDimension={{ width: 100, height: 180 }}>
+                                    <ComposedChart data={displayedChartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
+                                        <CartesianGrid stroke="#71717a" strokeOpacity={0.2} vertical={false} />
+                                        <XAxis dataKey="index" hide />
+                                        <YAxis
+                                            domain={['auto', 'auto']}
+                                            tickFormatter={(val) => {
+                                                if (val > 60000) return formatTime(val);
+                                                return (val / 1000).toFixed(1);
+                                            }}
+                                            width={50}
+                                            tick={{ fontSize: 10, fill: '#71717a' }}
+                                            axisLine={false}
+                                            tickLine={false}
+                                        />
+                                        <Tooltip
+                                            cursor={{ stroke: 'rgba(100,100,100,0.2)' }}
+                                            contentStyle={{
+                                                backgroundColor: 'rgba(24, 24, 27, 0.95)', // Zinc-950
+                                                borderColor: '#27272a',
+                                                fontSize: '12px',
+                                                color: '#fff',
+                                                borderRadius: '6px',
+                                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                                            }}
+                                            itemStyle={{ color: '#e4e4e7' }}
+                                            labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
+                                            formatter={(value: any, name: any) => {
+                                                if (name === 'index') return [null, null]; // Hide index
+                                                return [
+                                                    value ? formatTime(value) : 'DNF',
+                                                    name === 'time' ? 'Time' : (name === 'Ao5' ? 'Ao5' : name)
+                                                ];
+                                            }}
+                                            labelFormatter={(label) => `Solve #${label}`}
+                                        />
+                                        {/* Scatter for Individual Solves */}
+                                        <Scatter
+                                            name="time"
+                                            dataKey="time"
+                                            fill="#3b82f6"
+                                            opacity={0.5}
+                                            shape={(props: any) => <circle cx={props.cx} cy={props.cy} r={2} fill="#3b82f6" opacity={0.6} />}
+                                            isAnimationActive={false}
+                                        />
+                                        {/* Line for Moving Average (Trend) */}
+                                        <Line
+                                            name="Ao5"
+                                            type="monotone"
+                                            dataKey="ao5"
+                                            stroke="#ec4899"
+                                            strokeWidth={2}
+                                            dot={false}
+                                            activeDot={false} // Removed active dot on hover as requested ("remove second data point")
+                                            connectNulls
+                                            isAnimationActive={false}
+                                        />
+                                    </ComposedChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        {/* 2. Activity Calendar */}
+                        <ActivityCalendar solves={filteredSolves} />
+
+                        {/* 3. Horizontal Box Plot */}
+                        {boxPlotStats && (
+                            <div className="w-full h-24 flex flex-col justify-center relative min-w-0">
+                                <BoxPlot stats={boxPlotStats} />
+                            </div>
+                        )}
+                    </>
+                )}
+
+                {/* 3. Anomaly Table */}
+                {anomalySolves.length > 0 && (
+                    <div className="w-full mb-4">
+                        <div className="flex items-center gap-2 mb-2 px-1">
+                            <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                            <h3 className="text-lg font-medium text-text-primary">Anomalies ({anomalySolves.length})</h3>
+                        </div>
+                        <div className="">
+                            <Table
+                                data={anomalySolves}
+                                sortConfig={{ key: 'date', direction: 'desc' }}
+                                onHeaderClick={() => { }}
+                                className="w-full"
+                                headerClassName="bg-bg-secondary border border-border"
+                                rowClassName="border-none hover:bg-yellow-500/5 text-text-secondary"
+                                columns={[
+                                    { header: '#', accessor: (_: any, i: number) => anomalySolves.length - i, className: 'w-12 text-center text-text-secondary/50' },
+                                    {
+                                        header: 'Time',
+                                        accessor: (s: Solve) => (
+                                            <span className={`font-mono font-medium ${s.penalty === 'DNF' ? 'text-red-500' : 'text-yellow-500'}`}>
+                                                {formatTime(s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0))}
+                                            </span>
+                                        )
+                                    },
+                                    {
+                                        header: 'Issue',
+                                        accessor: (s: Solve) => {
+                                            const { reason } = detectOutliers(s.time, filteredSolves);
+                                            return (
+                                                <span className="text-xs text-text-secondary">
+                                                    {reason === 'suspected_misclick' ? 'Unusually Fast' : 'Unusually Slow'}
+                                                </span>
+                                            )
+                                        },
+                                        className: 'text-text-secondary'
+                                    },
+                                    {
+                                        header: 'Date',
+                                        accessor: (s: Solve) => new Date(s.date).toLocaleDateString(),
+                                        className: 'text-text-secondary text-right w-40'
+                                    },
+                                    {
+                                        header: 'Actions',
+                                        accessor: (s: Solve) => (
+                                            <div className="flex items-center gap-2 justify-end pr-1">
+                                                <button onClick={(e) => handleAction(e, 'approve', s)} className="px-3 py-1 bg-bg-tertiary hover:bg-green-500/20 rounded text-xs font-medium text-text-primary hover:text-green-500 flex items-center gap-1 transition-colors">
+                                                    <Check className="w-3 h-3" /> Approve
+                                                </button>
+                                                <button onClick={(e) => handleAction(e, 'delete', s)} className="px-3 py-1 bg-bg-tertiary hover:bg-red-500/20 rounded text-xs font-medium text-text-primary hover:text-red-500 flex items-center gap-1 transition-colors">
+                                                    <Trash className="w-3 h-3" /> Delete
+                                                </button>
+                                            </div>
+                                        ),
+                                        className: 'w-48 text-right'
+                                    }
+                                ]}
+                            />
+                        </div>
+                    </div>
+                )}
+
+
+                {/* 4. Solves Table */}
+                <div className="w-full">
+                    <h3 className="text-lg font-medium text-text-primary mb-2 px-1">Solves ({filteredSolves.length})</h3>
+                    {/* Using the standard table but wired to open side pane */}
+                    <div className="">
+                        <Table
+                            data={tableSolves}
+                            sortConfig={sortConfig}
+                            onHeaderClick={handleHeaderClick}
+                            className="w-full"
+                            headerClassName="bg-bg-secondary border border-border"
+                            rowClassName="border-none"
+                            columns={[
+                                { header: '#', accessor: (_: any, i: number) => tableSolves.length - i, className: 'w-16 text-center text-text-secondary/50' },
+                                {
+                                    header: 'Time',
+                                    key: 'time',
+                                    sortable: true,
+                                    accessor: (s: Solve) => (
+                                        <span className={`font-mono font-medium ${s.penalty === 'DNF' ? 'text-red-500' : ''}`}>
+                                            {s.penalty === 'DNF' ? 'DNF' : formatTime(s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0))}
+                                            {s.penalty === '+2' && '+'}
+                                        </span>
+                                    ),
+                                    className: 'w-24'
+                                },
+                                {
+                                    header: 'Scramble',
+                                    accessor: (s: Solve) => (
+                                        <div
+                                            onClick={(e) => handleCopyScramble(e, s.scramble)}
+                                            className="font-mono text-xs text-text-secondary cursor-copy hover:text-text-primary transition-colors flex items-center justify-between gap-2 group/scramble w-full"
+                                            title="Click to copy"
+                                        >
+                                            <span className="truncate">{s.scramble}</span>
+                                            <Copy className="w-3 h-3 opacity-0 group-hover/scramble:opacity-100 transition-opacity shrink-0" />
+                                        </div>
+                                    ),
+                                    className: 'hidden md:table-cell w-auto max-w-[12rem]'
+                                },
+                                {
+                                    header: 'Date',
+                                    key: 'date',
+                                    sortable: true,
+                                    accessor: (s: Solve) => new Date(s.date).toLocaleDateString() + ' ' + new Date(s.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                                    className: 'hidden sm:table-cell text-text-secondary w-48 text-right'
+                                },
+                                {
+                                    header: 'Actions',
+                                    accessor: (s: Solve) => (
+                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end pr-1">
+                                            <button onClick={(e) => handleAction(e, 'save', s)} className="p-1.5 hover:bg-bg-tertiary rounded text-text-secondary hover:text-accent" title="Save"><Save className="w-4 h-4" /></button>
+                                            <button onClick={(e) => handleAction(e, 'plus2', s)} className={`p-1.5 hover:bg-bg-tertiary rounded font-bold text-xs w-8 ${s.penalty === '+2' ? 'text-accent bg-accent/10' : 'text-text-secondary hover:text-text-primary'}`} title="+2">+2</button>
+                                            <button onClick={(e) => handleAction(e, 'dnf', s)} className={`p-1.5 hover:bg-bg-tertiary rounded font-bold text-xs w-8 ${s.penalty === 'DNF' ? 'text-red-500 bg-red-500/10' : 'text-text-secondary hover:text-text-primary'}`} title="DNF">DNF</button>
+                                            <button onClick={(e) => handleAction(e, 'share', s)} className="p-1.5 hover:bg-bg-tertiary rounded text-text-secondary hover:text-primary" title="Share"><Share2 className="w-4 h-4" /></button>
+                                            <button onClick={(e) => handleAction(e, 'delete', s)} className="p-1.5 hover:bg-red-500/10 rounded text-text-secondary hover:text-red-500" title="Delete"><Trash className="w-4 h-4" /></button>
+                                        </div>
+                                    ),
+                                    className: 'w-48 text-right'
+                                }
+                            ]}
+                            onRowClick={handleSolveClick}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* Viewer Pane (Side Panel) */}
+            {selectedSolve && (
+                <SidebarPane
+                    solve={selectedSolve}
+                    onClose={() => setSelectedSolveId(null)}
+                    allSolves={filteredSolves}
+                    onAction={handleAction}
+                    selectedSolveId={selectedSolveId}
+                />
+            )}
+        </div>
+    );
+}
+
+function SidebarPane({ solve, onClose, allSolves, onAction, selectedSolveId }: { solve: Solve, onClose: () => void, allSolves: Solve[], onAction: any, selectedSolveId: string | null }) {
+    const [width, setWidth] = useState(350);
+
+
+    // Initial resize handlers could go here, but for now simple toggle or fixed width + easy drag
+    // User asked "Grow and shrink".
+
+    return (
+        <div
+            className="flex flex-col bg-bg-secondary border-l border-border h-full overflow-y-auto animate-in slide-in-from-right duration-300 shrink-0 relative z-20"
+            style={{ width: width }}
+        >
+            {/* Resize Handle */}
+            <div
+                className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-accent/50 transition-colors z-30"
+                onMouseDown={(e) => {
+                    e.preventDefault();
+                    const startX = e.clientX;
+                    const startWidth = width;
+
+                    const onMouseMove = (ev: MouseEvent) => {
+                        const newWidth = startWidth - (ev.clientX - startX);
+                        setWidth(Math.max(300, Math.min(600, newWidth)));
+                    };
+
+                    const onMouseUp = () => {
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                    };
+
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                }}
+            />
+
+            <div className="p-4 flex flex-col gap-4">
+                <div className="flex justify-between items-start">
+                    <div className="flex flex-col">
+                        <h2 className="text-xl font-bold text-text-primary">Solve Details</h2>
+                        <span className="text-xs text-text-secondary font-mono">#{selectedSolveId?.slice(0, 8)}</span>
+                    </div>
+                    <button onClick={onClose} className="p-1 hover:bg-bg-hover rounded text-text-secondary">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                {/* Big Time Display */}
+                <div className="text-left px-2 py-4 border-b border-border/50">
+                    <div className={`text-4xl font-mono font-bold ${solve.penalty === 'DNF' ? 'text-red-500' : 'text-accent'}`}>
+                        {solve.penalty === 'DNF' ? 'DNF' : formatTime(solve.time + (solve.penalty === '+2' ? 2000 : 0))}
+                    </div>
+                    {solve.penalty !== 'none' && <div className="text-red-500 font-bold mt-1 uppercase text-sm">{solve.penalty} Penalty</div>}
+                </div>
+
+                {/* Details List (Single Column) */}
+                <div className="flex flex-col gap-6 px-2">
+                    <div>
+                        <div className="text-text-secondary text-xs uppercase font-bold mb-1">Date</div>
+                        <div className="text-text-primary text-sm flex flex-col">
+                            <span>{new Date(solve.date).toLocaleDateString()}</span>
+                            <span className="text-text-secondary text-xs">{new Date(solve.date).toLocaleTimeString()}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div className="text-text-secondary text-xs uppercase font-bold mb-1">Inspection</div>
+                        <div className="text-text-primary font-mono text-sm">
+                            {solve.inspectionTime ? (solve.inspectionTime / 1000).toFixed(2) + 's' : '-'}
+                        </div>
+                        {solve.inspectionPenalty !== 'none' && <span className="text-red-500 text-xs font-bold">({solve.inspectionPenalty})</span>}
+                    </div>
+                    <div>
+                        <div className="text-text-secondary text-xs uppercase font-bold mb-1">Scramble</div>
+                        <div className="font-mono text-xs leading-relaxed break-all text-text-primary/90">
+                            {solve.scramble}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Outlier Analysis Details */}
+                {(() => {
+                    const { isOutlier, reason } = detectOutliers(solve.time, allSolves);
+                    if (isOutlier && !solve.anomalyApproved) {
+                        return (
+                            <div className="mx-2 bg-yellow-500/10 border border-yellow-500/20 p-3 rounded flex items-start gap-3">
+                                <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0" />
+                                <div>
+                                    <div className="text-yellow-500 font-bold text-sm mb-0.5">Anomaly Detected</div>
+                                    <div className="text-yellow-500/80 text-xs mb-2">
+                                        {reason === 'suspected_misclick' ? 'This time is unusually fast.' : 'This time is unusually slow.'}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={(e) => onAction(e, 'approve', solve)} className="text-xs font-bold text-yellow-500 hover:text-yellow-400 underline decoration-dotted">Approve</button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+                    return null;
+                })()}
+            </div>
+        </div>
+    );
+}
+
+
+// -- Activity Calendar Component --
+function ActivityCalendar({ solves }: { solves: Solve[] }) {
+    // Generates dates dynamically based on solve history, up to 25 days
+    const range = useMemo(() => {
+        if (solves.length === 0) return [];
+        const today = startOfDay(new Date());
+
+        // Find earliest solve date
+        let earliest = today;
+        solves.forEach(s => {
+            const d = startOfDay(new Date(s.date));
+            if (d < earliest) earliest = d;
+        });
+
+        const daysDiff = Math.floor((today.getTime() - earliest.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        const countToShow = Math.min(25, Math.max(1, daysDiff)); // At least 1, max 25
+
+        const d = [];
+        for (let i = countToShow - 1; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(date.getDate() - i);
+            d.push(format(date, 'yyyy-MM-dd'));
+        }
+        return d;
+    }, [solves]);
+
+    // Create Map of Date -> Solve Count
+    const counts = useMemo(() => {
+        const c: Record<string, number> = {};
+        solves.forEach(s => {
+            const key = format(startOfDay(new Date(s.date)), 'yyyy-MM-dd');
+            c[key] = (c[key] || 0) + 1;
+        });
+        return c;
+    }, [solves]);
+
+    const getColor = (count: number) => {
+        if (count === 0) return 'bg-zinc-500/10 text-transparent'; // Muted for empty
+        if (count < 10) return 'bg-emerald-500/20 text-[#022c22] dark:text-emerald-400 border border-emerald-500/30';
+        if (count < 25) return 'bg-emerald-500/40 text-[#022c22] dark:text-emerald-200 border border-emerald-500/50';
+        if (count < 50) return 'bg-emerald-600 text-white border border-emerald-500';
+        return 'bg-emerald-700 text-white border border-emerald-600 font-bold shadow-sm shadow-emerald-900/20';
+    };
+
+    return (
+        <div className="w-full mb-6 mt-8 flex justify-center">
+            <div className="flex flex-wrap gap-2 justify-center">
+                {range.map(date => {
+                    const count = counts[date] || 0;
+                    const dateObj = new Date(date);
+
+
+                    return (
+                        <div
+                            key={date}
+                            className={`
+                                w-8 h-8 rounded-md flex items-center justify-center text-xs transition-all relative group cursor-default select-none
+                                ${getColor(count)}
+                            `}
+                            title={`${date}: ${count} solves`}
+                        >
+                            {count > 0 ? count : ''}
+
+                            {/* Tooltip */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block bg-bg-tertiary text-text-primary text-[10px] px-2 py-1 rounded border border-border whitespace-nowrap z-20 shadow-xl">
+                                <span className="font-semibold block text-center mb-0.5">{format(dateObj, 'MMM d')}</span>
+                                <div className="text-center opacity-80">{count} solves</div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+            {range.length === 0 && <div className="text-text-secondary text-xs italic px-1">Start cubing to see activity!</div>}
+        </div>
+    );
+}
+
+// -- Simple SVG Box Plot Component --
+function BoxPlot({ stats }: { stats: { min: number, q1: number, median: number, q3: number, max: number } }) {
+    if (!stats) return null;
+    const { min, q1, median, q3, max } = stats;
+    // Normalize values to 0-100% width
+    const range = max - min;
+    if (range === 0) return <div className="text-center text-xs text-text-secondary mt-8">Not enough data range</div>;
+
+    const getPos = (val: number) => ((val - min) / range) * 100;
+
+    return (
+        <div className="w-full h-16 relative mt-2 mb-2"> {/* Increased height and spacing */}
+            {/* Main Line (Whisker to Whisker) */}
+            <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-text-secondary/30 -translate-y-1/2"
+                style={{ left: `${getPos(min)}%`, right: `${100 - getPos(max)}%` }} />
+
+            {/* Whiskers (Ends) */}
+            <div className="absolute top-1/2 w-[2px] h-3 bg-text-secondary/50 -translate-y-1/2" style={{ left: `${getPos(min)}%` }} />
+            <div className="absolute top-1/2 w-[2px] h-3 bg-text-secondary/50 -translate-y-1/2" style={{ left: `${getPos(max)}%` }} />
+
+            {/* Box (Q1 to Q3) */}
+            <div className="absolute top-1/2 h-6 bg-blue-500/20 border border-blue-500/50 -translate-y-1/2"
+                style={{ left: `${getPos(q1)}%`, width: `${getPos(q3) - getPos(q1)}%` }} />
+
+            {/* Median Line */}
+            <div className="absolute top-1/2 w-[2px] h-6 bg-accent -translate-y-1/2 z-10"
+                style={{ left: `${getPos(median)}%` }} />
+
+            {/* Labels */}
+            {/* Min/Max at ends */}
+            <div className="absolute -bottom-0 text-xs font-mono text-text-secondary " style={{ left: `${getPos(min)}%` }}>{formatTime(min)}</div>
+            <div className="absolute -bottom-0 text-xs font-mono text-text-secondary -translate-x-1/1" style={{ left: `${getPos(max)}%` }}>{formatTime(max)}</div>
+
+            {/* Q1/Median/Q3 in middle */}
+            <div className="absolute -top-0 text-xs font-mono text-text-secondary -translate-x-1/2 opacity-75" style={{ left: `${getPos(q1)}%` }}>{formatTime(q1)}</div>
+            <div className="absolute -bottom-0 text-xs font-mono font-bold text-text-primary -translate-x-1/2" style={{ left: `${getPos(median)}%` }}>{formatTime(median)}</div>
+            <div className="absolute -top-0 text-xs font-mono text-text-secondary -translate-x-1/2 opacity-75" style={{ left: `${getPos(q3)}%` }}>{formatTime(q3)}</div>
+        </div>
+    );
+}
