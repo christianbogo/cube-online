@@ -118,15 +118,52 @@ export default function Layout() {
         }
     }, [isRightCollapsed, rightWidth, lastOpenRightWidth]);
 
-    // Global Keyboard Shortcuts
+    // Global Keyboard Shortcuts and Selection Prevention
     useEffect(() => {
+        const handleGlobalPointerUp = (e: MouseEvent | PointerEvent) => {
+            const target = e.target as HTMLElement | null;
+            if (target) {
+                const interactive = target.closest('a, button, select, [role="button"]');
+                if (interactive && interactive instanceof HTMLElement) {
+                    setTimeout(() => {
+                        interactive.blur();
+                    }, 0);
+                }
+            }
+        };
+
+        const handleGlobalChange = (e: Event) => {
+            const target = e.target as HTMLElement | null;
+            if (target && target.tagName === 'SELECT') {
+                target.blur();
+            }
+        };
+
+        window.addEventListener('pointerup', handleGlobalPointerUp);
+        window.addEventListener('change', handleGlobalChange);
+
         const handleGlobalKeyDown = (e: KeyboardEvent) => {
             if (isSignInPage) return;
 
-            const target = e.target as HTMLElement;
-            if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName) || target.isContentEditable) {
-                if (e.key === 'Tab' || e.key === 'Shift') return;
-                if (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) return;
+            const target = e.target as HTMLElement | null;
+            const isTextInput = (el: HTMLElement | null) => el && (
+                (el.tagName === 'INPUT' && !['button', 'checkbox', 'radio', 'submit', 'reset'].includes((el as HTMLInputElement).type)) ||
+                el.tagName === 'TEXTAREA' ||
+                el.isContentEditable
+            );
+
+            if (isTextInput(target) || isTextInput(document.activeElement as HTMLElement)) {
+                return;
+            }
+
+            if (e.code === 'Space' || e.key === ' ') {
+                e.preventDefault();
+                if (document.activeElement && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+                    document.activeElement.blur();
+                }
+                if (target && target !== document.body) {
+                    target.blur();
+                }
             }
 
             if (e.key === 'Shift' && !e.repeat) {
@@ -135,7 +172,7 @@ export default function Layout() {
             }
 
             if (e.key === 'Tab') {
-                if (location.pathname === '/account') return;
+                if (location.pathname === '/account' || location.pathname === '/privacy') return;
                 e.preventDefault();
                 if (!e.shiftKey) toggleRightSidebar();
                 else toggleLeftSidebar();
@@ -143,13 +180,6 @@ export default function Layout() {
             }
 
             if (e.key === 'Escape') navigate('/');
-
-            if (e.code === 'Space') {
-                if (target.tagName === 'BUTTON' || target.tagName === 'SELECT') {
-                    e.preventDefault();
-                    target.blur();
-                }
-            }
 
             // Keybinds Navigation Hotkeys
             if (e.key === 'b' || e.key === 'B' || e.key === '?') {
@@ -160,21 +190,26 @@ export default function Layout() {
                 if (!isPrivateMode) navigate('/goals');
                 else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/goals'); }
             }
-            if (e.key === 'r' || e.key === 'R') {
-                if (!isPrivateMode) navigate('/records');
-                else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/records'); }
-            }
             if (e.key === 'l' || e.key === 'L') {
                 if (!isPrivateMode) navigate('/logs');
                 else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/logs'); }
+            }
+            if (e.key === 's' || e.key === 'S') {
+                if (!isPrivateMode) navigate('/social');
+                else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/social'); }
             }
             if (e.key === 'a' || e.key === 'A') {
                 if (!isPrivateMode) navigate('/account');
                 else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/account'); }
             }
         };
-        window.addEventListener('keydown', handleGlobalKeyDown);
-        return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+
+        window.addEventListener('keydown', handleGlobalKeyDown, { capture: true });
+        return () => {
+            window.removeEventListener('pointerup', handleGlobalPointerUp);
+            window.removeEventListener('change', handleGlobalChange);
+            window.removeEventListener('keydown', handleGlobalKeyDown, { capture: true });
+        };
     }, [navigate, toggleLeftSidebar, toggleRightSidebar, location.pathname, isPrivateMode, togglePrivateMode, isSignInPage]);
 
     const startResizingLeft = useCallback(() => setIsResizingLeft(true), []);
@@ -273,10 +308,10 @@ export default function Layout() {
 
                 {/* Main Content */}
                 <main className="flex-1 flex flex-col relative bg-bg-primary min-w-0 overflow-hidden">
-                    <div className={`flex-1 w-full ${(location.pathname.startsWith('/logs') || location.pathname === '/account' || location.pathname === '/records') ? 'overflow-hidden p-0 flex flex-col' : 'p-6 overflow-y-auto custom-scrollbar'}`}>
+                    <div className={`flex-1 w-full ${(location.pathname.startsWith('/logs') || location.pathname === '/account') ? 'overflow-hidden p-0 flex flex-col' : 'p-6 overflow-y-auto custom-scrollbar'}`}>
                         <Outlet />
                     </div>
-                    {(!location.pathname.startsWith('/logs') && location.pathname !== '/account' && location.pathname !== '/records') && (
+                    {(!location.pathname.startsWith('/logs') && location.pathname !== '/account') && (
                         <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8 shrink-0">
                             <div className="flex gap-2 items-center">
                                 <span>{isOnline ? 'Online' : 'Offline'} • v0.3.1</span>
@@ -299,7 +334,7 @@ export default function Layout() {
                 </main>
 
                 {/* Right Sidebar */}
-                {!['/account', '/logs', '/keybinds', '/goals', '/records', '/dev'].some(p => location.pathname.startsWith(p)) && (
+                {!['/account', '/logs', '/keybinds', '/goals', '/social', '/dev', '/privacy'].some(p => location.pathname.startsWith(p)) && (
                     <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col backdrop-blur-sm will-change-[width] border-l border-border z-20">
                         <div className="absolute top-0 left-[-5px] w-2.5 h-full cursor-col-resize z-50 group flex justify-center" onMouseDown={startResizingRight}>
                             <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />

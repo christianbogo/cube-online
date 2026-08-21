@@ -1,52 +1,38 @@
-import { useState, useEffect, useCallback } from 'react';
-import {
-    collection,
-    query,
-    getDocs,
-    addDoc,
-    updateDoc,
-    deleteDoc,
-    doc
-} from 'firebase/firestore';
+import { useState, useEffect, useRef } from 'react';
+import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../contexts/AuthContext';
-import { isAdmin } from '../../utils/admin';
+import { compressImage } from '../../utils/admin';
+import { Link } from 'react-router-dom';
 import {
     Bug,
     Sparkles,
     Send,
-    Archive,
-    Trash2,
-    RotateCcw,
     Check,
     AlertCircle,
-    Search,
-    Shield,
-    Inbox,
     MessageSquarePlus,
-    Flame
+    Flame,
+    Paperclip,
+    FileText,
+    X,
+    ShieldCheck
 } from 'lucide-react';
-import type { DevFeedback, FeedbackType } from '../../types';
+import type { FeedbackType } from '../../types';
 
 export default function FeedbackTab() {
     const { user } = useAuth();
-    const userIsAdmin = isAdmin(user);
 
     // Form State
     const [type, setType] = useState<FeedbackType>('bug');
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [contactEmail, setContactEmail] = useState('');
+    const [attachments, setAttachments] = useState<{ filename: string; content: string; type?: string; isImage?: boolean }[]>([]);
+    const [isProcessingAttachments, setIsProcessingAttachments] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitSuccess, setSubmitSuccess] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
-
-    // Admin State
-    const [feedbacks, setFeedbacks] = useState<DevFeedback[]>([]);
-    const [adminLoading, setAdminLoading] = useState(false);
-    const [activeFilter, setActiveFilter] = useState<'all' | 'open' | 'archived' | 'bug' | 'feature'>('open');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Initialize contact email from user
     useEffect(() => {
@@ -55,45 +41,52 @@ export default function FeedbackTab() {
         }
     }, [user, contactEmail]);
 
-    // Fetch feedbacks if Admin
-    const loadFeedbacks = useCallback(async () => {
-        if (!userIsAdmin) return;
-        setAdminLoading(true);
+    const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        setIsProcessingAttachments(true);
         try {
-            const q = query(collection(db, 'feedback'));
-            const snap = await getDocs(q);
-            const list: DevFeedback[] = [];
-            snap.forEach(d => {
-                const data = d.data();
-                list.push({
-                    id: d.id,
-                    type: data.type || 'bug',
-                    title: data.title || '',
-                    description: data.description || '',
-                    userEmail: data.userEmail,
-                    userId: data.userId,
-                    username: data.username,
-                    status: data.status || 'open',
-                    createdAt: data.createdAt || new Date().toISOString(),
-                    archivedAt: data.archivedAt
-                });
-            });
-
-            // Sort descending by date
-            list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-            setFeedbacks(list);
+            const newAttachments: { filename: string; content: string; type?: string; isImage?: boolean }[] = [];
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const isImage = file.type.startsWith('image/');
+                if (isImage) {
+                    const base64 = await compressImage(file, 1600, 1600, 0.82);
+                    newAttachments.push({
+                        filename: file.name,
+                        content: base64,
+                        type: file.type,
+                        isImage: true
+                    });
+                } else {
+                    const base64 = await new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result as string);
+                        reader.onerror = (err) => reject(err);
+                        reader.readAsDataURL(file);
+                    });
+                    newAttachments.push({
+                        filename: file.name,
+                        content: base64,
+                        type: file.type || 'application/octet-stream',
+                        isImage: false
+                    });
+                }
+            }
+            setAttachments(prev => [...prev, ...newAttachments].slice(0, 5));
         } catch (err) {
-            console.error("Error loading feedback list:", err);
+            console.error("Error processing attachments:", err);
+            setFormError("Failed to process selected file(s).");
         } finally {
-            setAdminLoading(false);
+            setIsProcessingAttachments(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
         }
-    }, [userIsAdmin]);
+    };
 
-    useEffect(() => {
-        if (userIsAdmin) {
-            loadFeedbacks();
-        }
-    }, [userIsAdmin, loadFeedbacks]);
+    const handleRemoveAttachment = (index: number) => {
+        setAttachments(prev => prev.filter((_, i) => i !== index));
+    };
 
     // Submit new report / request
     const handleSubmit = async (e: React.FormEvent) => {
@@ -115,19 +108,51 @@ export default function FeedbackTab() {
                 userId: user?.uid || null,
                 username: user?.username || null,
                 status: 'open',
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
+                attachments: attachments.map(a => ({
+                    filename: a.filename,
+                    content: a.content,
+                    type: a.type
+                }))
             };
 
-            await addDoc(collection(db, 'feedback'), feedbackData);
+            // 1. Send via Resend API
+            try {
+                const apiRes = await fetch('/api/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(feedbackData)
+                });
+                if (!apiRes.ok) {
+                    const errData = await apiRes.json().catch(() => ({}));
+                    console.warn('API error:', errData);
+                }
+            } catch (apiErr) {
+                console.warn('Failed to call /api/feedback:', apiErr);
+            }
+
+            // 2. Firestore backup
+            try {
+                await addDoc(collection(db, 'feedback'), {
+                    type: feedbackData.type,
+                    title: feedbackData.title,
+                    description: feedbackData.description,
+                    userEmail: feedbackData.userEmail,
+                    userId: feedbackData.userId,
+                    username: feedbackData.username,
+                    status: 'open',
+                    createdAt: feedbackData.createdAt,
+                    attachmentCount: attachments.length
+                });
+            } catch (dbErr) {
+                console.warn('Firestore backup failed:', dbErr);
+            }
 
             setTitle('');
             setDescription('');
+            setAttachments([]);
             setSubmitSuccess(true);
             setTimeout(() => setSubmitSuccess(false), 5000);
-
-            if (userIsAdmin) {
-                loadFeedbacks();
-            }
         } catch (err) {
             console.error("Failed to submit feedback:", err);
             setFormError('Failed to submit. Please check your connection and try again.');
@@ -135,67 +160,6 @@ export default function FeedbackTab() {
             setIsSubmitting(false);
         }
     };
-
-    // Admin: Dismiss / Archive submission
-    const handleDismiss = async (item: DevFeedback) => {
-        setActionLoadingId(item.id);
-        try {
-            const newStatus = item.status === 'archived' ? 'open' : 'archived';
-            const updates = {
-                status: newStatus,
-                archivedAt: newStatus === 'archived' ? new Date().toISOString() : null
-            };
-
-            await updateDoc(doc(db, 'feedback', item.id), updates);
-
-            setFeedbacks(prev =>
-                prev.map(f => f.id === item.id ? { ...f, ...updates, status: newStatus } : f)
-            );
-        } catch (err) {
-            console.error("Error archiving feedback:", err);
-            alert("Failed to update status.");
-        } finally {
-            setActionLoadingId(null);
-        }
-    };
-
-    // Admin: Delete submission
-    const handleDelete = async (id: string) => {
-        if (!confirm("Are you sure you want to permanently delete this submission?")) return;
-
-        setActionLoadingId(id);
-        try {
-            await deleteDoc(doc(db, 'feedback', id));
-            setFeedbacks(prev => prev.filter(f => f.id !== id));
-        } catch (err) {
-            console.error("Error deleting feedback:", err);
-            alert("Failed to delete submission.");
-        } finally {
-            setActionLoadingId(null);
-        }
-    };
-
-    // Filter feedback list
-    const filteredFeedbacks = feedbacks.filter(f => {
-        if (activeFilter === 'open' && f.status !== 'open') return false;
-        if (activeFilter === 'archived' && f.status !== 'archived') return false;
-        if (activeFilter === 'bug' && f.type !== 'bug') return false;
-        if (activeFilter === 'feature' && f.type !== 'feature') return false;
-
-        if (searchQuery.trim()) {
-            const q = searchQuery.toLowerCase();
-            const matchesTitle = f.title.toLowerCase().includes(q);
-            const matchesDesc = f.description.toLowerCase().includes(q);
-            const matchesEmail = (f.userEmail || '').toLowerCase().includes(q);
-            const matchesUser = (f.username || '').toLowerCase().includes(q);
-            return matchesTitle || matchesDesc || matchesEmail || matchesUser;
-        }
-
-        return true;
-    });
-
-    const openCount = feedbacks.filter(f => f.status === 'open').length;
-    const archivedCount = feedbacks.filter(f => f.status === 'archived').length;
 
     const getTypeBadge = (t: FeedbackType) => {
         switch (t) {
@@ -233,7 +197,7 @@ export default function FeedbackTab() {
                         <Check className="w-5 h-5 shrink-0" />
                         <div>
                             <p className="text-xs font-bold">Submission Received!</p>
-                            <p className="text-[11px] opacity-90">Thank you for helping improve the site. Your report has been saved.</p>
+                            <p className="text-[11px] opacity-90">Thank you for helping improve the site. Your report has been delivered.</p>
                         </div>
                     </div>
                 )}
@@ -305,6 +269,63 @@ export default function FeedbackTab() {
                         />
                     </div>
 
+                    {/* Attachments */}
+                    <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-xs font-bold uppercase tracking-wider text-text-secondary">
+                                Attachments <span className="text-[10px] font-normal lowercase opacity-75">(screenshots or files, max 5)</span>
+                            </label>
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={handleFilesSelected}
+                                accept="image/*,.log,.txt,.json"
+                                multiple
+                                className="hidden"
+                                id="feedback-tab-file-upload"
+                            />
+                            <label
+                                htmlFor="feedback-tab-file-upload"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-bg-hover border border-border/80 cursor-pointer transition-colors"
+                            >
+                                <Paperclip className="w-3.5 h-3.5" />
+                                <span>{isProcessingAttachments ? 'Processing...' : 'Attach Screenshot / File'}</span>
+                            </label>
+                        </div>
+
+                        {attachments.length > 0 && (
+                            <div className="flex flex-wrap gap-2 pt-1">
+                                {attachments.map((att, idx) => (
+                                    <div
+                                        key={idx}
+                                        className="flex items-center gap-2 p-1.5 pr-2 bg-bg-primary border border-border rounded-lg text-xs group"
+                                    >
+                                        {att.isImage ? (
+                                            <div className="w-7 h-7 rounded overflow-hidden bg-bg-secondary shrink-0 border border-border/50">
+                                                <img src={att.content} alt="Preview" className="w-full h-full object-cover" />
+                                            </div>
+                                        ) : (
+                                            <div className="w-7 h-7 rounded bg-bg-secondary flex items-center justify-center shrink-0 border border-border/50 text-text-secondary">
+                                                <FileText className="w-3.5 h-3.5" />
+                                            </div>
+                                        )}
+                                        <span className="max-w-[140px] truncate text-text-primary text-[11px] font-medium" title={att.filename}>
+                                            {att.filename}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveAttachment(idx)}
+                                            className="text-text-secondary hover:text-red-500 transition-colors p-0.5 rounded cursor-pointer"
+                                            title="Remove attachment"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
                     {/* Contact Email */}
                     <div>
                         <label className="text-xs font-bold uppercase tracking-wider text-text-secondary block mb-1.5">
@@ -319,214 +340,22 @@ export default function FeedbackTab() {
                         />
                     </div>
 
-                    <button
-                        type="submit"
-                        disabled={isSubmitting}
-                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-accent hover:opacity-90 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
-                    >
-                        <Send className="w-4 h-4" />
-                        <span>{isSubmitting ? 'Submitting...' : 'Send Feedback'}</span>
-                    </button>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                        <button
+                            type="submit"
+                            disabled={isSubmitting}
+                            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-accent hover:opacity-90 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50 w-fit"
+                        >
+                            <Send className="w-4 h-4" />
+                            <span>{isSubmitting ? 'Submitting...' : 'Send Feedback'}</span>
+                        </button>
+                        <div className="text-[11px] text-text-secondary flex items-center gap-1.5 opacity-80">
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                            <span>Reports &amp; uploads handled securely per our <Link to="/privacy" className="text-accent underline font-medium">Privacy Policy</Link>.</span>
+                        </div>
+                    </div>
                 </form>
             </div>
-
-            {/* Admin Management Dashboard */}
-            {userIsAdmin ? (
-                <div className="bg-bg-secondary/40 border border-border rounded-2xl p-6 shadow-sm space-y-5">
-                    {/* Admin Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border/50">
-                        <div className="flex items-center gap-2.5">
-                            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-500 border border-purple-500/20">
-                                <Shield className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <h3 className="text-base font-bold text-text-primary flex items-center gap-2">
-                                    Submissions Management
-                                    <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20">
-                                        Admin Panel
-                                    </span>
-                                </h3>
-                                <p className="text-xs text-text-secondary">
-                                    Review, dismiss (archive), or delete user-submitted issues and requests.
-                                </p>
-                            </div>
-                        </div>
-
-                        <button
-                            onClick={loadFeedbacks}
-                            disabled={adminLoading}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-bg-primary hover:bg-bg-hover text-text-primary border border-border transition-all cursor-pointer disabled:opacity-50 self-start sm:self-center"
-                        >
-                            <RotateCcw className={`w-3.5 h-3.5 ${adminLoading ? 'animate-spin' : ''}`} />
-                            <span>Refresh List</span>
-                        </button>
-                    </div>
-
-                    {/* Filter Pills & Search */}
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                            <button
-                                onClick={() => setActiveFilter('open')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                                    activeFilter === 'open'
-                                        ? 'bg-accent text-white shadow-sm'
-                                        : 'bg-bg-primary border border-border text-text-secondary hover:text-text-primary'
-                                }`}
-                            >
-                                Active ({openCount})
-                            </button>
-                            <button
-                                onClick={() => setActiveFilter('archived')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                                    activeFilter === 'archived'
-                                        ? 'bg-accent text-white shadow-sm'
-                                        : 'bg-bg-primary border border-border text-text-secondary hover:text-text-primary'
-                                }`}
-                            >
-                                Archived Folder ({archivedCount})
-                            </button>
-                            <button
-                                onClick={() => setActiveFilter('all')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                                    activeFilter === 'all'
-                                        ? 'bg-accent text-white shadow-sm'
-                                        : 'bg-bg-primary border border-border text-text-secondary hover:text-text-primary'
-                                }`}
-                            >
-                                All ({feedbacks.length})
-                            </button>
-                            <button
-                                onClick={() => setActiveFilter('bug')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                                    activeFilter === 'bug'
-                                        ? 'bg-red-500 text-white shadow-sm'
-                                        : 'bg-bg-primary border border-border text-text-secondary hover:text-text-primary'
-                                }`}
-                            >
-                                Bugs
-                            </button>
-                            <button
-                                onClick={() => setActiveFilter('feature')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                                    activeFilter === 'feature'
-                                        ? 'bg-purple-500 text-white shadow-sm'
-                                        : 'bg-bg-primary border border-border text-text-secondary hover:text-text-primary'
-                                }`}
-                            >
-                                Features
-                            </button>
-                        </div>
-
-                        {/* Search Input */}
-                        <div className="relative">
-                            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-                            <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search submissions..."
-                                className="w-full sm:w-52 pl-8 pr-3 py-1.5 bg-bg-primary border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Submissions List */}
-                    {adminLoading ? (
-                        <div className="py-12 text-center text-xs text-text-secondary">
-                            Loading submissions from database...
-                        </div>
-                    ) : filteredFeedbacks.length === 0 ? (
-                        <div className="py-12 text-center text-xs text-text-secondary flex flex-col items-center gap-2">
-                            <Inbox className="w-8 h-8 opacity-40" />
-                            <span>No submissions found in this view.</span>
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {filteredFeedbacks.map((item) => {
-                                const badge = getTypeBadge(item.type);
-                                const Icon = badge.icon;
-                                const isArchived = item.status === 'archived';
-                                const isBusy = actionLoadingId === item.id;
-
-                                return (
-                                    <div
-                                        key={item.id}
-                                        className={`p-4 rounded-xl border transition-all ${
-                                            isArchived
-                                                ? 'bg-bg-primary/40 border-border/40 opacity-70'
-                                                : 'bg-bg-primary border-border hover:border-accent/40 shadow-xs'
-                                        }`}
-                                    >
-                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${badge.bg}`}>
-                                                    <Icon className="w-3 h-3" />
-                                                    {badge.label}
-                                                </span>
-                                                {isArchived && (
-                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-neutral-500/10 text-neutral-400 border border-neutral-500/20">
-                                                        Archived
-                                                    </span>
-                                                )}
-                                                <span className="text-[11px] text-text-secondary">
-                                                    {new Date(item.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
-                                                </span>
-                                            </div>
-
-                                            {/* Action Buttons */}
-                                            <div className="flex items-center gap-1.5 self-end sm:self-auto">
-                                                <button
-                                                    onClick={() => handleDismiss(item)}
-                                                    disabled={isBusy}
-                                                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer disabled:opacity-50 ${
-                                                        isArchived
-                                                            ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20'
-                                                            : 'bg-bg-secondary text-text-secondary hover:text-text-primary hover:bg-bg-hover border-border'
-                                                    }`}
-                                                    title={isArchived ? "Restore to Active" : "Dismiss to Archived folder"}
-                                                >
-                                                    <Archive className="w-3.5 h-3.5" />
-                                                    <span>{isArchived ? 'Restore' : 'Dismiss / Archive'}</span>
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(item.id)}
-                                                    disabled={isBusy}
-                                                    className="p-1.5 rounded-lg text-text-secondary hover:text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all cursor-pointer disabled:opacity-50"
-                                                    title="Permanently Delete"
-                                                >
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <h4 className="text-sm font-bold text-text-primary mb-1">
-                                            {item.title}
-                                        </h4>
-
-                                        <p className="text-xs text-text-secondary whitespace-pre-wrap leading-relaxed mb-3">
-                                            {item.description}
-                                        </p>
-
-                                        {(item.userEmail || item.username) && (
-                                            <div className="text-[11px] text-text-secondary/70 flex items-center gap-2 border-t border-border/40 pt-2 font-mono">
-                                                <span>Submitted by:</span>
-                                                {item.username && <span className="font-semibold text-text-primary">{item.username}</span>}
-                                                {item.userEmail && <span>&lt;{item.userEmail}&gt;</span>}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-            ) : (
-                <div className="bg-bg-secondary/20 border border-border/40 rounded-2xl p-4 text-center">
-                    <p className="text-xs text-text-secondary">
-                        Sign in as the project administrator to review and moderate submitted feedback.
-                    </p>
-                </div>
-            )}
         </div>
     );
 }

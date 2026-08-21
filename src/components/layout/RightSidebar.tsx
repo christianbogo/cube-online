@@ -159,7 +159,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                             e.target.blur();
                         }}
                         className="appearance-none bg-transparent font-medium border-none hover:text-accent
-                                focus:outline-none cursor-pointer text-center text-sm w-full z-10"
+                                outline-none focus:outline-none focus:ring-0 cursor-pointer text-center text-sm w-full z-10"
                     >
                         {SCRAMBLE_TYPES.map(opt => (
                             <option key={opt.value} value={opt.value} className="bg-bg-secondary text-text-primary">

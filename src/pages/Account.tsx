@@ -1,14 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import {
-    Check, X, LogOut, Info, Trash2, Download, TriangleAlert, Loader2, RotateCcw
+    Check, X, LogOut, Info, Trash2, Download, TriangleAlert, Loader2, RotateCcw, ShieldCheck
 } from 'lucide-react';
 
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { doc, setDoc, getDoc, getDocs, collection, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Tabs, FriendSidebar, SocialsTab, ProfileStatsTab, CubingFriendsTab, Logo, resetKeybindTooltips } from '../components';
+import { Tabs, FriendSidebar, SocialsTab, CubingFriendsTab, Logo, resetKeybindTooltips } from '../components';
 
 const AVAILABLE_COLORS = [
     { name: 'Red', hex: '#ef4444' },
@@ -292,6 +292,13 @@ export default function Account() {
             >
                 <Trash2 className="w-4 h-4" /> Delete Account
             </button>
+
+            <div className="pt-2 border-t border-border/50 w-full flex items-center justify-between text-xs text-text-secondary">
+                <span>Looking for data rights &amp; retention terms?</span>
+                <Link to="/privacy" className="text-accent hover:underline inline-flex items-center gap-1 font-medium">
+                    <ShieldCheck className="w-3.5 h-3.5" /> Privacy Policy
+                </Link>
+            </div>
         </div>
     );
 
@@ -305,7 +312,7 @@ export default function Account() {
                     </header>
                 )}
 
-                <main className={`flex-1 overflow-y-auto w-full ${user ? 'max-w-3xl mx-auto p-4 md:p-8' : 'p-4 sm:p-6'}`}>
+                <main className={`flex-1 overflow-y-auto no-scrollbar w-full ${user ? 'max-w-3xl mx-auto p-4 md:p-8' : 'p-4 sm:p-6'}`}>
                     {!user ? (
                         // Not Signed In
                         <div className="min-h-full flex flex-col items-center justify-center py-4 sm:py-8">
@@ -404,8 +411,11 @@ export default function Account() {
                                         </button>
                                     </form>
                                 </div>
-                                <div className="text-[11px] text-text-secondary mt-4 text-center max-w-xs mx-auto opacity-70 leading-relaxed">
-                                    By continuing, you acknowledge that local solves are wiped upon signing in/out to ensure data consistency.
+                                <div className="text-[11px] text-text-secondary mt-4 text-center max-w-xs mx-auto opacity-80 leading-relaxed space-y-1">
+                                    <p>By continuing, you acknowledge that local solves are wiped upon signing in/out to ensure data consistency.</p>
+                                    <p>
+                                        Read our <Link to="/privacy" className="text-accent underline font-medium">Privacy Policy</Link> for details on data protection &amp; AI usage.
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -528,9 +538,8 @@ export default function Account() {
                             <div className="relative z-10">
                                 <Tabs
                                     tabs={[
-                                        { label: "Profile Statistics", id: "stats", content: <ProfileStatsTab /> },
+                                        { label: "Connections", id: "connections", content: <CubingFriendsTab /> },
                                         { label: "Social Media Links", id: "socials", content: <SocialsTab /> },
-                                        { label: "Cubing Friends", id: "friends", content: <CubingFriendsTab /> },
                                         { label: "Timer Settings", id: "timer", content: <TimerSettingsTab /> },
                                         { label: "Danger Zone", id: "danger", content: <DangerZoneTab /> },
                                     ]}

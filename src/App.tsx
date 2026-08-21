@@ -10,10 +10,11 @@ import { Layout } from './components';
 import Cube from './pages/Cube';
 import Logs from './pages/Logs';
 import Goals from './pages/Goals';
+import Social from './pages/Social';
 import Account from './pages/Account';
 import Keybinds from './pages/Keybinds';
-import Records from './pages/Records';
 import Dev from './pages/Dev';
+import Privacy from './pages/Privacy';
 import type { ReactNode } from 'react';
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
@@ -42,11 +43,14 @@ function App() {
                         <Route path="data/*" element={<Navigate to="/logs" replace />} />
                         <Route path="stats" element={<Navigate to="/logs" replace />} />
                         <Route path="stats/*" element={<Navigate to="/logs" replace />} />
-                        <Route path="records" element={<Records />} />
+                        <Route path="records" element={<Navigate to="/goals" replace />} />
                         <Route path="goals" element={<Goals />} />
+                        <Route path="social" element={<Social />} />
+                        <Route path="social/:userId" element={<Social />} />
                         <Route path="account" element={<Account />} />
                         <Route path="keybinds" element={<Keybinds />} />
                         <Route path="dev" element={<Dev />} />
+                        <Route path="privacy" element={<Privacy />} />
                       </Route>
                     </Routes>
                   </GoalsProvider>

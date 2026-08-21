@@ -1,9 +1,6 @@
-import { Keyboard, Home, Activity, Box, Sparkles } from 'lucide-react';
-
 interface KeybindCategory {
     title: string;
     description: string;
-    icon: React.ReactNode;
     binds: { key: string; action: string; note?: string }[];
 }
 
@@ -12,12 +9,10 @@ export default function Keybinds() {
         {
             title: 'Navigation',
             description: 'Move quickly between pages and toggle panels',
-            icon: <Home className="w-5 h-5" />,
             binds: [
                 { key: 'Esc', action: 'Home / Reset Timer' },
                 { key: 'b', action: 'Go to Keybinds' },
                 { key: 'g', action: 'Go to Goals' },
-                { key: 'r', action: 'Go to Records' },
                 { key: 'l', action: 'Go to Logs' },
                 { key: 'a', action: 'Go to Account' },
                 { key: 'Tab', action: 'Toggle Right Sidebar' },
@@ -27,7 +22,6 @@ export default function Keybinds() {
         {
             title: 'Timer Controls',
             description: 'Start, stop, and penalty shortcuts',
-            icon: <Activity className="w-5 h-5" />,
             binds: [
                 { key: 'Space', action: 'Start / Stop Timer', note: 'Hold to prime' },
                 { key: 'd', action: 'DNF Penalty', note: 'Within 5s after solve' },
@@ -37,7 +31,6 @@ export default function Keybinds() {
         {
             title: 'Scrambler Hotkeys',
             description: 'Quickly switch active puzzle event',
-            icon: <Box className="w-5 h-5" />,
             binds: [
                 { key: '2 - 7', action: 'NxN Puzzles (2x2 to 7x7)' },
                 { key: '1', action: 'Square-1 Scramble' },
@@ -50,7 +43,6 @@ export default function Keybinds() {
         {
             title: 'Hidden & Power-User Features',
             description: 'Extra shortcuts for stats and session filtering',
-            icon: <Sparkles className="w-5 h-5" />,
             binds: [
                 { key: 'Click "Best"', action: 'Toggle Right Bar Best / Session Stats' },
                 { key: 'Click Session', action: 'Filter Solves Table in Logs Sidebar' },
@@ -61,10 +53,7 @@ export default function Keybinds() {
     return (
         <div className="max-w-6xl w-full mx-auto p-4 md:p-6 flex flex-col gap-6 select-none">
             <div className="mb-2">
-                <h1 className="text-3xl font-bold text-text-primary mb-2 flex items-center gap-3">
-                    <div className="p-2 bg-accent/10 text-accent rounded-xl">
-                        <Keyboard className="w-8 h-8" />
-                    </div>
+                <h1 className="text-3xl font-bold text-text-primary mb-2">
                     Keybinds & Shortcuts
                 </h1>
                 <p className="text-text-secondary text-sm">
@@ -78,18 +67,13 @@ export default function Keybinds() {
                         key={cat.title}
                         className="bg-bg-secondary/60 border border-border rounded-2xl p-5 flex flex-col gap-4 shadow-sm"
                     >
-                        <div className="flex items-center gap-2.5 pb-2 border-b border-border/50">
-                            <div className="text-accent">
-                                {cat.icon}
-                            </div>
-                            <div>
-                                <h2 className="text-base font-semibold text-text-primary">
-                                    {cat.title}
-                                </h2>
-                                <p className="text-[11px] text-text-secondary">
-                                    {cat.description}
-                                </p>
-                            </div>
+                        <div className="pb-2 border-b border-border/50">
+                            <h2 className="text-base font-semibold text-text-primary">
+                                {cat.title}
+                            </h2>
+                            <p className="text-[11px] text-text-secondary">
+                                {cat.description}
+                            </p>
                         </div>
 
                         <div className="flex flex-col gap-2">

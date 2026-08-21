@@ -30,3 +30,6 @@ export { default as SocialsTab } from './account/SocialsTab';
 export { default as FirebaseStatusTab } from './dev/FirebaseStatusTab';
 export { default as FeedbackTab } from './dev/FeedbackTab';
 export { default as ChangelogTab } from './dev/ChangelogTab';
+
+// Records Components
+export { default as RecordTable } from './records/RecordTable';

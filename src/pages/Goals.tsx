@@ -17,6 +17,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useGoals } from '../contexts/GoalsContext';
 import type { GoalCategory } from '../types/goals';
 import { CATEGORY_METADATA } from '../utils/goalsCalculations';
+import RecordTable from '../components/records/RecordTable';
 
 type StatusFilter = 'all' | 'completed' | 'in-progress';
 
@@ -161,21 +162,19 @@ export default function Goals() {
                     </div>
                 )}
 
+                {/* PERSONAL RECORDS TABLE */}
+                <RecordTable />
+
                 {/* HEADER OVERVIEW STATS */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                     {/* Main Progress Card */}
                     <div className="lg:col-span-2 bg-surface-elevation-1 border border-border rounded-xl p-5 flex flex-col justify-between gap-4">
                         <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent">
-                                    <Target className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <h1 className="text-lg font-bold text-text-primary tracking-tight">Goals and Milestones</h1>
-                                    <p className="text-xs text-text-secondary">
-                                        Track your speedcubing journey across volume, time, streaks, and disciplines.
-                                    </p>
-                                </div>
+                            <div>
+                                <h1 className="text-lg font-bold text-text-primary tracking-tight">Goals and Milestones</h1>
+                                <p className="text-xs text-text-secondary">
+                                    Track your speedcubing journey across volume, time, streaks, and disciplines.
+                                </p>
                             </div>
                             <div className="text-right">
                                 <span className="font-mono text-xl font-bold text-text-primary">
@@ -345,8 +344,11 @@ export default function Goals() {
                     <div className="flex items-center gap-2">
                         <select
                             value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-                            className="bg-surface-elevation-1 border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary focus:outline-none focus:border-accent cursor-pointer font-medium"
+                            onChange={(e) => {
+                                setStatusFilter(e.target.value as StatusFilter);
+                                e.target.blur();
+                            }}
+                            className="bg-surface-elevation-1 border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary outline-none focus:outline-none focus:ring-0 cursor-pointer font-medium"
                         >
                             <option value="all">All Status</option>
                             <option value="in-progress">In Progress</option>

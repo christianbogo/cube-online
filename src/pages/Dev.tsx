@@ -15,8 +15,8 @@ import {
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdmin, formatTimeMs, compressImage } from '../utils/admin';
+import { Paperclip, FileText, X, ChevronDown } from 'lucide-react';
 import type {
-    DevFeedback,
     FeedbackType,
     ChangelogEntry,
     ChangelogCategory,
@@ -192,15 +192,65 @@ export default function Dev() {
     const [feedbackTitle, setFeedbackTitle] = useState('');
     const [feedbackDescription, setFeedbackDescription] = useState('');
     const [feedbackEmail, setFeedbackEmail] = useState('');
+    const [feedbackAttachments, setFeedbackAttachments] = useState<{ filename: string; content: string; type?: string; isImage?: boolean }[]>([]);
+    const [isProcessingAttachments, setIsProcessingAttachments] = useState(false);
     const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
     const [feedbackSuccess, setFeedbackSuccess] = useState(false);
     const [feedbackError, setFeedbackError] = useState<string | null>(null);
+    const feedbackFileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (user?.email && !feedbackEmail) {
             setFeedbackEmail(user.email);
         }
     }, [user, feedbackEmail]);
+
+    const handleFeedbackFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        setIsProcessingAttachments(true);
+        try {
+            const newAttachments: { filename: string; content: string; type?: string; isImage?: boolean }[] = [];
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const isImage = file.type.startsWith('image/');
+                if (isImage) {
+                    const base64 = await compressImage(file, 1600, 1600, 0.82);
+                    newAttachments.push({
+                        filename: file.name,
+                        content: base64,
+                        type: file.type,
+                        isImage: true
+                    });
+                } else {
+                    const base64 = await new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result as string);
+                        reader.onerror = (err) => reject(err);
+                        reader.readAsDataURL(file);
+                    });
+                    newAttachments.push({
+                        filename: file.name,
+                        content: base64,
+                        type: file.type || 'application/octet-stream',
+                        isImage: false
+                    });
+                }
+            }
+            setFeedbackAttachments(prev => [...prev, ...newAttachments].slice(0, 5));
+        } catch (err) {
+            console.error("Error processing attachments:", err);
+            setFeedbackError("Failed to process selected file(s).");
+        } finally {
+            setIsProcessingAttachments(false);
+            if (feedbackFileInputRef.current) feedbackFileInputRef.current.value = '';
+        }
+    };
+
+    const handleRemoveFeedbackAttachment = (index: number) => {
+        setFeedbackAttachments(prev => prev.filter((_, i) => i !== index));
+    };
 
     const handleFeedbackSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -221,19 +271,55 @@ export default function Dev() {
                 userId: user?.uid || null,
                 username: user?.username || null,
                 status: 'open',
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
+                attachments: feedbackAttachments.map(a => ({
+                    filename: a.filename,
+                    content: a.content,
+                    type: a.type
+                }))
             };
 
-            await addDoc(collection(db, 'feedback'), payload);
+            // 1. Dispatch email via Resend API
+            try {
+                const apiRes = await fetch('/api/feedback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!apiRes.ok) {
+                    const errData = await apiRes.json().catch(() => ({}));
+                    console.warn('Feedback API response not ok:', errData);
+                }
+            } catch (apiErr) {
+                console.warn('Feedback API dispatch error:', apiErr);
+            }
+
+            // 2. Persist to Firestore as resilient backup
+            try {
+                const firestorePayload = {
+                    type: payload.type,
+                    title: payload.title,
+                    description: payload.description,
+                    userEmail: payload.userEmail,
+                    userId: payload.userId,
+                    username: payload.username,
+                    status: 'open',
+                    createdAt: payload.createdAt,
+                    attachmentCount: feedbackAttachments.length
+                };
+                await addDoc(collection(db, 'feedback'), firestorePayload);
+            } catch (dbErr) {
+                console.warn('Firestore backup failed:', dbErr);
+            }
 
             setFeedbackTitle('');
             setFeedbackDescription('');
+            setFeedbackAttachments([]);
             setFeedbackSuccess(true);
             setTimeout(() => setFeedbackSuccess(false), 5000);
-
-            if (userIsAdmin) {
-                loadAdminFeedbacks();
-            }
         } catch (err) {
             console.error("Failed to submit feedback:", err);
             setFeedbackError('Failed to submit. Please try again.');
@@ -438,107 +524,6 @@ export default function Dev() {
         }
     };
 
-    // ==========================================
-    // 4. Admin Feedback Submissions Management
-    // ==========================================
-    const [adminFeedbacks, setAdminFeedbacks] = useState<DevFeedback[]>([]);
-    const [adminFeedbackLoading, setAdminFeedbackLoading] = useState(false);
-    const [adminFilter, setAdminFilter] = useState<'all' | 'open' | 'archived' | 'bug' | 'feature'>('open');
-    const [adminSearch, setAdminSearch] = useState('');
-    const [actionBusyId, setActionBusyId] = useState<string | null>(null);
-
-    const loadAdminFeedbacks = useCallback(async () => {
-        if (!userIsAdmin) return;
-        setAdminFeedbackLoading(true);
-        try {
-            const q = query(collection(db, 'feedback'));
-            const snap = await getDocs(q);
-            const list: DevFeedback[] = [];
-            snap.forEach(d => {
-                const data = d.data();
-                list.push({
-                    id: d.id,
-                    type: data.type || 'bug',
-                    title: data.title || '',
-                    description: data.description || '',
-                    userEmail: data.userEmail,
-                    userId: data.userId,
-                    username: data.username,
-                    status: data.status || 'open',
-                    createdAt: data.createdAt || new Date().toISOString(),
-                    archivedAt: data.archivedAt
-                });
-            });
-            list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-            setAdminFeedbacks(list);
-        } catch (err) {
-            console.error("Error loading feedbacks:", err);
-        } finally {
-            setAdminFeedbackLoading(false);
-        }
-    }, [userIsAdmin]);
-
-    useEffect(() => {
-        if (userIsAdmin) {
-            loadAdminFeedbacks();
-        }
-    }, [userIsAdmin, loadAdminFeedbacks]);
-
-    const handleDismissFeedback = async (item: DevFeedback) => {
-        setActionBusyId(item.id);
-        try {
-            const newStatus = item.status === 'archived' ? 'open' : 'archived';
-            const updates = {
-                status: newStatus,
-                archivedAt: newStatus === 'archived' ? new Date().toISOString() : null
-            };
-            await updateDoc(doc(db, 'feedback', item.id), updates);
-            setAdminFeedbacks(prev =>
-                prev.map(f => f.id === item.id ? { ...f, ...updates, status: newStatus } : f)
-            );
-        } catch (err) {
-            console.error("Error updating feedback status:", err);
-            alert("Failed to update status.");
-        } finally {
-            setActionBusyId(null);
-        }
-    };
-
-    const handleDeleteFeedback = async (id: string) => {
-        if (!confirm("Are you sure you want to permanently delete this submission?")) return;
-        setActionBusyId(id);
-        try {
-            await deleteDoc(doc(db, 'feedback', id));
-            setAdminFeedbacks(prev => prev.filter(f => f.id !== id));
-        } catch (err) {
-            console.error("Error deleting feedback:", err);
-            alert("Failed to delete submission.");
-        } finally {
-            setActionBusyId(null);
-        }
-    };
-
-    const filteredAdminFeedbacks = adminFeedbacks.filter(f => {
-        if (adminFilter === 'open' && f.status !== 'open') return false;
-        if (adminFilter === 'archived' && f.status !== 'archived') return false;
-        if (adminFilter === 'bug' && f.type !== 'bug') return false;
-        if (adminFilter === 'feature' && f.type !== 'feature') return false;
-
-        if (adminSearch.trim()) {
-            const q = adminSearch.toLowerCase();
-            return (
-                f.title.toLowerCase().includes(q) ||
-                f.description.toLowerCase().includes(q) ||
-                (f.userEmail || '').toLowerCase().includes(q) ||
-                (f.username || '').toLowerCase().includes(q)
-            );
-        }
-        return true;
-    });
-
-    const openFeedbackCount = adminFeedbacks.filter(f => f.status === 'open').length;
-    const archivedFeedbackCount = adminFeedbacks.filter(f => f.status === 'archived').length;
-
     return (
         <div className="max-w-6xl w-full mx-auto p-4 md:p-6 flex flex-col gap-8 select-none">
             {/* Header */}
@@ -617,6 +602,7 @@ export default function Dev() {
                                 type="text"
                                 value={feedbackTitle}
                                 onChange={(e) => setFeedbackTitle(e.target.value)}
+                                placeholder="Brief summary of the issue or feature"
                                 className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                                 required
                             />
@@ -625,16 +611,22 @@ export default function Dev() {
                             <label className="text-xs font-bold uppercase tracking-wider text-text-secondary block mb-1">
                                 Type
                             </label>
-                            <select
-                                value={feedbackType}
-                                onChange={(e) => setFeedbackType(e.target.value as FeedbackType)}
-                                className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-                            >
-                                <option value="bug">Bug Report</option>
-                                <option value="feature">Feature Request</option>
-                                <option value="improvement">Improvement</option>
-                                <option value="other">Other</option>
-                            </select>
+                            <div className="relative">
+                                <select
+                                    value={feedbackType}
+                                    onChange={(e) => {
+                                        setFeedbackType(e.target.value as FeedbackType);
+                                        e.target.blur();
+                                    }}
+                                    className="w-full bg-bg-primary border border-border rounded-lg pl-3 pr-9 py-2 text-sm text-text-primary outline-none focus:outline-none focus:ring-0 focus:border-accent appearance-none cursor-pointer"
+                                >
+                                    <option value="bug">Bug Report</option>
+                                    <option value="feature">Feature Request</option>
+                                    <option value="improvement">Improvement</option>
+                                    <option value="other">Other</option>
+                                </select>
+                                <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none" />
+                            </div>
                         </div>
                     </div>
 
@@ -646,22 +638,81 @@ export default function Dev() {
                         <textarea
                             value={feedbackDescription}
                             onChange={(e) => setFeedbackDescription(e.target.value)}
+                            placeholder="Describe what happened, steps to reproduce, or feature details..."
                             rows={3}
                             className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent resize-y custom-scrollbar"
                             required
                         />
                     </div>
 
-                    {/* Row 3: Contact Email on left, Send Feedback button on right */}
-                    <div className="flex flex-col sm:flex-row items-end gap-3">
+                    {/* Row 3: Attachments */}
+                    <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-xs font-bold uppercase tracking-wider text-text-secondary">
+                                Attachments <span className="text-[10px] font-normal lowercase opacity-75">(screenshots or files, max 5)</span>
+                            </label>
+                            <input
+                                type="file"
+                                ref={feedbackFileInputRef}
+                                onChange={handleFeedbackFilesSelected}
+                                accept="image/*,.log,.txt,.json"
+                                multiple
+                                className="hidden"
+                                id="feedback-file-upload"
+                            />
+                            <label
+                                htmlFor="feedback-file-upload"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-bg-hover border border-border/80 cursor-pointer transition-colors"
+                            >
+                                <Paperclip className="w-3.5 h-3.5" />
+                                <span>{isProcessingAttachments ? 'Processing...' : 'Attach Screenshot / File'}</span>
+                            </label>
+                        </div>
+
+                        {feedbackAttachments.length > 0 && (
+                            <div className="flex flex-wrap gap-2 pt-1">
+                                {feedbackAttachments.map((att, idx) => (
+                                    <div
+                                        key={idx}
+                                        className="flex items-center gap-2 p-1.5 pr-2 bg-bg-primary border border-border rounded-lg text-xs group"
+                                    >
+                                        {att.isImage ? (
+                                            <div className="w-7 h-7 rounded overflow-hidden bg-bg-secondary shrink-0 border border-border/50">
+                                                <img src={att.content} alt="Preview" className="w-full h-full object-cover" />
+                                            </div>
+                                        ) : (
+                                            <div className="w-7 h-7 rounded bg-bg-secondary flex items-center justify-center shrink-0 border border-border/50 text-text-secondary">
+                                                <FileText className="w-3.5 h-3.5" />
+                                            </div>
+                                        )}
+                                        <span className="max-w-[140px] truncate text-text-primary text-[11px] font-medium" title={att.filename}>
+                                            {att.filename}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveFeedbackAttachment(idx)}
+                                            className="text-text-secondary hover:text-red-500 transition-colors p-0.5 rounded cursor-pointer"
+                                            title="Remove attachment"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Row 4: Contact Email on left, Send Feedback button on right */}
+                    <div className="flex flex-col sm:flex-row items-end gap-3 pt-1">
                         <div className="flex-1 w-full">
                             <label className="text-xs font-bold uppercase tracking-wider text-text-secondary block mb-1">
-                                Contact Email
+                                Contact Email <span className="text-[10px] font-normal lowercase opacity-75">(optional, for replies)</span>
                             </label>
                             <input
                                 type="email"
                                 value={feedbackEmail}
                                 onChange={(e) => setFeedbackEmail(e.target.value)}
+                                placeholder="your-email@example.com"
                                 className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                             />
                         </div>
@@ -758,161 +809,7 @@ export default function Dev() {
                 )}
             </div>
 
-            {/* 4. Submission Management (Admin Only, at bottom) */}
-            {userIsAdmin && (
-                <div className="bg-bg-secondary/40 border border-border rounded-xl p-5 shadow-xs space-y-4 mt-2">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/50">
-                        <div>
-                            <h2 className="text-base font-bold text-text-primary">
-                                Submission Management
-                            </h2>
-                            <p className="text-xs text-text-secondary">
-                                Review, dismiss to archive, or delete user feedback.
-                            </p>
-                        </div>
-                        <button
-                            onClick={loadAdminFeedbacks}
-                            disabled={adminFeedbackLoading}
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-bg-primary hover:bg-bg-hover text-text-primary border border-border transition-colors cursor-pointer disabled:opacity-50 self-start sm:self-center"
-                        >
-                            {adminFeedbackLoading ? 'Refreshing...' : 'Refresh'}
-                        </button>
-                    </div>
-
-                    {/* Filter buttons & Search */}
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <button
-                                onClick={() => setAdminFilter('open')}
-                                className={`px-3 py-1 rounded-lg text-xs font-medium cursor-pointer ${
-                                    adminFilter === 'open'
-                                        ? 'bg-text-primary text-bg-primary'
-                                        : 'bg-bg-primary border border-border text-text-secondary hover:text-text-primary'
-                                }`}
-                            >
-                                Active ({openFeedbackCount})
-                            </button>
-                            <button
-                                onClick={() => setAdminFilter('archived')}
-                                className={`px-3 py-1 rounded-lg text-xs font-medium cursor-pointer ${
-                                    adminFilter === 'archived'
-                                        ? 'bg-text-primary text-bg-primary'
-                                        : 'bg-bg-primary border border-border text-text-secondary hover:text-text-primary'
-                                }`}
-                            >
-                                Archived ({archivedFeedbackCount})
-                            </button>
-                            <button
-                                onClick={() => setAdminFilter('all')}
-                                className={`px-3 py-1 rounded-lg text-xs font-medium cursor-pointer ${
-                                    adminFilter === 'all'
-                                        ? 'bg-text-primary text-bg-primary'
-                                        : 'bg-bg-primary border border-border text-text-secondary hover:text-text-primary'
-                                }`}
-                            >
-                                All ({adminFeedbacks.length})
-                            </button>
-                            <button
-                                onClick={() => setAdminFilter('bug')}
-                                className={`px-3 py-1 rounded-lg text-xs font-medium cursor-pointer ${
-                                    adminFilter === 'bug'
-                                        ? 'bg-text-primary text-bg-primary'
-                                        : 'bg-bg-primary border border-border text-text-secondary hover:text-text-primary'
-                                }`}
-                            >
-                                Bugs
-                            </button>
-                            <button
-                                onClick={() => setAdminFilter('feature')}
-                                className={`px-3 py-1 rounded-lg text-xs font-medium cursor-pointer ${
-                                    adminFilter === 'feature'
-                                        ? 'bg-text-primary text-bg-primary'
-                                        : 'bg-bg-primary border border-border text-text-secondary hover:text-text-primary'
-                                }`}
-                            >
-                                Features
-                            </button>
-                        </div>
-
-                        <input
-                            type="text"
-                            value={adminSearch}
-                            onChange={(e) => setAdminSearch(e.target.value)}
-                            placeholder="Search..."
-                            className="w-full sm:w-48 px-3 py-1 bg-bg-primary border border-border rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent"
-                        />
-                    </div>
-
-                    {/* Submissions List */}
-                    {adminFeedbackLoading ? (
-                        <div className="py-6 text-xs text-text-secondary">Loading submissions...</div>
-                    ) : filteredAdminFeedbacks.length === 0 ? (
-                        <div className="py-6 text-xs text-text-secondary">No submissions in this view.</div>
-                    ) : (
-                        <div className="space-y-2.5">
-                            {filteredAdminFeedbacks.map((item) => {
-                                const isArchived = item.status === 'archived';
-                                const isBusy = actionBusyId === item.id;
-
-                                return (
-                                    <div
-                                        key={item.id}
-                                        className={`p-3.5 rounded-lg border text-xs space-y-1.5 ${
-                                            isArchived
-                                                ? 'bg-bg-primary/40 border-border/40 opacity-70'
-                                                : 'bg-bg-primary border-border'
-                                        }`}
-                                    >
-                                        <div className="flex items-center justify-between gap-2">
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-semibold uppercase tracking-wider text-[10px] px-2 py-0.5 rounded bg-bg-secondary border border-border text-text-secondary">
-                                                    {item.type}
-                                                </span>
-                                                <span className="text-text-secondary text-[11px]">
-                                                    {new Date(item.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                                                </span>
-                                            </div>
-
-                                            <div className="flex items-center gap-2">
-                                                <button
-                                                    onClick={() => handleDismissFeedback(item)}
-                                                    disabled={isBusy}
-                                                    className="text-text-secondary hover:text-text-primary underline cursor-pointer disabled:opacity-50"
-                                                >
-                                                    {isArchived ? 'Restore' : 'Dismiss'}
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDeleteFeedback(item.id)}
-                                                    disabled={isBusy}
-                                                    className="text-text-secondary hover:text-red-500 underline cursor-pointer disabled:opacity-50"
-                                                >
-                                                    Delete
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <div className="font-semibold text-text-primary">
-                                            {item.title}
-                                        </div>
-
-                                        <p className="text-text-secondary whitespace-pre-wrap leading-relaxed">
-                                            {item.description}
-                                        </p>
-
-                                        {(item.userEmail || item.username) && (
-                                            <div className="text-[10px] text-text-secondary/70 font-mono pt-1">
-                                                From: {item.username || ''} {item.userEmail ? `<${item.userEmail}>` : ''}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* 5. Large Changelog Post Editor Modal */}
+            {/* 4. Large Changelog Post Editor Modal */}
             {isChangelogModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-xs">
                     <div className="bg-bg-primary border border-border rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">

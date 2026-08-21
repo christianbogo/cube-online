@@ -10,7 +10,11 @@ export default function Topbar() {
         <header className="h-14 bg-bg-secondary border-b border-border flex items-center justify-between px-4 shrink-0 select-none z-20 transition-colors duration-200">
             {/* Left Side: Logo/Brand */}
             <div className="flex items-center gap-3">
-                <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                <Link
+                    to="/"
+                    onClick={(e) => (e.currentTarget as HTMLElement).blur()}
+                    className="flex items-center gap-3 hover:opacity-80 transition-opacity outline-none focus:outline-none"
+                >
                     <Logo className="w-6 h-6" />
                     <span className="font-semibold text-lg tracking-tight text-text-primary">Cube Online</span>
                 </Link>
@@ -21,7 +25,8 @@ export default function Topbar() {
                 {user ? (
                     <Link
                         to="/account"
-                        className="flex items-center gap-3 py-1 pl-3 pr-1 rounded-lg hover:bg-bg-hover transition-colors border border-transparent hover:border-border/50"
+                        onClick={(e) => (e.currentTarget as HTMLElement).blur()}
+                        className="flex items-center gap-3 py-1 pl-3 pr-1 rounded-lg hover:bg-bg-hover transition-colors border border-transparent hover:border-border/50 outline-none focus:outline-none"
                     >
                         <span className="font-medium text-sm text-text-primary hidden sm:block">
                             {user.username || 'CubingUser'}
@@ -34,14 +39,20 @@ export default function Topbar() {
                 ) : (
                     <div className="flex items-center gap-3">
                         <button
-                            onClick={() => navigate('/account', { state: { mode: 'signin' } })}
-                            className="text-sm font-medium text-text-secondary hover:text-text-primary transition-colors px-2 py-1 cursor-pointer"
+                            onClick={(e) => {
+                                (e.currentTarget as HTMLElement).blur();
+                                navigate('/account', { state: { mode: 'signin' } });
+                            }}
+                            className="text-sm font-medium text-text-secondary hover:text-text-primary transition-colors px-2 py-1 cursor-pointer outline-none focus:outline-none"
                         >
                             Sign In
                         </button>
                         <button
-                            onClick={() => navigate('/account', { state: { mode: 'signup' } })}
-                            className="text-sm font-medium bg-text-primary text-bg-primary hover:opacity-90 transition-opacity px-4 py-1.5 rounded-md cursor-pointer"
+                            onClick={(e) => {
+                                (e.currentTarget as HTMLElement).blur();
+                                navigate('/account', { state: { mode: 'signup' } });
+                            }}
+                            className="text-sm font-medium bg-text-primary text-bg-primary hover:opacity-90 transition-opacity px-4 py-1.5 rounded-md cursor-pointer outline-none focus:outline-none"
                         >
                             Sign Up
                         </button>

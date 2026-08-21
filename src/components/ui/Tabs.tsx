@@ -36,7 +36,7 @@ export default function Tabs({ tabs, defaultTab }: TabsProps) {
                     </button>
                 ))}
             </div>
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-auto no-scrollbar">
                 {tabs.find((t) => t.id === activeTab)?.content}
             </div>
         </div>

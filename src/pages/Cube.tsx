@@ -274,13 +274,19 @@ export default function Cube() {
     ]);
 
     // Keyboard handlers
+    const isTextInputElement = (el: HTMLElement | null) => el && (
+        (el.tagName === 'INPUT' && !['button', 'checkbox', 'radio', 'submit', 'reset'].includes((el as HTMLInputElement).type)) ||
+        el.tagName === 'TEXTAREA' ||
+        el.isContentEditable
+    );
+
     const handleKeyDown = useCallback((e: KeyboardEvent) => {
         const target = e.target as HTMLElement | null;
-        if (target && (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName) || target.isContentEditable)) {
-            if (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) return;
+        if (isTextInputElement(target) || isTextInputElement(document.activeElement as HTMLElement)) {
+            return;
         }
 
-        if (e.code === 'Space') {
+        if (e.code === 'Space' || e.key === ' ') {
             e.preventDefault();
             if (document.activeElement && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
                 document.activeElement.blur();
@@ -388,11 +394,11 @@ export default function Cube() {
 
     const handleKeyUp = useCallback((e: KeyboardEvent) => {
         const target = e.target as HTMLElement | null;
-        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        if (isTextInputElement(target) || isTextInputElement(document.activeElement as HTMLElement)) {
             return;
         }
 
-        if (e.code === 'Space') {
+        if (e.code === 'Space' || e.key === ' ') {
             e.preventDefault();
             if (timerState === 'PRIMING') {
                 const elapsed = (Date.now() - (primingStartRef.current || 0)) / 1000;

@@ -234,8 +234,11 @@ export default function SocialsTab() {
                     <div className="flex flex-col sm:flex-row gap-2">
                         <select
                             value={newNetwork}
-                            onChange={(e) => setNewNetwork(e.target.value)}
-                            className="bg-bg-secondary border border-border text-sm text-text-primary rounded px-3 py-2 w-full sm:w-auto focus:outline-none focus:border-accent"
+                            onChange={(e) => {
+                                setNewNetwork(e.target.value);
+                                e.target.blur();
+                            }}
+                            className="bg-bg-secondary border border-border text-sm text-text-primary rounded px-3 py-2 w-full sm:w-auto outline-none focus:outline-none focus:ring-0 focus:border-accent"
                         >
                             {AVAILABLE_NETWORKS.map(net => (
                                 <option key={net} value={net}>

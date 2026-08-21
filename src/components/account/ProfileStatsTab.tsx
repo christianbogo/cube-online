@@ -136,11 +136,11 @@ export default function ProfileStatsTab() {
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-text-secondary">
                 <span className="italic">* Only events with &gt;0 solves are shown. Averages calculated from all-time data.</span>
                 <Link
-                    to="/records"
+                    to="/goals"
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-secondary hover:bg-bg-hover text-text-primary border border-border text-xs font-semibold transition-colors group"
                 >
                     <Trophy className="w-3.5 h-3.5 text-amber-400" />
-                    <span>View Detailed Records Page</span>
+                    <span>View Goals & Records</span>
                     <ArrowRight className="w-3.5 h-3.5 text-text-secondary group-hover:translate-x-0.5 transition-transform" />
                 </Link>
             </div>

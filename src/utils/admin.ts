@@ -1,8 +1,86 @@
+import { db } from '../lib/firebase';
+import { collection, query, where, getDocs, writeBatch, doc, deleteDoc } from 'firebase/firestore';
+
 export const ADMIN_EMAIL = 'christianbcutter@yahoo.com';
 
 export function isAdmin(user: { email?: string | null } | null | undefined): boolean {
     if (!user || !user.email) return false;
     return user.email.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase().trim();
+}
+
+/**
+ * Admin action: Erases a user profile and all associated data from Firestore
+ * (solves, sessions, goals, private settings, and user document)
+ */
+export async function eraseUserProfileAndData(targetUserId: string): Promise<void> {
+    if (!targetUserId) return;
+
+    // 1. Delete all solves for this user
+    try {
+        const solvesQuery = query(collection(db, 'solves'), where('userId', '==', targetUserId));
+        const solvesSnap = await getDocs(solvesQuery);
+        
+        let batch = writeBatch(db);
+        let count = 0;
+        for (const d of solvesSnap.docs) {
+            batch.delete(d.ref);
+            count++;
+            if (count % 400 === 0) {
+                await batch.commit();
+                batch = writeBatch(db);
+            }
+        }
+        if (count % 400 !== 0) {
+            await batch.commit();
+        }
+    } catch (e) {
+        console.warn("Solves deletion warning:", e);
+    }
+
+    // 2. Delete all sessions for this user
+    try {
+        const sessionsQuery = query(collection(db, 'sessions'), where('userId', '==', targetUserId));
+        const sessionsSnap = await getDocs(sessionsQuery);
+        
+        let batch = writeBatch(db);
+        let count = 0;
+        for (const d of sessionsSnap.docs) {
+            batch.delete(d.ref);
+            count++;
+            if (count % 400 === 0) {
+                await batch.commit();
+                batch = writeBatch(db);
+            }
+        }
+        if (count % 400 !== 0) {
+            await batch.commit();
+        }
+    } catch (e) {
+        console.warn("Sessions deletion warning:", e);
+    }
+
+    // 3. Delete user's goals subcollection documents
+    try {
+        const goalsSnap = await getDocs(collection(db, 'users', targetUserId, 'goals'));
+        for (const d of goalsSnap.docs) {
+            await deleteDoc(d.ref);
+        }
+    } catch (e) {
+        console.warn("Goals deletion warning:", e);
+    }
+
+    // 4. Delete user's private subcollection documents
+    try {
+        const privateSnap = await getDocs(collection(db, 'users', targetUserId, 'private'));
+        for (const d of privateSnap.docs) {
+            await deleteDoc(d.ref);
+        }
+    } catch (e) {
+        console.warn("Private subcollection deletion warning:", e);
+    }
+
+    // 5. Delete the main user profile document
+    await deleteDoc(doc(db, 'users', targetUserId));
 }
 
 /**

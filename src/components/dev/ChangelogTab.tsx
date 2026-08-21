@@ -500,8 +500,11 @@ export default function ChangelogTab() {
                                     </label>
                                     <select
                                         value={category}
-                                        onChange={(e) => setCategory(e.target.value as ChangelogCategory)}
-                                        className="w-full bg-bg-secondary border border-border rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent"
+                                        onChange={(e) => {
+                                            setCategory(e.target.value as ChangelogCategory);
+                                            e.target.blur();
+                                        }}
+                                        className="w-full bg-bg-secondary border border-border rounded-xl px-3 py-2 text-xs text-text-primary outline-none focus:outline-none focus:ring-0 focus:border-accent"
                                     >
                                         <option value="release">Release</option>
                                         <option value="feature">Feature</option>

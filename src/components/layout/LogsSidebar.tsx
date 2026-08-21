@@ -244,7 +244,7 @@ export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, colla
                             updateSettings({ scrambleType: e.target.value });
                             e.target.blur();
                         }}
-                        className="appearance-none bg-transparent font-bold hover:text-accent focus:outline-none cursor-pointer text-center text-xs w-full pr-3 z-10"
+                        className="appearance-none bg-transparent font-bold hover:text-accent outline-none focus:outline-none focus:ring-0 cursor-pointer text-center text-xs w-full pr-3 z-10"
                     >
                         {SCRAMBLE_TYPES.map(opt => (
                             <option key={opt.value} value={opt.value} className="bg-bg-secondary text-text-primary">{opt.label}</option>
@@ -257,8 +257,11 @@ export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, colla
                 <div className="p-2 flex items-center justify-center relative group">
                     <select
                         value={grouping}
-                        onChange={(e) => setGrouping(e.target.value as GroupingType)}
-                        className="appearance-none bg-transparent font-bold hover:text-accent focus:outline-none cursor-pointer text-center text-xs w-full pr-3 z-10"
+                        onChange={(e) => {
+                            setGrouping(e.target.value as GroupingType);
+                            e.target.blur();
+                        }}
+                        className="appearance-none bg-transparent font-bold hover:text-accent outline-none focus:outline-none focus:ring-0 cursor-pointer text-center text-xs w-full pr-3 z-10"
                     >
                         {GROUPING_OPTIONS.map(opt => (
                             <option key={opt.value} value={opt.value} className="bg-bg-secondary text-text-primary">
@@ -274,8 +277,11 @@ export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, colla
             <div className="px-3 py-2 border-b border-border/30 bg-bg-secondary/30 relative flex items-center">
                 <select
                     value={statColumn}
-                    onChange={(e) => setStatColumn(e.target.value as StatColumn)}
-                    className="appearance-none bg-transparent hover:text-accent font-bold text-xs cursor-pointer focus:outline-none w-full text-left uppercase pr-6 z-10"
+                    onChange={(e) => {
+                        setStatColumn(e.target.value as StatColumn);
+                        e.target.blur();
+                    }}
+                    className="appearance-none bg-transparent hover:text-accent font-bold text-xs cursor-pointer outline-none focus:outline-none focus:ring-0 w-full text-left uppercase pr-6 z-10"
                 >
                     {COLUMN_OPTIONS.map(opt => (
                         <option key={opt.value} value={opt.value} className="bg-bg-secondary text-text-primary">
