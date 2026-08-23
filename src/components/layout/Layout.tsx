@@ -187,10 +187,12 @@ export default function Layout() {
                 else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/keybinds'); }
             }
             if (e.key === 'g' || e.key === 'G') {
+                if (!user) return;
                 if (!isPrivateMode) navigate('/goals');
                 else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/goals'); }
             }
             if (e.key === 'l' || e.key === 'L') {
+                if (!user) return;
                 if (!isPrivateMode) navigate('/logs');
                 else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/logs'); }
             }
@@ -317,7 +319,7 @@ export default function Layout() {
                                 <span>{isOnline ? 'Online' : 'Offline'} • v0.3.1</span>
                                 <SyncIndicator status={syncStatus} />
                                 {isPrivateMode && (
-                                    <button onClick={() => { if (confirm('Leave private mode?')) togglePrivateMode(); }} className="ml-2 bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20 uppercase font-bold text-[9px]">
+                                    <button onClick={togglePrivateMode} className="ml-2 bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20 uppercase font-bold text-[9px]">
                                         Exit Private Mode
                                     </button>
                                 )}

@@ -411,8 +411,7 @@ export default function Account() {
                                         </button>
                                     </form>
                                 </div>
-                                <div className="text-[11px] text-text-secondary mt-4 text-center max-w-xs mx-auto opacity-80 leading-relaxed space-y-1">
-                                    <p>By continuing, you acknowledge that local solves are wiped upon signing in/out to ensure data consistency.</p>
+                                <div className="text-[11px] text-text-secondary mt-4 text-center max-w-xs mx-auto opacity-80 leading-relaxed">
                                     <p>
                                         Read our <Link to="/privacy" className="text-accent underline font-medium">Privacy Policy</Link> for details on data protection &amp; AI usage.
                                     </p>
@@ -539,7 +538,7 @@ export default function Account() {
                                 <Tabs
                                     tabs={[
                                         { label: "Connections", id: "connections", content: <CubingFriendsTab /> },
-                                        { label: "Social Media Links", id: "socials", content: <SocialsTab /> },
+                                        { label: "Public Profile", id: "socials", content: <SocialsTab /> },
                                         { label: "Timer Settings", id: "timer", content: <TimerSettingsTab /> },
                                         { label: "Danger Zone", id: "danger", content: <DangerZoneTab /> },
                                     ]}

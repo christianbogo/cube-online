@@ -31,6 +31,7 @@ const NETWORK_LABELS: Record<string, string> = {
     'messenger': 'Messenger',
     'tumblr': 'Tumblr',
     'vk': 'VK',
+    'wca': 'WCA',
     'other': 'Other',
 };
 
@@ -38,7 +39,7 @@ const AVAILABLE_NETWORKS: string[] = [
     'discord', 'x-twitter', 'instagram', 'youtube', 'twitch', 'github',
     'bluesky', 'threads', 'reddit', 'tiktok', 'spotify', 'snapchat',
     'facebook', 'linkedin', 'telegram', 'signal', 'whatsapp', 'pinterest',
-    'dribbble', 'figma', 'messenger', 'tumblr', 'vk', 'other'
+    'dribbble', 'figma', 'messenger', 'tumblr', 'vk', 'wca', 'other'
 ];
 
 export default function SocialsTab() {
@@ -231,36 +232,54 @@ export default function SocialsTab() {
             {isEditingSocials && (
                 <div className="mt-4 p-4 bg-bg-secondary/20 rounded-lg border border-dashed border-border animate-in slide-in-from-top-2">
                     <h5 className="text-xs font-bold text-text-secondary uppercase mb-3">Add New Profile</h5>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                        <select
-                            value={newNetwork}
-                            onChange={(e) => {
-                                setNewNetwork(e.target.value);
-                                e.target.blur();
-                            }}
-                            className="bg-bg-secondary border border-border text-sm text-text-primary rounded px-3 py-2 w-full sm:w-auto outline-none focus:outline-none focus:ring-0 focus:border-accent"
-                        >
-                            {AVAILABLE_NETWORKS.map(net => (
-                                <option key={net} value={net}>
-                                    {getNetworkLabel(net)}
-                                </option>
-                            ))}
-                        </select>
-                        <input
-                            type="text"
-                            placeholder="Username or handle"
-                            value={newValue}
-                            onChange={(e) => setNewValue(e.target.value)}
-                            className="bg-bg-secondary border border-border text-sm text-text-primary rounded px-3 py-2 flex-1 focus:outline-none focus:border-accent"
-                            onKeyDown={(e) => e.key === 'Enter' && handleAddSocial()}
-                        />
+                    <div className="flex flex-col lg:flex-row items-center gap-4">
+                        <div className="flex flex-col sm:flex-row gap-2 flex-1 w-full">
+                            <div className="relative w-full sm:w-auto shrink-0">
+                                <select
+                                    value={newNetwork}
+                                    onChange={(e) => {
+                                        setNewNetwork(e.target.value);
+                                        e.target.blur();
+                                    }}
+                                    className="appearance-none bg-bg-secondary border border-border text-sm text-text-primary rounded pl-3 pr-8 py-2 w-full outline-none focus:outline-none focus:ring-0 focus:border-accent cursor-pointer"
+                                >
+                                    {AVAILABLE_NETWORKS.map(net => (
+                                        <option key={net} value={net}>
+                                            {getNetworkLabel(net)}
+                                        </option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="w-4 h-4 text-text-secondary absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Username or handle"
+                                value={newValue}
+                                onChange={(e) => setNewValue(e.target.value)}
+                                className="bg-bg-secondary border border-border text-sm text-text-primary rounded px-3 py-2 flex-1 focus:outline-none focus:border-accent"
+                                onKeyDown={(e) => e.key === 'Enter' && handleAddSocial()}
+                            />
+                            <button
+                                onClick={handleAddSocial}
+                                disabled={!newValue.trim()}
+                                className="bg-accent text-white px-4 py-2 rounded text-sm font-bold hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-1.5 shrink-0"
+                            >
+                                <Plus className="w-4 h-4" />
+                                <span>Add</span>
+                            </button>
+                        </div>
+                        <div className="w-px h-8 bg-border hidden lg:block" />
                         <button
-                            onClick={handleAddSocial}
-                            disabled={!newValue.trim()}
-                            className="bg-accent text-white px-4 py-2 rounded text-sm font-bold hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-1.5"
+                            onClick={() => {
+                                const wcaClientId = import.meta.env.VITE_WCA_CLIENT_ID;
+                                const redirectUri = window.location.origin.includes('localhost')
+                                    ? 'http://localhost:5173/callback'
+                                    : 'https://cubeonline.org/callback';
+                                window.location.href = `https://www.worldcubeassociation.org/oauth/authorize?client_id=${wcaClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=public`;
+                            }}
+                            className="bg-[#FF9900] text-white px-4 py-2 rounded text-sm font-bold hover:brightness-110 transition-all flex items-center justify-center gap-1.5 w-full lg:w-auto shrink-0"
                         >
-                            <Plus className="w-4 h-4" />
-                            <span>Add</span>
+                            Link WCA
                         </button>
                     </div>
                 </div>

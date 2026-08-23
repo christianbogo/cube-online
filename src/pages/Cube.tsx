@@ -6,7 +6,7 @@ import { useSession } from '../contexts/SessionContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useGoals } from '../contexts/GoalsContext';
 import { useLive } from '../contexts/LiveContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
     EyeOff,
     Minus,
@@ -14,21 +14,26 @@ import {
     Ghost,
     Search,
     SkipForward,
-    CheckCircle2
+    CheckCircle2,
+    X
 } from 'lucide-react';
 import { formatTime } from '../utils/formatTime';
 import type { LiveUser, TimerState } from '../types';
 import { UserCard, KeybindTooltip } from '../components';
 
 export default function Cube() {
+    const navigate = useNavigate();
     const { settings, updateSettings } = useSettings();
-    const { solves, addSolve, updateSolve, currentScramble, setCurrentScramble } = useSolves();
+    const { solves, addSolve, updateSolve, currentScramble, setCurrentScramble, isPrivateMode } = useSolves();
     const { currentSessionId, setCurrentSessionId, checkSessionStatus } = useSession();
     const { user, toggleStarUser } = useAuth();
     const { pinnedGoals } = useGoals();
     const { isLiveMode, isGhostMode, toggleGhostMode, connectedUsers, setLiveTimerState } = useLive();
 
     const scrambleType = settings.scrambleType;
+
+    // Guest solves reminder notification (every 5 solves)
+    const [showGuestPrompt, setShowGuestPrompt] = useState(false);
 
     // Last finished solve tracking for 5s penalty shortcuts
     const lastFinishedSolveRef = useRef<{ id: string; timestamp: number } | null>(null);
@@ -263,6 +268,14 @@ export default function Cube() {
             scrambleType: scrambleType
         });
 
+        // Trigger account creation prompt for guests every 5 solves
+        if (!user && !isPrivateMode) {
+            const nextSolveCount = solves.length + 1;
+            if (nextSolveCount > 0 && nextSolveCount % 5 === 0) {
+                setShowGuestPrompt(true);
+            }
+        }
+
         generateNewScramble();
     }, [
         time,
@@ -270,7 +283,10 @@ export default function Cube() {
         addSolve,
         generateNewScramble,
         inspectionTime,
-        scrambleType
+        scrambleType,
+        user,
+        isPrivateMode,
+        solves.length
     ]);
 
     // Keyboard handlers
@@ -288,6 +304,9 @@ export default function Cube() {
 
         if (e.code === 'Space' || e.key === ' ') {
             e.preventDefault();
+            if (showGuestPrompt) {
+                setShowGuestPrompt(false);
+            }
             if (document.activeElement && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
                 document.activeElement.blur();
             }
@@ -762,6 +781,53 @@ export default function Cube() {
                         )}
                     </div>
                 </div>
+            )}
+
+            {/* GUEST ACCOUNT 5-SOLVE NOTIFICATION */}
+            {!user && showGuestPrompt && timerState !== 'RUNNING' && timerState !== 'PRIMING' && (
+                <aside
+                    aria-label="Account Reminder"
+                    className="fixed bottom-14 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-6 z-40 max-w-md w-[calc(100%-2rem)] animate-in fade-in slide-in-from-bottom-3 duration-300 pointer-events-auto select-none"
+                >
+                    <div className="bg-bg-secondary/95 backdrop-blur-md border border-accent/40 shadow-2xl rounded-2xl p-4 sm:p-5 flex flex-col gap-3">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                                <h3 className="font-bold text-text-primary text-sm">Save Solves & Find Cubing Friends</h3>
+                                <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">
+                                    Create a free account to automatically save your solves, unlock 50+ milestone goals, and find cubing friends.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setShowGuestPrompt(false)}
+                                className="text-text-secondary/70 hover:text-text-primary p-1 rounded-md transition-colors shrink-0 cursor-pointer"
+                                title="Dismiss"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-1 border-t border-border/40">
+                            <button
+                                onClick={() => {
+                                    setShowGuestPrompt(false);
+                                    navigate('/account', { state: { mode: 'signin' } });
+                                }}
+                                className="px-3.5 py-1.5 text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-lg transition-colors cursor-pointer"
+                            >
+                                Sign In
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowGuestPrompt(false);
+                                    navigate('/account', { state: { mode: 'signup' } });
+                                }}
+                                className="px-4 py-1.5 text-xs font-bold bg-accent text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm cursor-pointer"
+                            >
+                                Create Free Account
+                            </button>
+                        </div>
+                    </div>
+                </aside>
             )}
 
             {/* KEYBIND & POWER-USER FEATURE TOOLTIPS */}

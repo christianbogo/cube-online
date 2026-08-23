@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Box, BarChart2, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Keyboard, Target, Users, Lock, CodeXml, ShieldCheck } from 'lucide-react';
 import { useTheme } from '../ui/ThemeProvider';
 import { NavLink, useNavigate } from 'react-router-dom';
@@ -17,7 +18,7 @@ interface NavItem {
     locked?: boolean;
 }
 
-const navItems: NavItem[] = [
+const defaultNavItems: NavItem[] = [
     { name: 'Cube', icon: Box, path: '/' },
     { name: 'Logs', icon: BarChart2, path: '/logs' },
     { name: 'Goals', icon: Target, path: '/goals' },
@@ -26,13 +27,46 @@ const navItems: NavItem[] = [
     { name: 'Binds', icon: Keyboard, path: '/keybinds' },
 ];
 
+const guestNavItems: NavItem[] = [
+    { name: 'Cube', icon: Box, path: '/' },
+    { name: 'Social', icon: Users, path: '/social' },
+    { name: 'Binds', icon: Keyboard, path: '/keybinds' },
+    { name: 'Logs', icon: BarChart2, path: '/logs' },
+    { name: 'Goals', icon: Target, path: '/goals' },
+    { name: 'Dev', icon: CodeXml, path: '/dev' },
+];
+
 export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebarProps) {
     const { theme, setTheme } = useTheme();
     const { user } = useAuth();
 
+    const navItems = user ? defaultNavItems : guestNavItems;
+
     const { isPrivateMode, togglePrivateMode } = useSolves();
     const { confirm: confirmAction } = useConfirm();
     const navigate = useNavigate();
+
+    // Floating temporary popup for locked items
+    const [popupState, setPopupState] = useState<{ x: number; y: number; visible: boolean } | null>(null);
+
+    const handleLockedClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        (e.currentTarget as HTMLElement).blur();
+
+        const x = Math.min(e.clientX + 10, window.innerWidth - 220);
+        const y = Math.max(10, Math.min(e.clientY - 15, window.innerHeight - 60));
+
+        setPopupState({ x, y, visible: true });
+    };
+
+    useEffect(() => {
+        if (!popupState?.visible) return;
+        const timer = setTimeout(() => {
+            setPopupState(null);
+        }, 2500);
+        return () => clearTimeout(timer);
+    }, [popupState]);
 
     const handleNavClick = async (e: React.MouseEvent, path: string) => {
         (e.currentTarget as HTMLElement).blur();
@@ -47,30 +81,43 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
 
     return (
         <nav className="h-full bg-bg-secondary flex flex-col select-none w-full transition-colors duration-200">
+            {/* Temporary Popup on Locked Click */}
+            {popupState?.visible && (
+                <div
+                    style={{ top: popupState.y, left: popupState.x }}
+                    onClick={() => {
+                        setPopupState(null);
+                        navigate('/account', { state: { mode: 'signup' } });
+                    }}
+                    className="fixed z-50 bg-zinc-900 border border-zinc-700 text-white text-xs font-semibold px-3 py-2 rounded-xl shadow-2xl flex items-center cursor-pointer hover:border-accent hover:bg-zinc-800 transition-all animate-in fade-in zoom-in-95 pointer-events-auto"
+                >
+                    <span className="whitespace-nowrap">Create Free Account to Access</span>
+                </div>
+            )}
+
             {/* Navigation Items */}
             <ul className="flex flex-col gap-1 px-2 pt-2 flex-1">
                 {navItems.map((item) => {
-                    const isItemLocked = !!item.locked || (!user && ['Logs'].includes(item.name));
+                    const isItemLocked = !!item.locked || (!user && ['Logs', 'Goals', 'Dev'].includes(item.name));
 
                     return (
                         <li key={item.name}>
                             <NavLink
                                 to={isItemLocked ? '#' : item.path}
                                 onClick={(e) => {
-                                    (e.currentTarget as HTMLElement).blur();
                                     if (isItemLocked) {
-                                        e.preventDefault();
+                                        handleLockedClick(e);
                                         return;
                                     }
                                     handleNavClick(e, item.path);
                                 }}
-                                title={item.locked ? `${item.name} (Coming Soon)` : item.name}
+                                title={isItemLocked ? `${item.name} (Requires Account)` : item.name}
                                 className={({ isActive }) => `
                                 w-full flex items-center gap-3 p-2 rounded-md transition-colors text-left outline-none focus:outline-none
                                 ${(isActive && !isItemLocked)
                                         ? 'bg-accent/10 text-accent'
                                         : isItemLocked
-                                            ? 'opacity-40 cursor-not-allowed text-text-secondary select-none'
+                                            ? 'opacity-40 hover:opacity-60 cursor-pointer text-text-secondary select-none'
                                             : 'hover:bg-bg-hover text-text-secondary hover:text-text-primary'
                                     }
                                 ${collapsed ? 'justify-center' : ''}
@@ -84,7 +131,7 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
                                                 <span className={`text-sm font-medium ${(isActive && !isItemLocked) ? 'text-accent' : 'text-text-primary'} truncate`}>
                                                     {item.name}
                                                 </span>
-                                                {item.locked && (
+                                                {isItemLocked && (
                                                     <Lock className="w-3.5 h-3.5 text-text-secondary/70 shrink-0 ml-1.5" />
                                                 )}
                                             </div>

@@ -15,6 +15,7 @@ import Account from './pages/Account';
 import Keybinds from './pages/Keybinds';
 import Dev from './pages/Dev';
 import Privacy from './pages/Privacy';
+import WCACallback from './pages/WCACallback';
 import type { ReactNode } from 'react';
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
@@ -44,13 +45,14 @@ function App() {
                         <Route path="stats" element={<Navigate to="/logs" replace />} />
                         <Route path="stats/*" element={<Navigate to="/logs" replace />} />
                         <Route path="records" element={<Navigate to="/goals" replace />} />
-                        <Route path="goals" element={<Goals />} />
+                        <Route path="goals" element={<ProtectedRoute><Goals /></ProtectedRoute>} />
                         <Route path="social" element={<Social />} />
                         <Route path="social/:userId" element={<Social />} />
                         <Route path="account" element={<Account />} />
                         <Route path="keybinds" element={<Keybinds />} />
-                        <Route path="dev" element={<Dev />} />
+                        <Route path="dev" element={<ProtectedRoute><Dev /></ProtectedRoute>} />
                         <Route path="privacy" element={<Privacy />} />
+                        <Route path="callback" element={<WCACallback />} />
                       </Route>
                     </Routes>
                   </GoalsProvider>

@@ -67,7 +67,7 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
 
     const prevUserRef = useRef<{ uid: string } | null | undefined>(undefined);
 
-    // Wipe local solves on auth state change (Sign In / Sign Out)
+    // Wipe local solves on auth state change (Sign In / Sign Out), but preserve/associate on Account Creation (Sign Up)
     useEffect(() => {
         const isFirstRun = prevUserRef.current === undefined;
         const prevUser = prevUserRef.current;
@@ -78,9 +78,16 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
             const currentUid = currentUser?.uid;
 
             if (prevUid !== currentUid) {
-                // Auth change detected
-                setSolves([]);
-                localStorage.removeItem('cutter-cubing-solves');
+                // Check if this was a new account sign up
+                const justSignedUpUid = sessionStorage.getItem('just_signed_up_uid');
+                if (currentUid && justSignedUpUid === currentUid) {
+                    sessionStorage.removeItem('just_signed_up_uid');
+                    setSolves(prev => prev.map(s => ({ ...s, userId: currentUid })));
+                } else {
+                    // Regular Sign In or Sign Out: wipe local solves
+                    setSolves([]);
+                    localStorage.removeItem('cutter-cubing-solves');
+                }
             }
         }
 

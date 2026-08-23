@@ -208,8 +208,12 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
         return () => unsubscribe();
     }, [user]);
 
-    // Listen to global goals stats document
+    // Listen to global goals stats document (authenticated users only)
     useEffect(() => {
+        if (!user) {
+            return;
+        }
+
         const statsRef = doc(db, 'global_stats', 'goals');
         const unsubscribe = onSnapshot(statsRef, (snapshot) => {
             if (snapshot.exists()) {
@@ -221,7 +225,7 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
         });
 
         return () => unsubscribe();
-    }, []);
+    }, [user]);
 
     // Sync user progress & update global stats transactionally
     useEffect(() => {

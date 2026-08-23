@@ -480,19 +480,19 @@ export const GOAL_DEFINITIONS: GoalDefinition[] = [
 
 export const CATEGORY_METADATA: Record<GoalCategory, { label: string; description: string }> = {
     time: {
-        label: 'Time Spent Solving',
+        label: 'Time',
         description: 'Accumulate solving time across all your sessions and events.'
     },
     count: {
-        label: 'Solve Count Milestones',
+        label: 'Solves',
         description: 'Reach high-volume solve milestones on your speedcubing journey.'
     },
     streak: {
-        label: 'Streaks & Daily Volume',
+        label: 'Streaks',
         description: 'Consistency tiers and high-volume daily solve grinds.'
     },
     diversity: {
-        label: 'Diversity & Event Breadth',
+        label: 'Breadth',
         description: 'Mastery across different events, big cubes, side events, and blindfolded.'
     }
 };

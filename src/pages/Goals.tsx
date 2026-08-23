@@ -9,7 +9,6 @@ import {
     Pin,
     PinOff,
     CheckCircle2,
-    Lock,
     TrendingUp,
     Users
 } from 'lucide-react';
@@ -130,37 +129,6 @@ export default function Goals() {
     return (
         <div className="flex-1 flex flex-col min-h-0 bg-bg-primary overflow-y-auto custom-scrollbar select-none">
             <div className="max-w-6xl w-full mx-auto p-4 md:p-6 flex flex-col gap-6">
-
-                {/* SIGN IN PROMPT BANNER FOR GUESTS */}
-                {!user && (
-                    <div className="bg-surface-elevation-1 border border-border/80 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center text-accent shrink-0">
-                                <Lock className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <h3 className="font-semibold text-text-primary text-sm">Sign in to track and save your goals</h3>
-                                <p className="text-xs text-text-secondary mt-0.5">
-                                    Track continuous progress across 56 milestones, compare solver stats, and pin goals to your practice timer.
-                                </p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                            <button
-                                onClick={() => navigate('/account', { state: { mode: 'signin' } })}
-                                className="px-3.5 py-1.5 text-xs font-medium border border-border rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
-                            >
-                                Sign In
-                            </button>
-                            <button
-                                onClick={() => navigate('/account', { state: { mode: 'signup' } })}
-                                className="px-3.5 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
-                            >
-                                Create Account
-                            </button>
-                        </div>
-                    </div>
-                )}
 
                 {/* PERSONAL RECORDS TABLE */}
                 <RecordTable />

@@ -140,6 +140,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isGhostMode: false
         });
 
+        // Upload all past local-only solves to Firestore for the new account
+        try {
+            const localSolvesRaw = localStorage.getItem('cutter-cubing-solves');
+            if (localSolvesRaw) {
+                const localSolves = JSON.parse(localSolvesRaw);
+                if (Array.isArray(localSolves) && localSolves.length > 0) {
+                    const chunkSize = 400;
+                    for (let i = 0; i < localSolves.length; i += chunkSize) {
+                        const chunk = localSolves.slice(i, i + chunkSize);
+                        const batch = writeBatch(db);
+                        chunk.forEach((s: any) => {
+                            if (s && s.id) {
+                                const solveRef = doc(db, 'solves', s.id);
+                                const solvePayload = {
+                                    id: s.id,
+                                    time: s.time,
+                                    scramble: s.scramble,
+                                    date: s.date,
+                                    penalty: s.penalty || 'none',
+                                    inspectionTime: s.inspectionTime ?? 0,
+                                    inspectionPenalty: s.inspectionPenalty || 'none',
+                                    sessionId: s.sessionId || null,
+                                    userId: result.user.uid,
+                                    scrambleType: s.scrambleType || '333',
+                                    anomalyApproved: s.anomalyApproved ?? false,
+                                    updatedAt: new Date().toISOString()
+                                };
+                                batch.set(solveRef, solvePayload, { merge: true });
+                            }
+                        });
+                        await batch.commit();
+                    }
+                    sessionStorage.setItem('just_signed_up_uid', result.user.uid);
+                }
+            }
+        } catch (uploadErr) {
+            console.error("Error uploading local solves during signup:", uploadErr);
+        }
+
         return result;
     };
 

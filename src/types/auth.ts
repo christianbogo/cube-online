@@ -5,6 +5,7 @@ export type SocialNetwork =
     | 'instagram'
     | 'youtube'
     | 'twitch'
+    | 'wca'
     | 'other';
 
 export type SocialPrivacy = 'hidden' | 'friends' | 'public';

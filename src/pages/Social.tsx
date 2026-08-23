@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { UserData, Solve } from '../types';
 import {
@@ -30,67 +30,146 @@ export default function Social() {
     const selectedUserUid = routeUserId !== undefined ? (routeUserId || null) : manualSelectedUserUid;
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Subscribe to all users in Firestore
+    // Fetch / subscribe to all users in Firestore
     useEffect(() => {
-        const usersRef = collection(db, 'users');
-        const unsubUsers = onSnapshot(usersRef, (snapshot) => {
-            const usersList: UserData[] = [];
-            snapshot.docs.forEach(docSnap => {
-                const data = docSnap.data();
-                usersList.push({
-                    uid: docSnap.id,
-                    shortId: data.shortId,
-                    email: data.email || null,
-                    emailVerified: data.emailVerified ?? true,
-                    username: data.username || 'CubingUser',
-                    color: data.color || '#3b82f6',
-                    following: data.following || data.starredUsers || [],
-                    starredUsers: data.following || data.starredUsers || [],
-                    blockedUsers: data.blockedUsers || [],
-                    socials: data.socials || [],
-                    lastSeenAt: data.lastSeenAt,
-                    status: data.status,
-                    isGhostMode: data.isGhostMode ?? false
+        let isMounted = true;
+        let unsubUsers: (() => void) | null = null;
+
+        if (currentUser) {
+            const usersRef = collection(db, 'users');
+            unsubUsers = onSnapshot(usersRef, (snapshot) => {
+                if (!isMounted) return;
+                const usersList: UserData[] = [];
+                snapshot.docs.forEach(docSnap => {
+                    const data = docSnap.data();
+                    usersList.push({
+                        uid: docSnap.id,
+                        shortId: data.shortId,
+                        email: data.email || null,
+                        emailVerified: data.emailVerified ?? true,
+                        username: data.username || 'CubingUser',
+                        color: data.color || '#3b82f6',
+                        following: data.following || data.starredUsers || [],
+                        starredUsers: data.following || data.starredUsers || [],
+                        blockedUsers: data.blockedUsers || [],
+                        socials: data.socials || [],
+                        lastSeenAt: data.lastSeenAt,
+                        status: data.status,
+                        isGhostMode: data.isGhostMode ?? false
+                    });
                 });
+                setAllUsers(usersList);
+                setLoadingData(false);
+            }, (err) => {
+                console.warn("Users subscription warning:", err.message);
+                if (isMounted) setLoadingData(false);
             });
-            setAllUsers(usersList);
-            setLoadingData(false);
-        }, (err) => {
-            console.warn("Users subscription warning:", err.message);
-            setLoadingData(false);
-        });
+        } else {
+            // Guest mode: one-time safe read to avoid watch stream assertion errors
+            const loadGuestUsers = async () => {
+                try {
+                    const snapshot = await getDocs(collection(db, 'users'));
+                    if (!isMounted) return;
+                    const usersList: UserData[] = [];
+                    snapshot.docs.forEach(docSnap => {
+                        const data = docSnap.data();
+                        usersList.push({
+                            uid: docSnap.id,
+                            shortId: data.shortId,
+                            email: data.email || null,
+                            emailVerified: data.emailVerified ?? true,
+                            username: data.username || 'CubingUser',
+                            color: data.color || '#3b82f6',
+                            following: data.following || data.starredUsers || [],
+                            starredUsers: data.following || data.starredUsers || [],
+                            blockedUsers: data.blockedUsers || [],
+                            socials: data.socials || [],
+                            lastSeenAt: data.lastSeenAt,
+                            status: data.status,
+                            isGhostMode: data.isGhostMode ?? false
+                        });
+                    });
+                    setAllUsers(usersList);
+                } catch {
+                    // Gracefully handled for guest mode
+                } finally {
+                    if (isMounted) setLoadingData(false);
+                }
+            };
+            loadGuestUsers();
+        }
 
-        return () => unsubUsers();
-    }, []);
+        return () => {
+            isMounted = false;
+            if (unsubUsers) unsubUsers();
+        };
+    }, [currentUser]);
 
-    // Subscribe to all solves in Firestore
+    // Fetch / subscribe to all solves in Firestore
     useEffect(() => {
-        const solvesRef = collection(db, 'solves');
-        const unsubSolves = onSnapshot(solvesRef, (snapshot) => {
-            const solvesList: Solve[] = [];
-            snapshot.docs.forEach(docSnap => {
-                const data = docSnap.data();
-                solvesList.push({
-                    id: docSnap.id,
-                    time: data.time,
-                    scramble: data.scramble,
-                    date: data.date,
-                    penalty: data.penalty,
-                    inspectionTime: data.inspectionTime,
-                    inspectionPenalty: data.inspectionPenalty,
-                    sessionId: data.sessionId,
-                    userId: data.userId,
-                    scrambleType: data.scrambleType || '333',
-                    anomalyApproved: data.anomalyApproved
-                });
-            });
-            setAllSolves(solvesList);
-        }, (err) => {
-            console.warn("Solves subscription warning:", err.message);
-        });
+        let isMounted = true;
+        let unsubSolves: (() => void) | null = null;
 
-        return () => unsubSolves();
-    }, []);
+        if (currentUser) {
+            const solvesRef = collection(db, 'solves');
+            unsubSolves = onSnapshot(solvesRef, (snapshot) => {
+                if (!isMounted) return;
+                const solvesList: Solve[] = [];
+                snapshot.docs.forEach(docSnap => {
+                    const data = docSnap.data();
+                    solvesList.push({
+                        id: docSnap.id,
+                        time: data.time,
+                        scramble: data.scramble,
+                        date: data.date,
+                        penalty: data.penalty,
+                        inspectionTime: data.inspectionTime,
+                        inspectionPenalty: data.inspectionPenalty,
+                        sessionId: data.sessionId,
+                        userId: data.userId,
+                        scrambleType: data.scrambleType || '333',
+                        anomalyApproved: data.anomalyApproved
+                    });
+                });
+                setAllSolves(solvesList);
+            }, (err) => {
+                console.warn("Solves subscription warning:", err.message);
+            });
+        } else {
+            const loadGuestSolves = async () => {
+                try {
+                    const snapshot = await getDocs(collection(db, 'solves'));
+                    if (!isMounted) return;
+                    const solvesList: Solve[] = [];
+                    snapshot.docs.forEach(docSnap => {
+                        const data = docSnap.data();
+                        solvesList.push({
+                            id: docSnap.id,
+                            time: data.time,
+                            scramble: data.scramble,
+                            date: data.date,
+                            penalty: data.penalty,
+                            inspectionTime: data.inspectionTime,
+                            inspectionPenalty: data.inspectionPenalty,
+                            sessionId: data.sessionId,
+                            userId: data.userId,
+                            scrambleType: data.scrambleType || '333',
+                            anomalyApproved: data.anomalyApproved
+                        });
+                    });
+                    setAllSolves(solvesList);
+                } catch {
+                    // Gracefully handled for guest mode
+                }
+            };
+            loadGuestSolves();
+        }
+
+        return () => {
+            isMounted = false;
+            if (unsubSolves) unsubSolves();
+        };
+    }, [currentUser]);
 
     // Combined list of users (ensuring current user is included even before snapshot)
     const combinedUsers = useMemo(() => {
@@ -195,7 +274,7 @@ export default function Social() {
                     <div className="flex flex-col gap-10 animate-in fade-in duration-200">
 
                         {/* 8 LEADERBOARDS GRID (No parenthesis in headers) */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 sm:gap-8">
                             {/* 1. Most Solving Today */}
                             <SocialLeaderboardCard
                                 title="Most Solving Today"
@@ -255,60 +334,119 @@ export default function Social() {
 
                         {/* COMMUNITY CUBERS DIRECTORY */}
                         <div className="flex flex-col gap-4 pt-6 border-t border-border/40">
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                                <h2 className="text-xs font-bold text-text-primary uppercase tracking-wider">
-                                    Community Profiles ({filteredCubers.length})
-                                </h2>
+                            {currentUser ? (
+                                <>
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                        <h2 className="text-xs font-bold text-text-primary uppercase tracking-wider">
+                                            Community Profiles ({filteredCubers.length})
+                                        </h2>
 
-                                {/* Search Bar */}
-                                <div className="relative w-full sm:w-64">
-                                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search by name or #id..."
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="w-full bg-surface-elevation-1 border border-border rounded-xl pl-9 pr-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Simple User Cards Grid: Just square and name */}
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                                {filteredCubers.map(userItem => {
-                                    const isSelf = currentUser?.uid === userItem.uid;
-
-                                    return (
-                                        <div
-                                            key={userItem.uid}
-                                            onClick={() => handleSelectUser(userItem)}
-                                            className={`flex items-center gap-2.5 p-2.5 rounded-xl border bg-surface-elevation-1 hover:bg-bg-hover hover:border-accent/40 transition-all cursor-pointer group shadow-2xs select-none ${
-                                                isSelf ? 'border-accent/40 ring-1 ring-accent/20' : 'border-border/60'
-                                            }`}
-                                        >
-                                            {/* Simple Card: Square Avatar */}
-                                            <div
-                                                className="w-8 h-8 rounded-lg shrink-0 shadow-2xs transition-transform group-hover:scale-105"
-                                                style={{ backgroundColor: userItem.color || '#3b82f6' }}
+                                        {/* Search Bar */}
+                                        <div className="relative w-full sm:w-64">
+                                            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
+                                            <input
+                                                type="text"
+                                                placeholder="Search by name or #id..."
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                                className="w-full bg-surface-elevation-1 border border-border rounded-xl pl-9 pr-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent"
                                             />
-
-                                            {/* Name & Short ID */}
-                                            <div className="flex flex-col min-w-0">
-                                                <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors">
-                                                    {userItem.username || 'CubingUser'}
-                                                </span>
-                                                <span className="text-[10px] text-text-secondary font-mono truncate">
-                                                    #{userItem.shortId || '????'}
-                                                </span>
-                                            </div>
                                         </div>
-                                    );
-                                })}
-                            </div>
+                                    </div>
 
-                            {filteredCubers.length === 0 && (
-                                <div className="py-8 text-center text-text-secondary text-xs italic bg-surface-elevation-1/40 rounded-xl border border-dashed border-border/40">
-                                    No cubers found matching &quot;{searchQuery}&quot;.
+                                    {/* User Cards Grid */}
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                                        {filteredCubers.map(userItem => {
+                                            const isSelf = currentUser?.uid === userItem.uid;
+
+                                            return (
+                                                <div
+                                                    key={userItem.uid}
+                                                    onClick={() => handleSelectUser(userItem)}
+                                                    className={`flex items-center gap-2.5 p-2.5 rounded-xl border bg-surface-elevation-1 hover:bg-bg-hover hover:border-accent/40 transition-all cursor-pointer group shadow-2xs select-none ${
+                                                        isSelf ? 'border-accent/40 ring-1 ring-accent/20' : 'border-border/60'
+                                                    }`}
+                                                >
+                                                    {/* Square Avatar */}
+                                                    <div
+                                                        className="w-8 h-8 rounded-lg shrink-0 shadow-2xs transition-transform group-hover:scale-105"
+                                                        style={{ backgroundColor: userItem.color || '#3b82f6' }}
+                                                    />
+
+                                                    {/* Name & Short ID */}
+                                                    <div className="flex flex-col min-w-0">
+                                                        <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors">
+                                                            {userItem.username || 'CubingUser'}
+                                                        </span>
+                                                        <span className="text-[10px] text-text-secondary font-mono truncate">
+                                                            #{userItem.shortId || '????'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {filteredCubers.length === 0 && (
+                                        <div className="py-8 text-center text-text-secondary text-xs italic bg-surface-elevation-1/40 rounded-xl border border-dashed border-border/40">
+                                            No cubers found matching &quot;{searchQuery}&quot;.
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                /* GUEST TEASER FOR COMMUNITY PROFILES */
+                                <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-surface-elevation-1 p-6 sm:p-8">
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
+                                        <div className="max-w-xl">
+                                            <h2 className="text-base sm:text-lg font-bold text-text-primary">
+                                                Connect with {allUsers.length > 0 ? `${allUsers.length}+` : 'Fellow'} Speedcubers Worldwide
+                                            </h2>
+                                            <p className="text-xs text-text-secondary mt-1.5 leading-relaxed">
+                                                Create a free account to search and explore member profiles by #ID, track live solves in real-time, view detailed personal bests, and build your cubing circle.
+                                            </p>
+                                        </div>
+
+                                        <div className="flex items-center gap-3 shrink-0">
+                                            <button
+                                                onClick={() => navigate('/account', { state: { mode: 'signin' } })}
+                                                className="px-4 py-2 text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-hover border border-border/80 rounded-xl transition-colors cursor-pointer"
+                                            >
+                                                Sign In
+                                            </button>
+                                            <button
+                                                onClick={() => navigate('/account', { state: { mode: 'signup' } })}
+                                                className="px-4 py-2 text-xs font-bold bg-accent text-white rounded-xl hover:opacity-90 transition-opacity shadow-sm cursor-pointer"
+                                            >
+                                                Create Free Account
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Background blurred preview grid */}
+                                    <div
+                                        onClick={() => navigate('/account', { state: { mode: 'signup' } })}
+                                        className="mt-6 pt-6 border-t border-border/40 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 opacity-35 blur-[1.5px] select-none pointer-events-none"
+                                    >
+                                        {(filteredCubers.slice(0, 12)).map((userItem) => (
+                                            <div
+                                                key={userItem.uid}
+                                                className="flex items-center gap-2.5 p-2.5 rounded-xl border border-border/60 bg-surface-elevation-1 shadow-2xs"
+                                            >
+                                                <div
+                                                    className="w-8 h-8 rounded-lg shrink-0"
+                                                    style={{ backgroundColor: userItem.color || '#3b82f6' }}
+                                                />
+                                                <div className="flex flex-col min-w-0">
+                                                    <span className="text-xs font-bold text-text-primary truncate">
+                                                        {userItem.username || 'CubingUser'}
+                                                    </span>
+                                                    <span className="text-[10px] text-text-secondary font-mono truncate">
+                                                        #{userItem.shortId || '????'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
                         </div>

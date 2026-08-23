@@ -4,6 +4,7 @@ import { useSession } from '../../contexts/SessionContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { Trash2, ChevronLeft, ChevronRight, EyeOff, ChevronDown } from 'lucide-react';
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage } from '../../utils/calculations';
 import { SCRAMBLE_TYPES } from '../../utils/constants';
 
@@ -193,6 +194,19 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
 
             {/* Solve List */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
+                {/* Permanent Guest Solves Save Prompt */}
+                {!user && !isPrivateMode && (
+                    <div className="py-2 px-3 bg-accent/5 border-b border-border/40 text-center">
+                        <Link
+                            to="/account"
+                            state={{ mode: 'signin' }}
+                            className="text-[11px] font-medium text-text-secondary hover:text-text-primary transition-colors block"
+                        >
+                            Sign in to save solves
+                        </Link>
+                    </div>
+                )}
+
                 <div className="flex flex-col">
                     {paginatedSolves.map((solve, index) => {
                         const newerSolve = paginatedSolves[index - 1];

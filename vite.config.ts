@@ -3,13 +3,14 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import handler from './api/feedback'
+import wcaHandler from './api/wca'
 
 function feedbackApiPlugin(): Plugin {
   return {
     name: 'feedback-api-middleware',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        if (req.url?.startsWith('/api/feedback')) {
+        if (req.url?.startsWith('/api/feedback') || req.url?.startsWith('/api/wca')) {
           if (req.method === 'OPTIONS') {
             res.statusCode = 200;
             res.end();
@@ -36,7 +37,11 @@ function feedbackApiPlugin(): Plugin {
                   },
                   end: () => res.end()
                 };
-                await handler(mockReq, mockRes);
+                if (req.url?.startsWith('/api/wca')) {
+                  await wcaHandler(mockReq, mockRes);
+                } else {
+                  await handler(mockReq, mockRes);
+                }
               } catch (err: any) {
                 res.statusCode = 500;
                 res.setHeader('Content-Type', 'application/json');
