@@ -5,25 +5,55 @@ export default async function handler(req: any, res: any) {
     let profileColor = (color && typeof color === 'string') ? color : '#3b82f6';
     let profileCode = (code && typeof code === 'string') ? code.replace('#', '').trim() : '';
 
-    // If userId provided and name/code not already in query, try fetching from Firestore REST API
+    // If userId provided and name/code not already in query, fetch from Firestore REST API
     if (userId && (!profileName || !profileCode)) {
         try {
-            const firebaseProjectId = 'cutter-cubing-timer'; // Project ID from firebase config
+            const firebaseProjectId = process.env.VITE_FIREBASE_PROJECT_ID || 'cube-online-1';
             const cleanId = String(userId).replace('#', '').trim();
             
-            // Try fetching by direct document ID (Auth UID)
-            const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/users/${encodeURIComponent(cleanId)}`;
-            const response = await fetch(firestoreUrl);
+            // 1. Try fetching directly by document ID (Auth UID)
+            const firestoreDocUrl = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/users/${encodeURIComponent(cleanId)}`;
+            const response = await fetch(firestoreDocUrl);
             if (response.ok) {
-                const doc = await response.json();
-                if (doc && doc.fields) {
-                    profileName = doc.fields.username?.stringValue || 'CubingUser';
-                    profileColor = doc.fields.color?.stringValue || '#3b82f6';
-                    profileCode = doc.fields.shortId?.stringValue || '';
+                const docData: any = await response.json();
+                if (docData && docData.fields) {
+                    profileName = docData.fields.username?.stringValue || 'CubingUser';
+                    profileColor = docData.fields.color?.stringValue || '#3b82f6';
+                    profileCode = docData.fields.shortId?.stringValue || '';
+                }
+            } else {
+                // 2. Query by shortId field using Firestore runQuery REST endpoint
+                const queryUrl = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents:runQuery`;
+                const queryBody = {
+                    structuredQuery: {
+                        from: [{ collectionId: 'users' }],
+                        where: {
+                            fieldFilter: {
+                                field: { fieldPath: 'shortId' },
+                                op: 'EQUAL',
+                                value: { stringValue: cleanId }
+                            }
+                        },
+                        limit: 1
+                    }
+                };
+                const qResponse = await fetch(queryUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(queryBody)
+                });
+                if (qResponse.ok) {
+                    const qResult = await qResponse.json();
+                    if (Array.isArray(qResult) && qResult[0]?.document?.fields) {
+                        const fields = qResult[0].document.fields;
+                        profileName = fields.username?.stringValue || 'CubingUser';
+                        profileColor = fields.color?.stringValue || '#3b82f6';
+                        profileCode = fields.shortId?.stringValue || cleanId;
+                    }
                 }
             }
-        } catch {
-            // Gracefully fall back to defaults
+        } catch (err) {
+            console.warn("Error fetching user meta from Firestore:", err);
         }
     }
 
@@ -56,7 +86,7 @@ export default async function handler(req: any, res: any) {
   <!-- Icons -->
   <link rel="icon" type="image/png" sizes="48x48" href="${baseUrl}/favicon.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="${baseUrl}/apple-touch-icon.png" />
-  <meta name="theme-color" content="${escapeHtml(profileColor)}" />
+  <meta name="theme-color" content="#ffffff" />
 
   <!-- Open Graph / iMessage / Facebook -->
   <meta property="og:type" content="profile" />
@@ -80,8 +110,8 @@ export default async function handler(req: any, res: any) {
     window.location.replace(${JSON.stringify(targetUrl)});
   </script>
 </head>
-<body style="background-color: #0f1117; color: #ffffff; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
-  <p>Loading profile... <a href="${escapeHtml(targetUrl)}" style="color: #38bdf8;">Click here if not redirected</a>.</p>
+<body style="background-color: #ffffff; color: #0f172a; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
+  <p>Loading profile... <a href="${escapeHtml(targetUrl)}" style="color: #f05224;">Click here if not redirected</a>.</p>
 </body>
 </html>`;
 
@@ -96,5 +126,5 @@ function escapeHtml(str: string): string {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+        .replace(/'/g, '&apos;');
 }

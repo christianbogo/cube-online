@@ -76,12 +76,52 @@ export function UserProfileView({
     const [followLoading, setFollowLoading] = useState(false);
     const [blockLoading, setBlockLoading] = useState(false);
 
+    // Dynamic Page Title & Meta Tags for browser tabs and sharing
+    useEffect(() => {
+        const username = liveUser.username || 'CubingUser';
+        const code = liveUser.shortId ? `#${liveUser.shortId}` : '';
+        const pageTitle = code ? `${username} (${code}) • Cube Online` : `${username} • Cube Online`;
+        const previousTitle = document.title;
+
+        document.title = pageTitle;
+
+        // Update meta tags dynamically in DOM
+        const updateMeta = (selector: string, attr: string, value: string) => {
+            let el = document.querySelector(selector);
+            if (!el) {
+                el = document.createElement('meta');
+                const [attrName] = selector.replace(/[\[\]"']/g, '').split('=');
+                el.setAttribute(attrName, selector.split('=')[1]?.replace(/["']/g, '') || '');
+                document.head.appendChild(el);
+            }
+            el.setAttribute(attr, value);
+        };
+
+        const ogImageUrl = `${window.location.origin}/api/og?name=${encodeURIComponent(username)}&color=${encodeURIComponent(liveUser.color || '#3b82f6')}&code=${encodeURIComponent(liveUser.shortId || '')}`;
+
+        updateMeta('meta[property="og:title"]', 'content', pageTitle);
+        updateMeta('meta[property="og:image"]', 'content', ogImageUrl);
+        updateMeta('meta[name="twitter:title"]', 'content', pageTitle);
+        updateMeta('meta[name="twitter:image"]', 'content', ogImageUrl);
+
+        return () => {
+            document.title = previousTitle || 'Cube Online';
+            updateMeta('meta[property="og:title"]', 'content', 'Cube Online');
+            updateMeta('meta[property="og:image"]', 'content', `${window.location.origin}/og-image.png`);
+            updateMeta('meta[name="twitter:title"]', 'content', 'Cube Online');
+            updateMeta('meta[name="twitter:image"]', 'content', `${window.location.origin}/og-image.png`);
+        };
+    }, [liveUser.username, liveUser.shortId, liveUser.color]);
+
     const handleShareProfile = async () => {
         const shareCode = liveUser.shortId || liveUser.uid;
+        const username = liveUser.username || 'CubingUser';
+        const codeDisplay = liveUser.shortId ? `#${liveUser.shortId}` : '';
+        const title = `${username} ${codeDisplay} • Cube Online`.trim();
         const shareUrl = `${window.location.origin}/social/${shareCode}`;
         const shareData = {
-            title: `${liveUser.username || 'CubingUser'} on Cube Online`,
-            text: `Check out ${liveUser.username || 'CubingUser'}'s speedcubing records and profile on Cube Online!`,
+            title,
+            text: `Check out ${username}'s speedcubing records and profile on Cube Online!`,
             url: shareUrl
         };
 

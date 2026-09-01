@@ -4,12 +4,51 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import handler from './api/feedback'
 import wcaHandler from './api/wca'
+import ogHandler from './api/og'
+import metaHandler from './api/meta'
 
 function feedbackApiPlugin(): Plugin {
   return {
     name: 'feedback-api-middleware',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+        if (!req.url) return next();
+        const parsedUrl = new URL(req.url, 'http://localhost');
+
+        if (parsedUrl.pathname === '/api/og') {
+          const query = Object.fromEntries(parsedUrl.searchParams.entries());
+          const mockReq = { query, headers: req.headers };
+          const mockRes = {
+            setHeader: (k: string, v: string) => res.setHeader(k, v),
+            status: (code: number) => {
+              res.statusCode = code;
+              return mockRes;
+            },
+            send: (data: string) => {
+              res.end(data);
+            }
+          };
+          ogHandler(mockReq, mockRes);
+          return;
+        }
+
+        if (parsedUrl.pathname === '/api/meta') {
+          const query = Object.fromEntries(parsedUrl.searchParams.entries());
+          const mockReq = { query, headers: req.headers };
+          const mockRes = {
+            setHeader: (k: string, v: string) => res.setHeader(k, v),
+            status: (code: number) => {
+              res.statusCode = code;
+              return mockRes;
+            },
+            send: (data: string) => {
+              res.end(data);
+            }
+          };
+          await metaHandler(mockReq, mockRes);
+          return;
+        }
+
         if (req.url?.startsWith('/api/feedback') || req.url?.startsWith('/api/wca')) {
           if (req.method === 'OPTIONS') {
             res.statusCode = 200;

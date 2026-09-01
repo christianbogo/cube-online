@@ -38,11 +38,34 @@ export default function Social() {
     // Fetch / subscribe to all users in Firestore
     useEffect(() => {
         let isMounted = true;
-        let unsubUsers: (() => void) | null = null;
-
-        if (currentUser) {
-            const usersRef = collection(db, 'users');
-            unsubUsers = onSnapshot(usersRef, (snapshot) => {
+        const usersRef = collection(db, 'users');
+        const unsubUsers = onSnapshot(usersRef, (snapshot) => {
+            if (!isMounted) return;
+            const usersList: UserData[] = [];
+            snapshot.docs.forEach(docSnap => {
+                const data = docSnap.data();
+                usersList.push({
+                    uid: docSnap.id,
+                    shortId: data.shortId,
+                    email: data.email || null,
+                    emailVerified: data.emailVerified ?? true,
+                    username: data.username || 'CubingUser',
+                    color: data.color || '#3b82f6',
+                    following: data.following || data.starredUsers || [],
+                    starredUsers: data.following || data.starredUsers || [],
+                    blockedUsers: data.blockedUsers || [],
+                    socials: data.socials || [],
+                    lastSeenAt: data.lastSeenAt,
+                    status: data.status,
+                    isGhostMode: data.isGhostMode ?? false
+                });
+            });
+            setAllUsers(usersList);
+            setLoadingData(false);
+        }, async (err) => {
+            console.warn("Users subscription warning:", err.message);
+            try {
+                const snapshot = await getDocs(usersRef);
                 if (!isMounted) return;
                 const usersList: UserData[] = [];
                 snapshot.docs.forEach(docSnap => {
@@ -64,60 +87,47 @@ export default function Social() {
                     });
                 });
                 setAllUsers(usersList);
-                setLoadingData(false);
-            }, (err) => {
-                console.warn("Users subscription warning:", err.message);
+            } catch (fallbackErr) {
+                console.error("Users fallback read error:", fallbackErr);
+            } finally {
                 if (isMounted) setLoadingData(false);
-            });
-        } else {
-            // Guest mode: one-time safe read to avoid watch stream assertion errors
-            const loadGuestUsers = async () => {
-                try {
-                    const snapshot = await getDocs(collection(db, 'users'));
-                    if (!isMounted) return;
-                    const usersList: UserData[] = [];
-                    snapshot.docs.forEach(docSnap => {
-                        const data = docSnap.data();
-                        usersList.push({
-                            uid: docSnap.id,
-                            shortId: data.shortId,
-                            email: data.email || null,
-                            emailVerified: data.emailVerified ?? true,
-                            username: data.username || 'CubingUser',
-                            color: data.color || '#3b82f6',
-                            following: data.following || data.starredUsers || [],
-                            starredUsers: data.following || data.starredUsers || [],
-                            blockedUsers: data.blockedUsers || [],
-                            socials: data.socials || [],
-                            lastSeenAt: data.lastSeenAt,
-                            status: data.status,
-                            isGhostMode: data.isGhostMode ?? false
-                        });
-                    });
-                    setAllUsers(usersList);
-                } catch {
-                    // Gracefully handled for guest mode
-                } finally {
-                    if (isMounted) setLoadingData(false);
-                }
-            };
-            loadGuestUsers();
-        }
+            }
+        });
 
         return () => {
             isMounted = false;
-            if (unsubUsers) unsubUsers();
+            unsubUsers();
         };
-    }, [currentUser]);
+    }, []);
 
     // Fetch / subscribe to all solves in Firestore
     useEffect(() => {
         let isMounted = true;
-        let unsubSolves: (() => void) | null = null;
-
-        if (currentUser) {
-            const solvesRef = collection(db, 'solves');
-            unsubSolves = onSnapshot(solvesRef, (snapshot) => {
+        const solvesRef = collection(db, 'solves');
+        const unsubSolves = onSnapshot(solvesRef, (snapshot) => {
+            if (!isMounted) return;
+            const solvesList: Solve[] = [];
+            snapshot.docs.forEach(docSnap => {
+                const data = docSnap.data();
+                solvesList.push({
+                    id: docSnap.id,
+                    time: data.time,
+                    scramble: data.scramble,
+                    date: data.date,
+                    penalty: data.penalty,
+                    inspectionTime: data.inspectionTime,
+                    inspectionPenalty: data.inspectionPenalty,
+                    sessionId: data.sessionId,
+                    userId: data.userId,
+                    scrambleType: data.scrambleType || '333',
+                    anomalyApproved: data.anomalyApproved
+                });
+            });
+            setAllSolves(solvesList);
+        }, async (err) => {
+            console.warn("Solves subscription warning:", err.message);
+            try {
+                const snapshot = await getDocs(solvesRef);
                 if (!isMounted) return;
                 const solvesList: Solve[] = [];
                 snapshot.docs.forEach(docSnap => {
@@ -137,44 +147,16 @@ export default function Social() {
                     });
                 });
                 setAllSolves(solvesList);
-            }, (err) => {
-                console.warn("Solves subscription warning:", err.message);
-            });
-        } else {
-            const loadGuestSolves = async () => {
-                try {
-                    const snapshot = await getDocs(collection(db, 'solves'));
-                    if (!isMounted) return;
-                    const solvesList: Solve[] = [];
-                    snapshot.docs.forEach(docSnap => {
-                        const data = docSnap.data();
-                        solvesList.push({
-                            id: docSnap.id,
-                            time: data.time,
-                            scramble: data.scramble,
-                            date: data.date,
-                            penalty: data.penalty,
-                            inspectionTime: data.inspectionTime,
-                            inspectionPenalty: data.inspectionPenalty,
-                            sessionId: data.sessionId,
-                            userId: data.userId,
-                            scrambleType: data.scrambleType || '333',
-                            anomalyApproved: data.anomalyApproved
-                        });
-                    });
-                    setAllSolves(solvesList);
-                } catch {
-                    // Gracefully handled for guest mode
-                }
-            };
-            loadGuestSolves();
-        }
+            } catch (fallbackErr) {
+                console.error("Solves fallback read error:", fallbackErr);
+            }
+        });
 
         return () => {
             isMounted = false;
-            if (unsubSolves) unsubSolves();
+            unsubSolves();
         };
-    }, [currentUser]);
+    }, []);
 
     // Combined list of users (ensuring current user and direct user are included)
     const combinedUsers = useMemo(() => {
