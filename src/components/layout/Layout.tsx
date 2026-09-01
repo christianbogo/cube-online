@@ -310,7 +310,7 @@ export default function Layout() {
 
                 {/* Main Content */}
                 <main className="flex-1 flex flex-col relative bg-bg-primary min-w-0 overflow-hidden">
-                    <div className={`flex-1 w-full ${(location.pathname.startsWith('/logs') || location.pathname === '/account') ? 'overflow-hidden p-0 flex flex-col' : 'p-6 overflow-y-auto custom-scrollbar'}`}>
+                    <div className={`flex-1 w-full ${(location.pathname.startsWith('/logs') || location.pathname === '/account' || location.pathname === '/') ? (location.pathname === '/' ? 'overflow-hidden pt-3 px-3 pb-2 flex flex-col' : 'overflow-hidden p-0 flex flex-col') : 'p-6 overflow-y-auto custom-scrollbar'}`}>
                         <Outlet />
                     </div>
                     {(!location.pathname.startsWith('/logs') && location.pathname !== '/account') && (

@@ -16,7 +16,7 @@
           ".validate": "newData.isString() && newData.val().length <= 30"
         },
         "status": {
-          ".validate": "newData.isString() && (newData.val() == 'idle' || newData.val() == 'inspecting' || newData.val() == 'solving')"
+          ".validate": "newData.isString() && (newData.val() == 'IDLE' || newData.val() == 'INSPECTION' || newData.val() == 'PRIMING' || newData.val() == 'RUNNING' || newData.val() == 'SOLVED' || newData.val() == 'idle' || newData.val() == 'inspecting' || newData.val() == 'solving')"
         },
         "timestamp": {
           ".validate": "newData.isNumber()"

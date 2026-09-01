@@ -17,7 +17,7 @@ export { UserCard } from './ui/UserCard';
 export type { UserCardProps } from './ui/UserCard';
 export { Logo } from './ui/Logo';
 export type { LogoProps } from './ui/Logo';
-export { default as KeybindTooltip, resetKeybindTooltips } from './ui/KeybindTooltip';
+export { default as KeybindTooltip, resetKeybindTooltips, setTooltipsDisabled, isTooltipsDisabled, KEYBIND_TOOLTIPS, type TooltipItem } from './ui/KeybindTooltip';
 export { ThemeProvider, useTheme } from './ui/ThemeProvider';
 export type { Theme, ThemeProviderProps, ThemeProviderState } from './ui/ThemeProvider';
 

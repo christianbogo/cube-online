@@ -334,7 +334,6 @@ export default function Social() {
 
                         {/* COMMUNITY CUBERS DIRECTORY */}
                         <div className="flex flex-col gap-4 pt-6 border-t border-border/40">
-                            {currentUser ? (
                                 <>
                                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                                         <h2 className="text-xs font-bold text-text-primary uppercase tracking-wider">
@@ -393,67 +392,11 @@ export default function Social() {
                                         </div>
                                     )}
                                 </>
-                            ) : (
-                                /* GUEST TEASER FOR COMMUNITY PROFILES */
-                                <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-surface-elevation-1 p-6 sm:p-8">
-                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
-                                        <div className="max-w-xl">
-                                            <h2 className="text-base sm:text-lg font-bold text-text-primary">
-                                                Connect with {allUsers.length > 0 ? `${allUsers.length}+` : 'Fellow'} Speedcubers Worldwide
-                                            </h2>
-                                            <p className="text-xs text-text-secondary mt-1.5 leading-relaxed">
-                                                Create a free account to search and explore member profiles by #ID, track live solves in real-time, view detailed personal bests, and build your cubing circle.
-                                            </p>
-                                        </div>
+                            </div>
 
-                                        <div className="flex items-center gap-3 shrink-0">
-                                            <button
-                                                onClick={() => navigate('/account', { state: { mode: 'signin' } })}
-                                                className="px-4 py-2 text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-hover border border-border/80 rounded-xl transition-colors cursor-pointer"
-                                            >
-                                                Sign In
-                                            </button>
-                                            <button
-                                                onClick={() => navigate('/account', { state: { mode: 'signup' } })}
-                                                className="px-4 py-2 text-xs font-bold bg-accent text-white rounded-xl hover:opacity-90 transition-opacity shadow-sm cursor-pointer"
-                                            >
-                                                Create Free Account
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* Background blurred preview grid */}
-                                    <div
-                                        onClick={() => navigate('/account', { state: { mode: 'signup' } })}
-                                        className="mt-6 pt-6 border-t border-border/40 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 opacity-35 blur-[1.5px] select-none pointer-events-none"
-                                    >
-                                        {(filteredCubers.slice(0, 12)).map((userItem) => (
-                                            <div
-                                                key={userItem.uid}
-                                                className="flex items-center gap-2.5 p-2.5 rounded-xl border border-border/60 bg-surface-elevation-1 shadow-2xs"
-                                            >
-                                                <div
-                                                    className="w-8 h-8 rounded-lg shrink-0"
-                                                    style={{ backgroundColor: userItem.color || '#3b82f6' }}
-                                                />
-                                                <div className="flex flex-col min-w-0">
-                                                    <span className="text-xs font-bold text-text-primary truncate">
-                                                        {userItem.username || 'CubingUser'}
-                                                    </span>
-                                                    <span className="text-[10px] text-text-secondary font-mono truncate">
-                                                        #{userItem.shortId || '????'}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
                         </div>
-
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
-        </div>
     );
 }

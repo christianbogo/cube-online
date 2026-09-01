@@ -95,21 +95,25 @@ export default function Goals() {
 
     // Global percentile calculation
     const globalPercentileText = useMemo(() => {
-        if (!globalStats || !globalStats.totalUsers || !globalStats.totalGoalsCountDistribution) {
+        if (!globalStats || !globalStats.totalGoalsCountDistribution) {
             return null;
         }
 
-        const totalUsers = globalStats.totalUsers;
-        let usersWithFewerGoals = 0;
+        const distribution = globalStats.totalGoalsCountDistribution;
+        const distributionUserCount = Object.values(distribution).reduce((sum, count) => sum + count, 0);
+        const totalUsers = Math.max(globalStats.totalUsers || 0, distributionUserCount, 1);
 
-        Object.entries(globalStats.totalGoalsCountDistribution).forEach(([countStr, userCount]) => {
+        if (totalUsers === 0) return null;
+
+        let usersWithFewerGoals = 0;
+        Object.entries(distribution).forEach(([countStr, userCount]) => {
             const count = parseInt(countStr, 10);
             if (count < totalCompletedCount) {
                 usersWithFewerGoals += userCount;
             }
         });
 
-        const percentile = Math.round((usersWithFewerGoals / totalUsers) * 100);
+        const percentile = Math.min(100, Math.max(0, Math.round((usersWithFewerGoals / totalUsers) * 100)));
         return percentile;
     }, [globalStats, totalCompletedCount]);
 

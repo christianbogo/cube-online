@@ -171,7 +171,7 @@ export default function CubingFriendsTab() {
             const usersRef = collection(db, 'users');
 
             const [byShortId, byUsername] = await Promise.all([
-                getDocs(query(usersRef, where('shortId', '==', cleanShortId.toUpperCase()))),
+                getDocs(query(usersRef, where('shortId', '==', cleanShortId))),
                 getDocs(query(usersRef, where('username', '>=', trimmed), where('username', '<=', trimmed + '\uf8ff')))
             ]);
 

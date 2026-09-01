@@ -1,14 +1,24 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import {
-    Check, X, LogOut, Info, Trash2, Download, TriangleAlert, Loader2, RotateCcw, ShieldCheck
+    Check, X, LogOut, Info, Trash2, Download, TriangleAlert, Loader2, RotateCcw, ShieldCheck, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { doc, setDoc, getDoc, getDocs, collection, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Tabs, FriendSidebar, SocialsTab, CubingFriendsTab, Logo, resetKeybindTooltips } from '../components';
+import {
+    Tabs,
+    FriendSidebar,
+    SocialsTab,
+    CubingFriendsTab,
+    Logo,
+    resetKeybindTooltips,
+    setTooltipsDisabled,
+    isTooltipsDisabled,
+    KEYBIND_TOOLTIPS
+} from '../components';
 
 const AVAILABLE_COLORS = [
     { name: 'Red', hex: '#ef4444' },
@@ -195,16 +205,39 @@ export default function Account() {
     );
 
     const TimerSettingsTab = () => {
+        const [isSubscribed, setIsSubscribed] = useState(() => !isTooltipsDisabled());
         const [resetSuccess, setResetSuccess] = useState(false);
+        const [viewingIndex, setViewingIndex] = useState(0);
+
+        useEffect(() => {
+            const handleUpdate = () => {
+                setIsSubscribed(!isTooltipsDisabled());
+            };
+            window.addEventListener('cube-tooltips-updated', handleUpdate);
+            window.addEventListener('cube-tooltips-reset', handleUpdate);
+            return () => {
+                window.removeEventListener('cube-tooltips-updated', handleUpdate);
+                window.removeEventListener('cube-tooltips-reset', handleUpdate);
+            };
+        }, []);
+
+        const handleToggleSubscription = () => {
+            const next = !isSubscribed;
+            setTooltipsDisabled(!next);
+            setIsSubscribed(next);
+        };
 
         const handleReset = () => {
             resetKeybindTooltips();
+            setIsSubscribed(true);
             setResetSuccess(true);
             setTimeout(() => setResetSuccess(false), 2000);
         };
 
+        const currentTip = KEYBIND_TOOLTIPS[viewingIndex] || KEYBIND_TOOLTIPS[0];
+
         return (
-            <div className="flex flex-col gap-1 p-2 max-w-lg">
+            <div className="flex flex-col gap-3 p-2 max-w-lg">
                 <SettingRow label="Show Inspection" description="Enable 15s inspection timer before solving">
                     <button
                         onClick={() => updateSettings({ solveInspection: !settings.solveInspection })}
@@ -234,29 +267,104 @@ export default function Account() {
                     </button>
                 </SettingRow>
 
-                <SettingRow label="Keybind & Feature Tooltips" description="Reset dismissed tooltips on the practice timer">
-                    <button
-                        onClick={handleReset}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                            resetSuccess
-                                ? 'bg-green-500/10 text-green-500 border-green-500/30'
-                                : 'bg-bg-primary text-text-secondary hover:text-text-primary hover:bg-bg-hover border-border'
-                        }`}
-                        title="Reset dismissed timer tooltips"
-                    >
-                        {resetSuccess ? (
-                            <>
-                                <Check className="w-3.5 h-3.5" />
-                                <span>Reset!</span>
-                            </>
-                        ) : (
-                            <>
-                                <RotateCcw className="w-3.5 h-3.5" />
-                                <span>Reset Tooltips</span>
-                            </>
+                <SettingRow
+                    label="Practice Tooltips"
+                    description={isSubscribed ? "Subscribed to timer & keybind hints" : "Unsubscribed from practice tooltips"}
+                >
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleToggleSubscription}
+                            className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer ${isSubscribed ? 'bg-accent' : 'bg-text-secondary/20'}`}
+                            title={isSubscribed ? "Click to unsubscribe from tooltips" : "Click to subscribe to tooltips"}
+                        >
+                            <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${isSubscribed ? 'translate-x-5' : 'translate-x-0'}`} />
+                        </button>
+                        {isSubscribed && (
+                            <button
+                                onClick={handleReset}
+                                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
+                                    resetSuccess
+                                        ? 'bg-green-500/10 text-green-500 border-green-500/30'
+                                        : 'bg-bg-primary text-text-secondary hover:text-text-primary hover:bg-bg-hover border-border'
+                                }`}
+                                title="Reset tooltips order & history"
+                            >
+                                {resetSuccess ? (
+                                    <>
+                                        <Check className="w-3 h-3" />
+                                        <span>Reset!</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <RotateCcw className="w-3 h-3" />
+                                        <span>Reset</span>
+                                    </>
+                                )}
+                            </button>
                         )}
-                    </button>
+                    </div>
                 </SettingRow>
+
+                {/* Individual Tooltip Viewer */}
+                <div className="mt-2 pt-4 border-t border-border/50 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h4 className="text-xs font-semibold text-text-primary">Practice Tooltip Library</h4>
+                            <p className="text-[11px] text-text-secondary">View and explore each tip individually.</p>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <button
+                                onClick={() => setViewingIndex(prev => (prev - 1 + KEYBIND_TOOLTIPS.length) % KEYBIND_TOOLTIPS.length)}
+                                className="p-1 rounded-md bg-bg-primary hover:bg-bg-hover border border-border text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+                                title="Previous Tip"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <span className="text-[11px] font-mono font-medium text-text-secondary px-1 text-center min-w-[36px]">
+                                {viewingIndex + 1} / {KEYBIND_TOOLTIPS.length}
+                            </span>
+                            <button
+                                onClick={() => setViewingIndex(prev => (prev + 1) % KEYBIND_TOOLTIPS.length)}
+                                className="p-1 rounded-md bg-bg-primary hover:bg-bg-hover border border-border text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+                                title="Next Tip"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Tooltip Card Preview */}
+                    <div className="bg-bg-primary border border-border rounded-xl p-3 flex flex-col gap-2 shadow-sm">
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-text-primary text-xs">
+                                {currentTip.title}
+                            </span>
+                            <span className="bg-bg-secondary border border-border text-text-secondary px-1.5 py-0.5 rounded text-[10px] font-mono font-medium">
+                                {currentTip.badge}
+                            </span>
+                        </div>
+                        <p className="text-text-secondary text-[11px] leading-relaxed">
+                            {currentTip.description}
+                        </p>
+                    </div>
+
+                    {/* Quick navigation pill selector */}
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                        {KEYBIND_TOOLTIPS.map((tip, idx) => (
+                            <button
+                                key={tip.id}
+                                onClick={() => setViewingIndex(idx)}
+                                className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors cursor-pointer ${
+                                    viewingIndex === idx
+                                        ? 'bg-accent/15 text-accent border-accent/40 font-semibold'
+                                        : 'bg-bg-primary text-text-secondary hover:text-text-primary border-border hover:bg-bg-hover'
+                                }`}
+                            >
+                                {tip.title}
+                            </button>
+                        ))}
+                    </div>
+                </div>
             </div>
         );
     };

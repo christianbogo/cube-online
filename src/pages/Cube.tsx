@@ -15,11 +15,13 @@ import {
     Search,
     SkipForward,
     CheckCircle2,
-    X
+    X,
+    Maximize2
 } from 'lucide-react';
 import { formatTime } from '../utils/formatTime';
 import type { LiveUser, TimerState } from '../types';
 import { UserCard, KeybindTooltip } from '../components';
+import { MOCK_FRIENDS, MOCK_COMMUNITY_USERS, USE_MOCK_USERS } from '../utils/mockLiveUsers';
 
 export default function Cube() {
     const navigate = useNavigate();
@@ -43,6 +45,33 @@ export default function Cube() {
     const [searchQuery, setSearchQuery] = useState('');
     const bottomContainerRef = useRef<HTMLDivElement>(null);
     const [isBottomOverflowing, setIsBottomOverflowing] = useState(false);
+
+    // Minimized / Hidden top friends chips
+    const [hiddenUserIds, setHiddenUserIds] = useState<string[]>(() => {
+        try {
+            const saved = localStorage.getItem('cube_hidden_live_users');
+            return saved ? JSON.parse(saved) : [];
+        } catch {
+            return [];
+        }
+    });
+
+    const hideUser = useCallback((uid: string) => {
+        setHiddenUserIds(prev => {
+            if (prev.includes(uid)) return prev;
+            const next = [...prev, uid];
+            localStorage.setItem('cube_hidden_live_users', JSON.stringify(next));
+            return next;
+        });
+    }, []);
+
+    const unhideUser = useCallback((uid: string) => {
+        setHiddenUserIds(prev => {
+            const next = prev.filter(id => id !== uid);
+            localStorage.setItem('cube_hidden_live_users', JSON.stringify(next));
+            return next;
+        });
+    }, []);
 
     // Session consistency
     const checkSessionConsistency = useCallback(() => {
@@ -121,24 +150,44 @@ export default function Cube() {
         setVisualScrambleType(settings.scrambleType);
     }, [scramble, settings.scrambleType]);
 
-    // Filter connected users
+    // Filter connected users (includes mock users for UI testing)
     const { favoriteUsers, communityUsers } = useMemo(() => {
-        if (!user) return { favoriteUsers: [], communityUsers: [] };
-        const starred = user.following || user.starredUsers || [];
-        const blocked = user.blockedUsers || [];
+        const starred = user?.following || user?.starredUsers || [];
+        const blocked = user?.blockedUsers || [];
         const q = searchQuery.toLowerCase();
 
         const allowed = connectedUsers.filter(u => !blocked.includes(u.uid));
-        const favs = allowed.filter(u => starred.includes(u.uid));
-        const comms = allowed.filter(u => !starred.includes(u.uid));
+        const liveFavs = allowed.filter(u => starred.includes(u.uid));
+        const liveComms = allowed.filter(u => !starred.includes(u.uid));
 
         const filterFn = (u: LiveUser) => u.username.toLowerCase().includes(q);
 
+        // Include mock users for testing when USE_MOCK_USERS is true
+        const mockFavs = USE_MOCK_USERS ? MOCK_FRIENDS : [];
+        const mockComms = USE_MOCK_USERS ? MOCK_COMMUNITY_USERS : [];
+
+        const combinedFavs = [...mockFavs, ...liveFavs];
+        const combinedComms = [...mockComms, ...liveComms];
+
         return {
-            favoriteUsers: favs,
-            communityUsers: comms.filter(filterFn)
+            favoriteUsers: combinedFavs.filter(u => !blocked.includes(u.uid)),
+            communityUsers: combinedComms.filter(u => !blocked.includes(u.uid) && filterFn(u))
         };
     }, [connectedUsers, user, searchQuery]);
+
+    // Split top followed users into visible cards and minimized chips
+    const { visibleFavoriteUsers, hiddenFavoriteUsers } = useMemo(() => {
+        const visible: LiveUser[] = [];
+        const hidden: LiveUser[] = [];
+        favoriteUsers.forEach(u => {
+            if (hiddenUserIds.includes(u.uid)) {
+                hidden.push(u);
+            } else {
+                visible.push(u);
+            }
+        });
+        return { visibleFavoriteUsers: visible, hiddenFavoriteUsers: hidden };
+    }, [favoriteUsers, hiddenUserIds]);
 
     // Scramble generation
     const generateNewScramble = useCallback(async () => {
@@ -495,8 +544,9 @@ export default function Cube() {
     useEffect(() => {
         const check = () => {
             if (bottomContainerRef.current) {
-                const { scrollWidth, clientWidth } = bottomContainerRef.current;
-                setIsBottomOverflowing(scrollWidth > clientWidth);
+                const containerWidth = bottomContainerRef.current.clientWidth;
+                const totalEstimatedWidth = communityUsers.length * 120;
+                setIsBottomOverflowing(totalEstimatedWidth > containerWidth);
             }
         };
         check();
@@ -515,15 +565,49 @@ export default function Cube() {
     return (
         <div className="flex flex-col h-full relative overflow-hidden">
 
-            {/* LIVE BAR (Top - Followed Cubers) */}
+            {/* LIVE BAR (Top - Followed Cubers & Minimized Chips) */}
             {isLiveMode && favoriteUsers.length > 0 && (
-                <div className="flex-shrink-0 p-4 flex justify-center items-center gap-4 overflow-x-auto h-40 animate-in slide-in-from-top-4 fade-in duration-300 z-10">
-                    {favoriteUsers.map(u => (
-                        <UserCard
-                            key={u.uid}
-                            user={u}
-                        />
-                    ))}
+                <div className="flex-shrink-0 w-full px-2 pt-1 pb-1 flex flex-col items-center gap-1.5 z-10 animate-in slide-in-from-top-4 fade-in duration-300">
+                    {/* Top Minimized/Hidden Friends Chips Row (Above Cards) */}
+                    {hiddenFavoriteUsers.length > 0 && (
+                        <div className="w-full flex items-center justify-center overflow-x-auto no-scrollbar py-1 px-4 mask-fade-edges">
+                            <div className="flex items-center gap-2 flex-nowrap min-w-max mx-auto justify-center">
+                                {hiddenFavoriteUsers.map(u => (
+                                    <button
+                                        key={`hidden-${u.uid}`}
+                                        type="button"
+                                        onClick={() => unhideUser(u.uid)}
+                                        className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border/40 hover:border-accent/60 bg-bg-secondary/40 hover:bg-bg-secondary text-xs text-text-secondary hover:text-text-primary transition-all cursor-pointer group select-none shadow-2xs"
+                                        title={`Show ${u.username}'s card`}
+                                    >
+                                        <div className="w-3 h-3 relative flex items-center justify-center flex-shrink-0">
+                                            <div
+                                                className="w-2.5 h-2.5 rounded-sm group-hover:scale-0 group-hover:opacity-0 shadow-2xs transition-all duration-150"
+                                                style={{ backgroundColor: u.color }}
+                                            />
+                                            <Maximize2 className="w-3 h-3 text-accent absolute inset-0 m-auto scale-0 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-150" />
+                                        </div>
+                                        <span className="font-medium truncate max-w-[110px]">{u.username}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Unhidden Followed Players Cards Row - Always Centered */}
+                    {visibleFavoriteUsers.length > 0 && (
+                        <div className="w-full flex items-center overflow-x-auto min-h-[146px] py-2 px-4 no-scrollbar mask-fade-edges-cards">
+                            <div className="flex items-center gap-4 min-w-max mx-auto px-4 justify-center">
+                                {visibleFavoriteUsers.map(u => (
+                                    <UserCard
+                                        key={u.uid}
+                                        user={u}
+                                        onHide={() => hideUser(u.uid)}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -726,16 +810,16 @@ export default function Cube() {
                     {/* Chips Container */}
                     <div
                         ref={bottomContainerRef}
-                        className="w-full overflow-hidden flex items-center justify-center min-h-[32px]"
+                        className={`w-full overflow-hidden flex items-center min-h-[32px] ${isBottomOverflowing ? 'justify-start mask-fade-edges' : 'justify-center'}`}
                     >
                         {communityUsers.length === 0 ? (
                             searchQuery ? (
-                                <div className="text-text-secondary/50 text-xs italic text-center py-1">
+                                <div className="w-full text-text-secondary/50 text-xs italic text-center py-1">
                                     No cubers matching &quot;{searchQuery}&quot;
                                 </div>
                             ) : null
                         ) : isBottomOverflowing ? (
-                            <div className="animate-marquee-slow flex items-center gap-2 py-0.5">
+                            <div className="animate-marquee-slow flex items-center gap-2 py-0.5 flex-nowrap pr-2">
                                 {[...communityUsers, ...communityUsers].map((u, idx) => (
                                     <button
                                         key={`${u.uid}-${idx}`}
@@ -757,7 +841,7 @@ export default function Cube() {
                                 ))}
                             </div>
                         ) : (
-                            <div className="flex flex-wrap justify-center items-center gap-2 py-0.5 max-w-full">
+                            <div className="flex flex-nowrap justify-center items-center gap-2 py-0.5 max-w-full overflow-x-auto no-scrollbar">
                                 {communityUsers.map(u => (
                                     <button
                                         key={u.uid}

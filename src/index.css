@@ -110,11 +110,22 @@ textarea:focus {
 .animate-marquee-slow {
   display: flex;
   width: max-content;
-  animation: marquee-scroll 35s linear infinite;
+  animation: marquee-scroll 140s linear infinite;
 }
 
 .animate-marquee-slow:hover {
   animation-play-state: paused;
+}
+
+/* Fade edges mask for smooth scrolling chip rows and lists */
+.mask-fade-edges {
+  mask-image: linear-gradient(to right, transparent 0%, black 40px, black calc(100% - 40px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 40px, black calc(100% - 40px), transparent 100%);
+}
+
+.mask-fade-edges-cards {
+  mask-image: linear-gradient(to right, transparent 0%, black 28px, black calc(100% - 28px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 28px, black calc(100% - 28px), transparent 100%);
 }
 
 .no-scrollbar::-webkit-scrollbar {

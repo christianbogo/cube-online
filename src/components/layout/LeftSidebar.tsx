@@ -5,6 +5,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useSolves } from '../../contexts/SolvesContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useConfirm } from '../../contexts/ConfirmationContext';
+import { useGoals } from '../../contexts/GoalsContext';
 
 export interface LeftSidebarProps {
     collapsed: boolean;
@@ -39,6 +40,7 @@ const guestNavItems: NavItem[] = [
 export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebarProps) {
     const { theme, setTheme } = useTheme();
     const { user } = useAuth();
+    const { hasUnseenGoals } = useGoals();
 
     const navItems = user ? defaultNavItems : guestNavItems;
 
@@ -125,12 +127,22 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
                             >
                                 {({ isActive }) => (
                                     <>
-                                        <item.icon className={`w-5 h-5 ${(isActive && !isItemLocked) ? 'text-accent' : 'text-text-secondary'}`} />
+                                        <div className="relative shrink-0 flex items-center justify-center">
+                                            <item.icon className={`w-5 h-5 ${(isActive && !isItemLocked) ? 'text-accent' : 'text-text-secondary'}`} />
+                                            {item.name === 'Goals' && hasUnseenGoals && collapsed && (
+                                                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-text-primary ring-2 ring-bg-secondary" />
+                                            )}
+                                        </div>
                                         {!collapsed && (
                                             <div className="flex-1 flex items-center justify-between min-w-0">
-                                                <span className={`text-sm font-medium ${(isActive && !isItemLocked) ? 'text-accent' : 'text-text-primary'} truncate`}>
-                                                    {item.name}
-                                                </span>
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                    <span className={`text-sm font-medium ${(isActive && !isItemLocked) ? 'text-accent' : 'text-text-primary'} truncate`}>
+                                                        {item.name}
+                                                    </span>
+                                                    {item.name === 'Goals' && hasUnseenGoals && (
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-text-primary shrink-0" title="New goal unlocked!" />
+                                                    )}
+                                                </div>
                                                 {isItemLocked && (
                                                     <Lock className="w-3.5 h-3.5 text-text-secondary/70 shrink-0 ml-1.5" />
                                                 )}

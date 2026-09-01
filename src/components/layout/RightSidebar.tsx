@@ -123,15 +123,17 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                 </div>
 
                 <div className="p-2 border-t border-border flex flex-col gap-2 items-center">
-                    <button
-                        onClick={togglePrivateMode}
-                        onFocus={(e) => e.target.blur()}
-                        className={`w-full flex items-center justify-center p-1 rounded-md transition-colors
-                            ${isPrivateMode ? 'text-accent bg-bg-tertiary shadow-inner' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
-                        title={isPrivateMode ? "Exit Private Session" : "Enter Private Session"}
-                    >
-                        <EyeOff className={`w-5 h-5 ${isPrivateMode ? 'animate-pulse' : ''}`} />
-                    </button>
+                    {user && (
+                        <button
+                            onClick={togglePrivateMode}
+                            onFocus={(e) => e.target.blur()}
+                            className={`w-full flex items-center justify-center p-1 rounded-md transition-colors
+                                ${isPrivateMode ? 'text-accent bg-bg-tertiary shadow-inner' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
+                            title={isPrivateMode ? "Exit Private Session" : "Enter Private Session"}
+                        >
+                            <EyeOff className={`w-5 h-5 ${isPrivateMode ? 'animate-pulse' : ''}`} />
+                        </button>
+                    )}
 
                     <button
                         onClick={onToggleCollapse}
@@ -263,16 +265,18 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
 
             {/* Footer */}
             <div className="p-2 border-t border-border flex flex-col gap-2">
-                <button
-                    onClick={togglePrivateMode}
-                    onFocus={(e) => e.target.blur()}
-                    className={`w-full flex items-center justify-center gap-2 py-2 px-4 text-xs font-medium transition-colors border-b border-border/10
-                        ${isPrivateMode ? 'text-text-primary bg-bg-tertiary shadow-inner' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
-                    title={isPrivateMode ? "Exit Private Session" : "Enter Private Session"}
-                >
-                    <EyeOff className={`w-3.5 h-3.5 ${isPrivateMode ? 'text-accent animate-pulse' : ''}`} />
-                    {isPrivateMode ? 'Private Session Active' : 'Private Session'}
-                </button>
+                {user && (
+                    <button
+                        onClick={togglePrivateMode}
+                        onFocus={(e) => e.target.blur()}
+                        className={`w-full flex items-center justify-center gap-2 py-2 px-4 text-xs font-medium transition-colors border-b border-border/10
+                            ${isPrivateMode ? 'text-text-primary bg-bg-tertiary shadow-inner' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
+                        title={isPrivateMode ? "Exit Private Session" : "Enter Private Session"}
+                    >
+                        <EyeOff className={`w-3.5 h-3.5 ${isPrivateMode ? 'text-accent animate-pulse' : ''}`} />
+                        {isPrivateMode ? 'Private Session Active' : 'Private Session'}
+                    </button>
+                )}
 
                 <button
                     onClick={onToggleCollapse}

@@ -94,16 +94,22 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         }));
     }, [solves]);
 
+    const lastUidRef = useRef<string | null>(null);
+    const onDisconnectSetRef = useRef<string | null>(null);
+
     // Firebase Presence Sync
     useEffect(() => {
         if (!user || isGhostMode) {
-            if (user) {
-                const userPresenceRef = ref(rtdb, `presence/${user.uid}`);
+            if (lastUidRef.current) {
+                const userPresenceRef = ref(rtdb, `presence/${lastUidRef.current}`);
                 remove(userPresenceRef).catch(() => {});
+                lastUidRef.current = null;
+                onDisconnectSetRef.current = null;
             }
             return;
         }
 
+        lastUidRef.current = user.uid;
         const userPresenceRef = ref(rtdb, `presence/${user.uid}`);
         const currentRecent = formatRecentSolves();
 
@@ -121,7 +127,11 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         };
 
         updatePresence();
-        onDisconnect(userPresenceRef).remove();
+
+        if (onDisconnectSetRef.current !== user.uid) {
+            onDisconnect(userPresenceRef).remove();
+            onDisconnectSetRef.current = user.uid;
+        }
 
         // Heartbeat interval every 30s to keep timestamp fresh while active/in other tabs
         const heartbeatInterval = setInterval(() => {
@@ -130,7 +140,6 @@ export function LiveProvider({ children }: { children: ReactNode }) {
 
         return () => {
             clearInterval(heartbeatInterval);
-            remove(userPresenceRef).catch(() => {});
         };
     }, [user, isGhostMode, liveTimerState, solves, formatRecentSolves]);
 
