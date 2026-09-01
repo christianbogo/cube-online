@@ -310,7 +310,7 @@ export default function Layout() {
                     {(!location.pathname.startsWith('/logs') && location.pathname !== '/account') && (
                         <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8 shrink-0">
                             <div className="flex gap-2 items-center">
-                                <span>{isOnline ? 'Online' : 'Offline'} • v0.3.2</span>
+                                <span>{isOnline ? 'Online' : 'Offline'} • v0.3.3</span>
                                 <SyncIndicator status={syncStatus} />
                                 {isPrivateMode && (
                                     <button onClick={togglePrivateMode} className="ml-2 bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20 uppercase font-bold text-[9px]">

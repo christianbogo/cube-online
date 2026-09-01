@@ -339,7 +339,7 @@ export default function Dev() {
     const [editingChangelog, setEditingChangelog] = useState<ChangelogEntry | null>(null);
     const [modalTitle, setModalTitle] = useState('');
     const [modalDate, setModalDate] = useState(() => new Date().toISOString().slice(0, 10));
-    const [modalVersion, setModalVersion] = useState('v0.3.2');
+    const [modalVersion, setModalVersion] = useState('v0.0.0');
     const [modalCategory, setModalCategory] = useState<ChangelogCategory>('release');
     const [modalItems, setModalItems] = useState<string[]>(['']);
     const [modalImages, setModalImages] = useState<string[]>([]);
@@ -402,7 +402,7 @@ export default function Dev() {
         setEditingChangelog(null);
         setModalTitle('');
         setModalDate(new Date().toISOString().slice(0, 10));
-        setModalVersion('v0.3.2');
+        setModalVersion('v0.0.0');
         setModalCategory('release');
         setModalItems(['']);
         setModalImages([]);

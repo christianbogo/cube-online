@@ -79,8 +79,9 @@ export function UserProfileView({
     // Dynamic Page Title & Meta Tags for browser tabs and sharing
     useEffect(() => {
         const username = liveUser.username || 'CubingUser';
-        const code = liveUser.shortId ? `#${liveUser.shortId}` : '';
-        const pageTitle = code ? `${username} (${code}) • Cube Online` : `${username} • Cube Online`;
+        const cleanCode = liveUser.shortId ? liveUser.shortId.replace('#', '').trim() : '';
+        // Formatted strictly as "[name]#[code]" without adding Cube Online
+        const pageTitle = cleanCode ? `${username}#${cleanCode}` : username;
         const previousTitle = document.title;
 
         document.title = pageTitle;
@@ -97,7 +98,7 @@ export function UserProfileView({
             el.setAttribute(attr, value);
         };
 
-        const ogImageUrl = `${window.location.origin}/api/og?name=${encodeURIComponent(username)}&color=${encodeURIComponent(liveUser.color || '#3b82f6')}&code=${encodeURIComponent(liveUser.shortId || '')}`;
+        const ogImageUrl = `${window.location.origin}/api/og?name=${encodeURIComponent(username)}&color=${encodeURIComponent(liveUser.color || '#3b82f6')}&code=${encodeURIComponent(cleanCode)}`;
 
         updateMeta('meta[property="og:title"]', 'content', pageTitle);
         updateMeta('meta[property="og:image"]', 'content', ogImageUrl);
@@ -116,8 +117,8 @@ export function UserProfileView({
     const handleShareProfile = async () => {
         const shareCode = liveUser.shortId || liveUser.uid;
         const username = liveUser.username || 'CubingUser';
-        const codeDisplay = liveUser.shortId ? `#${liveUser.shortId}` : '';
-        const title = `${username} ${codeDisplay} • Cube Online`.trim();
+        const cleanCode = liveUser.shortId ? liveUser.shortId.replace('#', '').trim() : '';
+        const title = cleanCode ? `${username}#${cleanCode}` : username;
         const shareUrl = `${window.location.origin}/social/${shareCode}`;
         const shareData = {
             title,

@@ -1,5 +1,7 @@
+import { Resvg } from '@resvg/resvg-js';
+
 export default function handler(req: any, res: any) {
-    const { name, color, code } = req.query || {};
+    const { name, color, code, format } = req.query || {};
 
     const profileName = (name && typeof name === 'string') ? escapeXml(name.trim()) : 'Cube Online';
     const profileColor = (color && typeof color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(color)) ? color : '#3b82f6';
@@ -149,9 +151,30 @@ export default function handler(req: any, res: any) {
   `}
 </svg>`;
 
-    res.setHeader('Content-Type', 'image/svg+xml');
-    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
-    res.status(200).send(svg);
+    if (format === 'svg') {
+        res.setHeader('Content-Type', 'image/svg+xml');
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+        return res.status(200).send(svg);
+    }
+
+    try {
+        const resvg = new Resvg(svg, {
+            fitTo: { mode: 'width', value: 1200 },
+            font: {
+                loadSystemFonts: true,
+                defaultFontFamily: 'system-ui'
+            }
+        });
+        const pngBuffer = resvg.render().asPng();
+
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+        return res.status(200).send(pngBuffer);
+    } catch {
+        res.setHeader('Content-Type', 'image/svg+xml');
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+        return res.status(200).send(svg);
+    }
 }
 
 function escapeXml(str: string): string {

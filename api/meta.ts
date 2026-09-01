@@ -57,16 +57,17 @@ export default async function handler(req: any, res: any) {
         }
     }
 
-    const displayName = profileName || 'Cubing Community Profile';
-    const displayCode = profileCode ? `#${profileCode}` : '';
-    const title = displayCode ? `${displayName} (${displayCode}) • Cube Online` : `${displayName} • Cube Online`;
+    const displayName = profileName || 'Cube Online';
+    const cleanCode = profileCode ? profileCode.replace('#', '').trim() : '';
+    // Formatted strictly as "[name]#[code]" for profiles without adding "Cube Online"
+    const title = cleanCode ? `${displayName}#${cleanCode}` : (profileName ? displayName : 'Cube Online');
     const description = `View speedcubing personal records, goal progress, and community solves on Cube Online.`;
 
     // Dynamic OG image URL
     const ogParams = new URLSearchParams();
     if (displayName) ogParams.set('name', displayName);
     if (profileColor) ogParams.set('color', profileColor);
-    if (displayCode) ogParams.set('code', displayCode);
+    if (cleanCode) ogParams.set('code', cleanCode);
 
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'cubeonline.org';
     const protocol = (req.headers['x-forwarded-proto'] === 'http') ? 'http' : 'https';
@@ -96,7 +97,7 @@ export default async function handler(req: any, res: any) {
   <meta property="og:image" content="${escapeHtml(ogImageUrl)}" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:type" content="image/svg+xml" />
+  <meta property="og:image:type" content="image/png" />
   <meta property="og:url" content="${escapeHtml(targetUrl)}" />
 
   <!-- Twitter -->
