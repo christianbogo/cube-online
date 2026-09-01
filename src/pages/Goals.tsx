@@ -318,7 +318,6 @@ export default function Goals() {
                             value={statusFilter}
                             onChange={(e) => {
                                 setStatusFilter(e.target.value as StatusFilter);
-                                e.target.blur();
                             }}
                             className="bg-surface-elevation-1 border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary outline-none focus:outline-none focus:ring-0 cursor-pointer font-medium"
                         >

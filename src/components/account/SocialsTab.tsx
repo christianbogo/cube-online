@@ -239,7 +239,6 @@ export default function SocialsTab() {
                                     value={newNetwork}
                                     onChange={(e) => {
                                         setNewNetwork(e.target.value);
-                                        e.target.blur();
                                     }}
                                     className="appearance-none bg-bg-secondary border border-border text-sm text-text-primary rounded pl-3 pr-8 py-2 w-full outline-none focus:outline-none focus:ring-0 focus:border-accent cursor-pointer"
                                 >

@@ -525,7 +525,7 @@ export default function Dev() {
     };
 
     return (
-        <div className="max-w-6xl w-full mx-auto p-4 md:p-6 flex flex-col gap-8 select-none">
+        <div className="max-w-6xl w-full mx-auto p-4 md:p-6 flex flex-col gap-8">
             {/* Header */}
             <div>
                 <h1 className="text-3xl font-bold text-text-primary mb-1">Developer</h1>
@@ -616,7 +616,6 @@ export default function Dev() {
                                     value={feedbackType}
                                     onChange={(e) => {
                                         setFeedbackType(e.target.value as FeedbackType);
-                                        e.target.blur();
                                     }}
                                     className="w-full bg-bg-primary border border-border rounded-lg pl-3 pr-9 py-2 text-sm text-text-primary outline-none focus:outline-none focus:ring-0 focus:border-accent appearance-none cursor-pointer"
                                 >
@@ -876,7 +875,7 @@ export default function Dev() {
                                     <select
                                         value={modalCategory}
                                         onChange={(e) => setModalCategory(e.target.value as ChangelogCategory)}
-                                        className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+                                        className="w-full bg-bg-secondary border border-border rounded-lg pl-3 pr-8 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                                     >
                                         <option value="release">Release</option>
                                         <option value="feature">Feature</option>

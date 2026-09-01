@@ -123,7 +123,10 @@ export default function Layout() {
         const handleGlobalPointerUp = (e: MouseEvent | PointerEvent) => {
             const target = e.target as HTMLElement | null;
             if (target) {
-                const interactive = target.closest('a, button, select, [role="button"]');
+                if (target.closest('select, input, textarea, option, [contenteditable="true"]')) {
+                    return;
+                }
+                const interactive = target.closest('a, button, [role="button"]');
                 if (interactive && interactive instanceof HTMLElement) {
                     setTimeout(() => {
                         interactive.blur();
@@ -132,15 +135,7 @@ export default function Layout() {
             }
         };
 
-        const handleGlobalChange = (e: Event) => {
-            const target = e.target as HTMLElement | null;
-            if (target && target.tagName === 'SELECT') {
-                target.blur();
-            }
-        };
-
         window.addEventListener('pointerup', handleGlobalPointerUp);
-        window.addEventListener('change', handleGlobalChange);
 
         const handleGlobalKeyDown = (e: KeyboardEvent) => {
             if (isSignInPage) return;
@@ -209,7 +204,6 @@ export default function Layout() {
         window.addEventListener('keydown', handleGlobalKeyDown, { capture: true });
         return () => {
             window.removeEventListener('pointerup', handleGlobalPointerUp);
-            window.removeEventListener('change', handleGlobalChange);
             window.removeEventListener('keydown', handleGlobalKeyDown, { capture: true });
         };
     }, [navigate, toggleLeftSidebar, toggleRightSidebar, location.pathname, isPrivateMode, togglePrivateMode, isSignInPage]);
@@ -316,7 +310,7 @@ export default function Layout() {
                     {(!location.pathname.startsWith('/logs') && location.pathname !== '/account') && (
                         <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8 shrink-0">
                             <div className="flex gap-2 items-center">
-                                <span>{isOnline ? 'Online' : 'Offline'} • v0.3.1</span>
+                                <span>{isOnline ? 'Online' : 'Offline'} • v0.3.2</span>
                                 <SyncIndicator status={syncStatus} />
                                 {isPrivateMode && (
                                     <button onClick={togglePrivateMode} className="ml-2 bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20 uppercase font-bold text-[9px]">
