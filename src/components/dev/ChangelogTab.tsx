@@ -502,9 +502,8 @@ export default function ChangelogTab() {
                                         value={category}
                                         onChange={(e) => {
                                             setCategory(e.target.value as ChangelogCategory);
-                                            e.target.blur();
                                         }}
-                                        className="w-full bg-bg-secondary border border-border rounded-xl px-3 py-2 text-xs text-text-primary outline-none focus:outline-none focus:ring-0 focus:border-accent"
+                                        className="w-full bg-bg-secondary border border-border rounded-xl pl-3 pr-8 py-2 text-xs text-text-primary outline-none focus:outline-none focus:ring-0 focus:border-accent"
                                     >
                                         <option value="release">Release</option>
                                         <option value="feature">Feature</option>
