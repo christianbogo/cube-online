@@ -3,6 +3,17 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/social/:userId",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(bot|facebookexternalhit|Facebot|Twitterbot|Applebot|Slackbot|WhatsApp|TelegramBot|Discordbot|SkypeUriPreview|LinkedInBot|redditbot|Pinterest|Embedly).*"
+        }
+      ],
+      "destination": "/api/meta?userId=:userId"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

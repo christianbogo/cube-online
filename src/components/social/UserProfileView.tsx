@@ -19,7 +19,8 @@ import {
     Award,
     Trash2,
     AlertTriangle,
-    Loader2
+    Loader2,
+    Share2
 } from 'lucide-react';
 
 const NETWORK_LABELS: Record<string, string> = {
@@ -71,8 +72,39 @@ export function UserProfileView({
     const [pinnedGoalIds, setPinnedGoalIds] = useState<string[]>([]);
     const [copiedId, setCopiedId] = useState(false);
     const [copiedSocialId, setCopiedSocialId] = useState<string | null>(null);
+    const [copiedShareLink, setCopiedShareLink] = useState(false);
     const [followLoading, setFollowLoading] = useState(false);
     const [blockLoading, setBlockLoading] = useState(false);
+
+    const handleShareProfile = async () => {
+        const shareCode = liveUser.shortId || liveUser.uid;
+        const shareUrl = `${window.location.origin}/social/${shareCode}`;
+        const shareData = {
+            title: `${liveUser.username || 'CubingUser'} on Cube Online`,
+            text: `Check out ${liveUser.username || 'CubingUser'}'s speedcubing records and profile on Cube Online!`,
+            url: shareUrl
+        };
+
+        if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+            try {
+                await navigator.share(shareData);
+                return;
+            } catch (err: any) {
+                if (err.name !== 'AbortError') {
+                    console.warn("Navigator share warning:", err);
+                }
+            }
+        }
+
+        // Fallback to clipboard
+        try {
+            await navigator.clipboard.writeText(shareUrl);
+            setCopiedShareLink(true);
+            setTimeout(() => setCopiedShareLink(false), 2000);
+        } catch {
+            prompt('Copy profile link:', shareUrl);
+        }
+    };
 
     // Admin Erase Profile Dual Confirmation States
     const [isEraseModalOpen, setIsEraseModalOpen] = useState(false);
@@ -108,8 +140,10 @@ export function UserProfileView({
     // Sync live user profile from Firestore
     useEffect(() => {
         setLiveUser(initialUser);
-        const unsubscribe = onSnapshot(doc(db, 'users', initialUser.uid), (docSnap) => {
-            if (docSnap.exists()) {
+        let isMounted = true;
+        const userDocRef = doc(db, 'users', initialUser.uid);
+        const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists() && isMounted) {
                 const data = docSnap.data();
                 setLiveUser({
                     uid: initialUser.uid,
@@ -127,8 +161,36 @@ export function UserProfileView({
                     isGhostMode: data.isGhostMode ?? false
                 });
             }
+        }, async (err) => {
+            console.warn("User live sync warning:", err.message);
+            try {
+                const docSnap = await getDoc(userDocRef);
+                if (docSnap.exists() && isMounted) {
+                    const data = docSnap.data();
+                    setLiveUser({
+                        uid: initialUser.uid,
+                        shortId: data.shortId || initialUser.shortId,
+                        email: data.email || initialUser.email,
+                        emailVerified: data.emailVerified ?? true,
+                        username: data.username || initialUser.username || 'CubingUser',
+                        color: data.color || initialUser.color || '#3b82f6',
+                        following: data.following || data.starredUsers || [],
+                        starredUsers: data.following || data.starredUsers || [],
+                        blockedUsers: data.blockedUsers || [],
+                        socials: data.socials || [],
+                        lastSeenAt: data.lastSeenAt,
+                        status: data.status,
+                        isGhostMode: data.isGhostMode ?? false
+                    });
+                }
+            } catch {
+                // Ignore permissions error
+            }
         });
-        return () => unsubscribe();
+        return () => {
+            isMounted = false;
+            unsubscribe();
+        };
     }, [initialUser.uid, initialUser]);
 
     // Fetch user pinned goals from users/{uid}/goals/progress
@@ -355,6 +417,18 @@ export function UserProfileView({
                                     {copiedId && <span className="text-[10px] text-green-500 font-sans font-bold">Copied!</span>}
                                 </div>
                             )}
+
+                            {/* Share Profile Chip */}
+                            <button
+                                type="button"
+                                onClick={handleShareProfile}
+                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-bg-secondary/60 border border-border/40 text-xs text-text-secondary font-mono cursor-pointer hover:text-accent hover:border-accent/40 transition-colors group"
+                                title="Share Profile Link"
+                            >
+                                <Share2 className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
+                                <span>{copiedShareLink ? 'Link Copied!' : 'Share'}</span>
+                                {copiedShareLink && <Check className="w-3 h-3 text-green-500" />}
+                            </button>
 
                             {/* Follow / Following Button Chip */}
                             {!isSelf && currentUser && (

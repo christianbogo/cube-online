@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { collection, onSnapshot, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { UserData, Solve } from '../types';
 import {
@@ -24,6 +24,11 @@ export default function Social() {
     const [allUsers, setAllUsers] = useState<UserData[]>([]);
     const [allSolves, setAllSolves] = useState<Solve[]>([]);
     const [loadingData, setLoadingData] = useState(true);
+
+    // Direct single user fetch state (for direct deep links or unauthenticated visits)
+    const [directUser, setDirectUser] = useState<UserData | null>(null);
+    const [directSolves, setDirectSolves] = useState<Solve[]>([]);
+    const [loadingDirectUser, setLoadingDirectUser] = useState(false);
 
     // Selected user for profile view
     const [manualSelectedUserUid, setManualSelectedUserUid] = useState<string | null>(null);
@@ -171,21 +176,164 @@ export default function Social() {
         };
     }, [currentUser]);
 
-    // Combined list of users (ensuring current user is included even before snapshot)
+    // Combined list of users (ensuring current user and direct user are included)
     const combinedUsers = useMemo(() => {
-        if (!currentUser) return allUsers;
-        const exists = allUsers.some(u => u.uid === currentUser.uid);
-        if (!exists) {
-            return [currentUser, ...allUsers];
+        let base = allUsers;
+        if (currentUser && !base.some(u => u.uid === currentUser.uid)) {
+            base = [currentUser, ...base];
         }
-        return allUsers;
-    }, [allUsers, currentUser]);
+        if (directUser && !base.some(u => u.uid === directUser.uid)) {
+            base = [directUser, ...base];
+        }
+        return base;
+    }, [allUsers, currentUser, directUser]);
+
+    // Direct User Lookup by route param (handles both Auth UID and Short ID directly)
+    useEffect(() => {
+        if (!routeUserId) {
+            setDirectUser(null);
+            setDirectSolves([]);
+            setLoadingDirectUser(false);
+            return;
+        }
+
+        const cleanTarget = routeUserId.replace('#', '').trim();
+        const existingInCombined = combinedUsers.find(
+            u => u.uid === cleanTarget || u.shortId?.toLowerCase() === cleanTarget.toLowerCase()
+        );
+
+        if (existingInCombined) {
+            setDirectUser(existingInCombined);
+            return;
+        }
+
+        let isMounted = true;
+        const fetchDirectProfile = async () => {
+            setLoadingDirectUser(true);
+            try {
+                // 1. Try finding by Auth UID
+                const userDocSnap = await getDoc(doc(db, 'users', cleanTarget));
+                if (userDocSnap.exists() && isMounted) {
+                    const data = userDocSnap.data();
+                    const targetUserData: UserData = {
+                        uid: userDocSnap.id,
+                        shortId: data.shortId,
+                        email: data.email || null,
+                        emailVerified: data.emailVerified ?? true,
+                        username: data.username || 'CubingUser',
+                        color: data.color || '#3b82f6',
+                        following: data.following || data.starredUsers || [],
+                        starredUsers: data.following || data.starredUsers || [],
+                        blockedUsers: data.blockedUsers || [],
+                        socials: data.socials || [],
+                        lastSeenAt: data.lastSeenAt,
+                        status: data.status,
+                        isGhostMode: data.isGhostMode ?? false
+                    };
+                    setDirectUser(targetUserData);
+
+                    // Fetch solves for this user directly
+                    const solvesSnap = await getDocs(query(collection(db, 'solves'), where('userId', '==', targetUserData.uid)));
+                    if (isMounted) {
+                        const directSolvesList: Solve[] = [];
+                        solvesSnap.docs.forEach(docSnap => {
+                            const sData = docSnap.data();
+                            directSolvesList.push({
+                                id: docSnap.id,
+                                time: sData.time,
+                                scramble: sData.scramble,
+                                date: sData.date,
+                                penalty: sData.penalty,
+                                inspectionTime: sData.inspectionTime,
+                                inspectionPenalty: sData.inspectionPenalty,
+                                sessionId: sData.sessionId,
+                                userId: sData.userId,
+                                scrambleType: sData.scrambleType || '333',
+                                anomalyApproved: sData.anomalyApproved
+                            });
+                        });
+                        setDirectSolves(directSolvesList);
+                    }
+                    return;
+                }
+
+                // 2. Try finding by shortId
+                const shortIdQuery = query(collection(db, 'users'), where('shortId', '==', cleanTarget));
+                const shortIdSnap = await getDocs(shortIdQuery);
+                if (!shortIdSnap.empty && isMounted) {
+                    const docSnap = shortIdSnap.docs[0];
+                    const data = docSnap.data();
+                    const targetUserData: UserData = {
+                        uid: docSnap.id,
+                        shortId: data.shortId,
+                        email: data.email || null,
+                        emailVerified: data.emailVerified ?? true,
+                        username: data.username || 'CubingUser',
+                        color: data.color || '#3b82f6',
+                        following: data.following || data.starredUsers || [],
+                        starredUsers: data.following || data.starredUsers || [],
+                        blockedUsers: data.blockedUsers || [],
+                        socials: data.socials || [],
+                        lastSeenAt: data.lastSeenAt,
+                        status: data.status,
+                        isGhostMode: data.isGhostMode ?? false
+                    };
+                    setDirectUser(targetUserData);
+
+                    // Fetch solves for this user directly
+                    const solvesSnap = await getDocs(query(collection(db, 'solves'), where('userId', '==', targetUserData.uid)));
+                    if (isMounted) {
+                        const directSolvesList: Solve[] = [];
+                        solvesSnap.docs.forEach(dSnap => {
+                            const sData = dSnap.data();
+                            directSolvesList.push({
+                                id: dSnap.id,
+                                time: sData.time,
+                                scramble: sData.scramble,
+                                date: sData.date,
+                                penalty: sData.penalty,
+                                inspectionTime: sData.inspectionTime,
+                                inspectionPenalty: sData.inspectionPenalty,
+                                sessionId: sData.sessionId,
+                                userId: sData.userId,
+                                scrambleType: sData.scrambleType || '333',
+                                anomalyApproved: sData.anomalyApproved
+                            });
+                        });
+                        setDirectSolves(directSolvesList);
+                    }
+                }
+            } catch (err) {
+                console.warn("Direct profile fetch warning:", err);
+            } finally {
+                if (isMounted) setLoadingDirectUser(false);
+            }
+        };
+
+        fetchDirectProfile();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [routeUserId, combinedUsers]);
 
     // Active selected user object
     const selectedUser = useMemo(() => {
         if (!selectedUserUid) return null;
-        return combinedUsers.find(u => u.uid === selectedUserUid) || null;
-    }, [selectedUserUid, combinedUsers]);
+        const cleanTarget = selectedUserUid.replace('#', '').trim().toLowerCase();
+        const found = combinedUsers.find(
+            u => u.uid === selectedUserUid ||
+                 u.shortId?.toLowerCase() === cleanTarget ||
+                 u.uid.toLowerCase() === cleanTarget
+        );
+        return found || directUser || null;
+    }, [selectedUserUid, combinedUsers, directUser]);
+
+    // Solves to pass into UserProfileView
+    const effectiveSolves = useMemo(() => {
+        if (allSolves.length > 0) return allSolves;
+        return directSolves;
+    }, [allSolves, directSolves]);
 
     // Leaderboard calculations for each timeframe table
     const solvingDaySlots = useMemo(() => {
@@ -245,12 +393,14 @@ export default function Social() {
         navigate('/social');
     };
 
-    if (loadingData && combinedUsers.length === 0) {
+    if ((loadingData && combinedUsers.length === 0) || (routeUserId && loadingDirectUser && !selectedUser)) {
         return (
             <div className="flex-1 flex items-center justify-center min-h-[400px]">
                 <div className="flex flex-col items-center gap-3 text-text-secondary">
                     <Loader2 className="w-6 h-6 animate-spin text-accent" />
-                    <span className="text-xs font-semibold">Loading cubing community...</span>
+                    <span className="text-xs font-semibold">
+                        {routeUserId ? 'Loading cuber profile...' : 'Loading cubing community...'}
+                    </span>
                 </div>
             </div>
         );
@@ -261,10 +411,20 @@ export default function Social() {
             <div className="max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col gap-8">
 
                 {/* USER PROFILE VIEW (When a user card is selected) */}
-                {selectedUser ? (
+                {routeUserId && !selectedUser ? (
+                    <div className="flex flex-col items-center justify-center min-h-[300px] gap-4 text-center animate-in fade-in duration-200">
+                        <p className="text-sm text-text-secondary">Cuber profile not found.</p>
+                        <button
+                            onClick={handleBackFromProfile}
+                            className="px-4 py-2 text-xs font-semibold text-text-primary bg-surface-elevation-1 border border-border/80 hover:bg-bg-hover rounded-xl cursor-pointer"
+                        >
+                            Return to Community Social
+                        </button>
+                    </div>
+                ) : selectedUser ? (
                     <UserProfileView
                         targetUser={selectedUser}
-                        solves={allSolves}
+                        solves={effectiveSolves}
                         allUsers={combinedUsers}
                         onBack={handleBackFromProfile}
                         onSelectUser={handleSelectUser}
