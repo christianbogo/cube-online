@@ -8,6 +8,8 @@ import RightSidebar from './RightSidebar';
 import LogsSidebar from './LogsSidebar';
 import { useSolves } from '../../contexts/SolvesContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useIsMobile } from '../../utils/useIsMobile';
+import BottomNav from './BottomNav';
 
 export default function Layout() {
     const navigate = useNavigate();
@@ -15,6 +17,13 @@ export default function Layout() {
     const { isPrivateMode, togglePrivateMode, syncStatus } = useSolves();
     const { user } = useAuth();
     const isSignInPage = location.pathname === '/account' && !user;
+    const isMobile = useIsMobile();
+
+    useEffect(() => {
+        if (isMobile && location.pathname === '/') {
+            navigate('/account', { replace: true });
+        }
+    }, [isMobile, location.pathname, navigate]);
 
     // Online presence and network status
     const [onlineCubersCount, setOnlineCubersCount] = useState<number>(0);
@@ -281,10 +290,11 @@ export default function Layout() {
     return (
         <div className="h-screen w-screen bg-bg-primary text-text-primary flex flex-col overflow-hidden font-sans">
             <Topbar />
-            <div ref={layoutRef} className="flex-1 flex overflow-hidden relative">
+            <div ref={layoutRef} className="flex-1 flex flex-col md:flex-row overflow-hidden relative pb-16 md:pb-0">
+                {/* Left Sidebar */}
                 {/* Left Sidebar */}
                 {!isSignInPage && (
-                    <div style={{ width: leftWidth }} className="flex-shrink-0 relative flex flex-col border-r border-border backdrop-blur-sm will-change-[width] z-30">
+                    <div style={{ width: leftWidth }} className="hidden md:flex flex-shrink-0 relative flex-col border-r border-border backdrop-blur-sm will-change-[width] z-30">
                         <LeftSidebar collapsed={isLeftCollapsed} onToggleCollapse={toggleLeftSidebar} />
                         <div className="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-10 group flex justify-center" onMouseDown={startResizingLeft}>
                             <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
@@ -294,11 +304,13 @@ export default function Layout() {
 
                 {/* Logs Sidebar */}
                 {location.pathname.startsWith('/logs') && (
-                    <div style={{ width: dataWidth }} className="flex-shrink-0 relative flex flex-col border-r border-border backdrop-blur-sm bg-bg-secondary will-change-[width] z-20">
+                    <div style={{ width: isMobile ? '100%' : dataWidth, height: isMobile ? 'auto' : '100%' }} className="flex-shrink-0 relative flex flex-col border-b md:border-b-0 md:border-r border-border backdrop-blur-sm bg-bg-secondary will-change-[width] z-20 transition-all">
                         <LogsSidebar onToggleCollapse={() => setDataCollapsed(!dataCollapsed)} collapsed={dataCollapsed} />
-                        <div className="absolute top-0 right-[-5px] w-2.5 h-full cursor-col-resize z-50 group flex justify-center" onMouseDown={startResizingData}>
-                            <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
-                        </div>
+                        {!isMobile && (
+                            <div className="absolute top-0 right-[-5px] w-2.5 h-full cursor-col-resize z-50 group flex justify-center" onMouseDown={startResizingData}>
+                                <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -331,7 +343,7 @@ export default function Layout() {
 
                 {/* Right Sidebar */}
                 {!['/account', '/logs', '/keybinds', '/goals', '/social', '/dev', '/privacy'].some(p => location.pathname.startsWith(p)) && (
-                    <div style={{ width: rightWidth }} className="flex-shrink-0 relative flex flex-col backdrop-blur-sm will-change-[width] border-l border-border z-20">
+                    <div style={{ width: rightWidth }} className="hidden md:flex flex-shrink-0 relative flex-col backdrop-blur-sm will-change-[width] border-l border-border z-20">
                         <div className="absolute top-0 left-[-5px] w-2.5 h-full cursor-col-resize z-50 group flex justify-center" onMouseDown={startResizingRight}>
                             <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
                         </div>
@@ -339,6 +351,7 @@ export default function Layout() {
                     </div>
                 )}
             </div>
+            <BottomNav />
         </div>
     );
 }

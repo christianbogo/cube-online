@@ -235,7 +235,7 @@ export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, colla
     return (
         <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-sm overflow-hidden min-w-0 font-sans">
             {/* Header Area: Event & Grouping Selectors in same row */}
-            <div className="grid grid-cols-2 border-b border-border/50 bg-bg-secondary/50 backdrop-blur-sm sticky top-0 z-10 text-text-primary divide-x divide-border/40">
+            <div className="grid grid-cols-1 md:grid-cols-2 border-b border-border/50 bg-bg-secondary/50 backdrop-blur-sm sticky top-0 z-10 text-text-primary divide-y md:divide-y-0 md:divide-x divide-border/40">
                 {/* Event Selector */}
                 <div className="p-2 flex items-center justify-center relative group">
                     <select
@@ -254,7 +254,7 @@ export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, colla
                 </div>
 
                 {/* Grouping Selector */}
-                <div className="p-2 flex items-center justify-center relative group">
+                <div className="hidden md:flex p-2 items-center justify-center relative group">
                     <select
                         value={grouping}
                         onChange={(e) => {
@@ -274,7 +274,7 @@ export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, colla
             </div>
 
             {/* Sub-Header: Full Row Stat Filter Dropdown */}
-            <div className="px-3 py-2 border-b border-border/30 bg-bg-secondary/30 relative flex items-center">
+            <div className="hidden md:flex px-3 py-2 border-b border-border/30 bg-bg-secondary/30 relative items-center">
                 <select
                     value={statColumn}
                     onChange={(e) => {
@@ -293,7 +293,7 @@ export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, colla
             </div>
 
             {/* List Content */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+            <div className="hidden md:block flex-1 overflow-y-auto custom-scrollbar relative">
                 {displayItems.length === 0 ? (
                     <div className="p-8 text-center text-text-secondary italic text-xs">No data found.</div>
                 ) : (
@@ -356,7 +356,7 @@ export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, colla
             </div>
 
             {/* Footer Stats Table */}
-            <div className="border-t border-border bg-bg-secondary p-3 flex flex-col gap-2">
+            <div className="hidden md:flex border-t border-border bg-bg-secondary p-3 flex-col gap-2">
                 <div className="flex items-center justify-between mb-1">
                     <div className="text-[10px] uppercase font-bold text-text-secondary">
                         {selectedKeys.size > 0 ? `Selected (${selectedKeys.size})` : 'All Solves'}

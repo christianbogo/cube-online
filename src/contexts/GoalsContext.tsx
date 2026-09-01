@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef, type ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import { useSolves } from './SolvesContext';
+import { useIsMobile } from '../utils/useIsMobile';
 import { doc, setDoc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { GoalProgress, GoalCategory, GlobalGoalsStats, UserGoalsDoc } from '../types/goals';
@@ -52,6 +53,7 @@ const GoalsContext = createContext<GoalsContextType | undefined>(undefined);
 
 export function GoalsProvider({ children }: { children: ReactNode }) {
     const location = useLocation();
+    const isMobile = useIsMobile();
     const { user } = useAuth();
     const { solves, isPrivateMode } = useSolves();
 
@@ -492,7 +494,7 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
             {children}
 
             {/* Visual Cue when user earns a goal */}
-            {recentlyEarnedGoal && (
+            {recentlyEarnedGoal && !isMobile && (
                 <div className="fixed top-16 right-6 z-50 animate-in slide-in-from-top-4 fade-in duration-300 pointer-events-auto">
                     <div className="bg-bg-secondary/95 backdrop-blur-md border border-border/80 shadow-2xl rounded-xl p-3 flex items-center gap-3 min-w-[260px] max-w-sm">
                         <div className="w-8 h-8 rounded-lg bg-bg-tertiary border border-border/70 flex items-center justify-center text-text-primary shrink-0">

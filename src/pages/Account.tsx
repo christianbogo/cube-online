@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useIsMobile } from '../utils/useIsMobile';
 import { useLocation, Link } from 'react-router-dom';
 import {
     Check, X, LogOut, Info, Trash2, Download, TriangleAlert, Loader2, RotateCcw, ShieldCheck, ChevronLeft, ChevronRight
@@ -39,6 +40,7 @@ export default function Account() {
     const { settings, updateSettings } = useSettings();
     const { user, emailSignUp, emailSignIn, resendVerificationEmail, logout, updateGhostMode } = useAuth();
     const location = useLocation();
+    const isMobile = useIsMobile();
 
     // Profile State
     const [username, setUsername] = useState('');
@@ -413,11 +415,10 @@ export default function Account() {
     return (
         <div className="flex h-full w-full bg-bg-primary overflow-hidden relative">
             <div className="flex-1 flex flex-col h-full bg-bg-primary min-w-0 transition-all duration-300 relative z-0">
-                {/* Header (Mobile) - only when logged in */}
-                {user && (
-                    <header className="h-14 border-b border-border flex items-center justify-between px-4 bg-bg-secondary md:hidden shrink-0">
-                        <h1 className="text-xl font-bold text-text-primary">Account</h1>
-                    </header>
+                {isMobile && user && (
+                    <div className="text-xs text-text-secondary/70 text-center py-2 bg-bg-secondary border-b border-border/50 shrink-0">
+                        Note: Please use a computer to access timing features.
+                    </div>
                 )}
 
                 <main className={`flex-1 overflow-y-auto no-scrollbar w-full ${user ? 'max-w-3xl mx-auto p-4 md:p-8' : 'p-4 sm:p-6'}`}>
@@ -647,8 +648,8 @@ export default function Account() {
                                     tabs={[
                                         { label: "Connections", id: "connections", content: <CubingFriendsTab /> },
                                         { label: "Public Profile", id: "socials", content: <SocialsTab /> },
-                                        { label: "Timer Settings", id: "timer", content: <TimerSettingsTab /> },
-                                        { label: "Danger Zone", id: "danger", content: <DangerZoneTab /> },
+                                        ...(isMobile ? [] : [{ label: "Timer Settings", id: "timer", content: <TimerSettingsTab /> }]),
+                                        ...(isMobile ? [] : [{ label: "Danger Zone", id: "danger", content: <DangerZoneTab /> }]),
                                     ]}
                                 />
                             </div>

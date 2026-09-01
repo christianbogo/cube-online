@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import { useIsMobile } from '../utils/useIsMobile';
 import { useSearchParams } from 'react-router-dom';
 import { Table } from '../components';
 import {
@@ -33,6 +34,7 @@ export default function Logs() {
     const { settings } = useSettings();
     const { user } = useAuth();
     const [searchParams] = useSearchParams();
+    const isMobile = useIsMobile();
 
     // -- State: Sorting --
     const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>(() => {
@@ -530,6 +532,7 @@ export default function Logs() {
                 {/* Viewer Pane (Side Panel) */}
                 {selectedSolve && (
                     <SidebarPane
+                        isMobile={isMobile}
                         solve={selectedSolve}
                         onClose={() => setSelectedSolveId(null)}
                         allSolves={filteredSolves}
@@ -542,13 +545,13 @@ export default function Logs() {
     );
 }
 
-function SidebarPane({ solve, onClose, allSolves, onAction, selectedSolveId }: { solve: Solve, onClose: () => void, allSolves: Solve[], onAction: any, selectedSolveId: string | null }) {
+function SidebarPane({ solve, onClose, allSolves, onAction, selectedSolveId, isMobile }: { solve: Solve, onClose: () => void, allSolves: Solve[], onAction: any, selectedSolveId: string | null, isMobile?: boolean }) {
     const [width, setWidth] = useState(350);
 
     return (
         <div
-            className="flex flex-col bg-bg-secondary border-l border-border h-full overflow-y-auto animate-in slide-in-from-right duration-300 shrink-0 relative z-20"
-            style={{ width: width }}
+            className={`flex flex-col bg-bg-secondary h-full overflow-y-auto animate-in slide-in-from-right duration-300 shrink-0 ${isMobile ? 'fixed inset-0 z-[70] pb-[env(safe-area-inset-bottom)]' : 'border-l border-border relative z-20'}`}
+            style={{ width: isMobile ? '100%' : width }}
         >
             {/* Resize Handle */}
             <div

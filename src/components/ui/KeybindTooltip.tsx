@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useIsMobile } from '../../utils/useIsMobile';
 import { useLocation } from 'react-router-dom';
 import { X, EyeOff } from 'lucide-react';
 import type { TimerState } from '../../types';
@@ -90,6 +91,7 @@ interface KeybindTooltipProps {
 
 export default function KeybindTooltip({ timerState, totalSolves }: KeybindTooltipProps) {
     const location = useLocation();
+    const isMobile = useIsMobile();
     const [currentTip, setCurrentTip] = useState<TooltipItem | null>(null);
     const [isVisible, setIsVisible] = useState(false);
     const [isDisabled, setIsDisabled] = useState(() => isTooltipsDisabled());
@@ -108,7 +110,7 @@ export default function KeybindTooltip({ timerState, totalSolves }: KeybindToolt
     }, []);
 
     const showNextTooltip = useCallback(() => {
-        if (isDisabled || isTooltipsDisabled() || location.pathname !== '/') return;
+        if (isDisabled || isTooltipsDisabled() || location.pathname !== '/' || isMobile) return;
 
         const currentIndexStr = localStorage.getItem('cube-keybind-tooltips-index') || '0';
         let index = parseInt(currentIndexStr, 10);

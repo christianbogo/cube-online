@@ -261,7 +261,7 @@ export function FriendSidebar() {
 
     return (
         <div
-            className="bg-bg-secondary border-l border-border flex flex-col shrink-0 relative select-none transition-all duration-200"
+            className="hidden lg:flex bg-bg-secondary border-l border-border flex-col shrink-0 relative select-none transition-all duration-200"
             style={{ width: currentWidth }}
         >
             {/* Resize Handle */}
