@@ -98,12 +98,17 @@ export function UserProfileView({
             el.setAttribute(attr, value);
         };
 
-        const ogImageUrl = `${window.location.origin}/api/og?name=${encodeURIComponent(username)}&color=${encodeURIComponent(liveUser.color || '#3b82f6')}&code=${encodeURIComponent(cleanCode)}`;
+        const removeMeta = (selector: string) => {
+            const el = document.querySelector(selector);
+            if (el) el.remove();
+        };
 
         updateMeta('meta[property="og:title"]', 'content', pageTitle);
-        updateMeta('meta[property="og:image"]', 'content', ogImageUrl);
         updateMeta('meta[name="twitter:title"]', 'content', pageTitle);
-        updateMeta('meta[name="twitter:image"]', 'content', ogImageUrl);
+
+        // Remove og:image and twitter:image so profile sharing renders the compact bubble with just favicon
+        removeMeta('meta[property="og:image"]');
+        removeMeta('meta[name="twitter:image"]');
 
         return () => {
             document.title = previousTitle || 'Cube Online';
@@ -112,7 +117,7 @@ export function UserProfileView({
             updateMeta('meta[name="twitter:title"]', 'content', 'Cube Online');
             updateMeta('meta[name="twitter:image"]', 'content', `${window.location.origin}/og-image.png`);
         };
-    }, [liveUser.username, liveUser.shortId, liveUser.color]);
+    }, [liveUser.username, liveUser.shortId]);
 
     const handleShareProfile = async () => {
         const shareCode = liveUser.shortId || liveUser.uid;

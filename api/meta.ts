@@ -1,8 +1,7 @@
 export default async function handler(req: any, res: any) {
-    const { userId, name, color, code } = req.query || {};
+    const { userId, name, code } = req.query || {};
 
     let profileName = (name && typeof name === 'string') ? name.trim() : '';
-    let profileColor = (color && typeof color === 'string') ? color : '#3b82f6';
     let profileCode = (code && typeof code === 'string') ? code.replace('#', '').trim() : '';
 
     // If userId provided and name/code not already in query, fetch from Firestore REST API
@@ -18,7 +17,6 @@ export default async function handler(req: any, res: any) {
                 const docData: any = await response.json();
                 if (docData && docData.fields) {
                     profileName = docData.fields.username?.stringValue || 'CubingUser';
-                    profileColor = docData.fields.color?.stringValue || '#3b82f6';
                     profileCode = docData.fields.shortId?.stringValue || '';
                 }
             } else {
@@ -47,7 +45,6 @@ export default async function handler(req: any, res: any) {
                     if (Array.isArray(qResult) && qResult[0]?.document?.fields) {
                         const fields = qResult[0].document.fields;
                         profileName = fields.username?.stringValue || 'CubingUser';
-                        profileColor = fields.color?.stringValue || '#3b82f6';
                         profileCode = fields.shortId?.stringValue || cleanId;
                     }
                 }
@@ -57,23 +54,19 @@ export default async function handler(req: any, res: any) {
         }
     }
 
+    const isProfile = Boolean(userId) || Boolean(profileName && profileName !== 'Cube Online');
     const displayName = profileName || 'Cube Online';
     const cleanCode = profileCode ? profileCode.replace('#', '').trim() : '';
     // Formatted strictly as "[name]#[code]" for profiles without adding "Cube Online"
     const title = cleanCode ? `${displayName}#${cleanCode}` : (profileName ? displayName : 'Cube Online');
-    const description = `View speedcubing personal records, goal progress, and community solves on Cube Online.`;
-
-    // Dynamic OG image URL
-    const ogParams = new URLSearchParams();
-    if (displayName) ogParams.set('name', displayName);
-    if (profileColor) ogParams.set('color', profileColor);
-    if (cleanCode) ogParams.set('code', cleanCode);
+    const description = isProfile 
+        ? `View speedcubing personal records, goal progress, and community solves on Cube Online.`
+        : `The modern speedcubing timer and community platform.`;
 
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'cubeonline.org';
     const protocol = (req.headers['x-forwarded-proto'] === 'http') ? 'http' : 'https';
     const baseUrl = `${protocol}://${host}`;
 
-    const ogImageUrl = `${baseUrl}/api/og?${ogParams.toString()}`;
     const targetUrl = `${baseUrl}/social${userId ? `/${encodeURIComponent(userId)}` : ''}`;
 
     const html = `<!DOCTYPE html>
@@ -84,27 +77,31 @@ export default async function handler(req: any, res: any) {
   <meta name="description" content="${escapeHtml(description)}" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- Icons -->
+  <!-- Icons (Transparent Favicon for compact profile bubble previews) -->
   <link rel="icon" type="image/png" sizes="48x48" href="${baseUrl}/favicon.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="${baseUrl}/apple-touch-icon.png" />
   <meta name="theme-color" content="#ffffff" />
 
   <!-- Open Graph / iMessage / Facebook -->
-  <meta property="og:type" content="profile" />
+  <meta property="og:type" content="${isProfile ? 'profile' : 'website'}" />
   <meta property="og:site_name" content="Cube Online" />
   <meta property="og:title" content="${escapeHtml(title)}" />
   <meta property="og:description" content="${escapeHtml(description)}" />
-  <meta property="og:image" content="${escapeHtml(ogImageUrl)}" />
+  ${!isProfile ? `
+  <meta property="og:image" content="${baseUrl}/og-image.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:image:type" content="image/png" />
+  ` : ''}
   <meta property="og:url" content="${escapeHtml(targetUrl)}" />
 
   <!-- Twitter -->
-  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:card" content="${isProfile ? 'summary' : 'summary_large_image'}" />
   <meta name="twitter:title" content="${escapeHtml(title)}" />
   <meta name="twitter:description" content="${escapeHtml(description)}" />
-  <meta name="twitter:image" content="${escapeHtml(ogImageUrl)}" />
+  ${!isProfile ? `
+  <meta name="twitter:image" content="${baseUrl}/og-image.png" />
+  ` : ''}
 
   <!-- Redirect real browser visitors to the SPA route immediately -->
   <script>
@@ -112,7 +109,7 @@ export default async function handler(req: any, res: any) {
   </script>
 </head>
 <body style="background-color: #ffffff; color: #0f172a; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
-  <p>Loading profile... <a href="${escapeHtml(targetUrl)}" style="color: #f05224;">Click here if not redirected</a>.</p>
+  <p>Loading... <a href="${escapeHtml(targetUrl)}" style="color: #f05224;">Click here if not redirected</a>.</p>
 </body>
 </html>`;
 
