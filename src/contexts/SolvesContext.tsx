@@ -160,9 +160,6 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
 
     const syncToCloud = async (solve: Solve, action: 'add' | 'update' | 'delete') => {
         if (!user || isPrivateMode) return;
-        if (action === 'add') {
-            console.log('Uploading Solve:', solve);
-        }
         setSyncStatus('syncing');
 
         try {

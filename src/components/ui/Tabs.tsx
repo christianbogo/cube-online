@@ -16,13 +16,13 @@ export default function Tabs({ tabs, defaultTab }: TabsProps) {
 
     return (
         <div className="w-full h-full flex flex-col">
-            <div className="flex border-b border-border mb-4">
+            <div className="flex border-b border-border mb-4 w-full">
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
                         className={`
-              px-4 py-2 text-sm font-medium transition-colors relative
+              flex-1 px-4 py-2 text-sm font-medium transition-colors relative text-center cursor-pointer
               ${activeTab === tab.id
                                 ? 'text-accent'
                                 : 'text-text-secondary hover:text-text-primary'

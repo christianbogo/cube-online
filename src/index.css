@@ -135,3 +135,17 @@ textarea:focus {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Safe area utilities for mobile devices (Dynamic Island, notches, home indicator) */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.h-topbar {
+  height: calc(3.5rem + env(safe-area-inset-top, 0px));
+}
+.h-bottomnav {
+  height: calc(4rem + env(safe-area-inset-bottom, 0px));
+}

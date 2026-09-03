@@ -31,6 +31,7 @@ export interface UserData {
     lastSeenAt?: string;
     status?: string;
     isGhostMode?: boolean;
+    pinnedGoalIds?: string[];
 }
 
 export interface AuthContextType {

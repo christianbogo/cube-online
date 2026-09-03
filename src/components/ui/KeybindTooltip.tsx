@@ -29,9 +29,9 @@ export const KEYBIND_TOOLTIPS: TooltipItem[] = [
     },
     {
         id: 'side-puzzles',
-        badge: 'S • P • M • C • 1',
+        badge: 'K • P • M • C • 1',
         title: 'Puzzle Hotkeys',
-        description: 'Press S for Skewb, P for Pyra, M for Mega, C for Clock, or 1 for Sq-1.'
+        description: 'Press K for Skewb, P for Pyra, M for Mega, C for Clock, or 1 for Sq-1.'
     },
     {
         id: 'post-solve-penalty',

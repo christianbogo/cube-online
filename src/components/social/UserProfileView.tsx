@@ -69,7 +69,7 @@ export function UserProfileView({
 }: UserProfileViewProps) {
     const { user: currentUser, toggleFollowUser, toggleBlockUser } = useAuth();
     const [liveUser, setLiveUser] = useState<UserData>(initialUser);
-    const [pinnedGoalIds, setPinnedGoalIds] = useState<string[]>([]);
+    const [pinnedGoalIds, setPinnedGoalIds] = useState<string[]>(() => initialUser.pinnedGoalIds || []);
     const [copiedId, setCopiedId] = useState(false);
     const [copiedSocialId, setCopiedSocialId] = useState<string | null>(null);
     const [copiedShareLink, setCopiedShareLink] = useState(false);
@@ -204,8 +204,12 @@ export function UserProfileView({
                     socials: data.socials || [],
                     lastSeenAt: data.lastSeenAt,
                     status: data.status,
-                    isGhostMode: data.isGhostMode ?? false
+                    isGhostMode: data.isGhostMode ?? false,
+                    pinnedGoalIds: Array.isArray(data.pinnedGoalIds) ? data.pinnedGoalIds : (initialUser.pinnedGoalIds || [])
                 });
+                if (Array.isArray(data.pinnedGoalIds)) {
+                    setPinnedGoalIds(data.pinnedGoalIds);
+                }
             }
         }, async (err) => {
             console.warn("User live sync warning:", err.message);
@@ -226,8 +230,12 @@ export function UserProfileView({
                         socials: data.socials || [],
                         lastSeenAt: data.lastSeenAt,
                         status: data.status,
-                        isGhostMode: data.isGhostMode ?? false
+                        isGhostMode: data.isGhostMode ?? false,
+                        pinnedGoalIds: Array.isArray(data.pinnedGoalIds) ? data.pinnedGoalIds : (initialUser.pinnedGoalIds || [])
                     });
+                    if (Array.isArray(data.pinnedGoalIds)) {
+                        setPinnedGoalIds(data.pinnedGoalIds);
+                    }
                 }
             } catch {
                 // Ignore permissions error
@@ -636,10 +644,10 @@ export function UserProfileView({
                                         style={{ backgroundColor: u.color || '#3b82f6' }}
                                     />
                                     <div className="flex flex-col min-w-0">
-                                        <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors">
+                                        <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors leading-tight">
                                             {u.username || 'CubingUser'}
                                         </span>
-                                        <span className="text-[10px] text-text-secondary font-mono truncate">
+                                        <span className="text-[10px] text-text-secondary font-mono truncate leading-none">
                                             #{u.shortId || '????'}
                                         </span>
                                     </div>
@@ -672,10 +680,10 @@ export function UserProfileView({
                                         style={{ backgroundColor: u.color || '#3b82f6' }}
                                     />
                                     <div className="flex flex-col min-w-0">
-                                        <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors">
+                                        <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors leading-tight">
                                             {u.username || 'CubingUser'}
                                         </span>
-                                        <span className="text-[10px] text-text-secondary font-mono truncate">
+                                        <span className="text-[10px] text-text-secondary font-mono truncate leading-none">
                                             #{u.shortId || '????'}
                                         </span>
                                     </div>

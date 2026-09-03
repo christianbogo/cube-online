@@ -106,9 +106,28 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
     }, [user]);
 
     const [pinnedGoalIds, setPinnedGoalIds] = useState<string[]>(() => {
+        if (user && Array.isArray(user.pinnedGoalIds) && user.pinnedGoalIds.length > 0) {
+            return user.pinnedGoalIds;
+        }
         const stored = localStorage.getItem('cutter-cubing-pinned-goals');
         return stored ? JSON.parse(stored) : [];
     });
+
+    const prevUserIdRef = useRef<string | null>(user?.uid || null);
+
+    useEffect(() => {
+        if (user && Array.isArray(user.pinnedGoalIds) && user.pinnedGoalIds.length > 0) {
+            queueMicrotask(() => {
+                setPinnedGoalIds(prev => {
+                    if (prev.length === 0) {
+                        localStorage.setItem('cutter-cubing-pinned-goals', JSON.stringify(user.pinnedGoalIds));
+                        return user.pinnedGoalIds!;
+                    }
+                    return prev;
+                });
+            });
+        }
+    }, [user]);
 
     const [usedKeybinds, setUsedKeybinds] = useState<string[]>(() => {
         const stored = localStorage.getItem('cutter-cubing-used-keybinds');
@@ -233,11 +252,19 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
     // Load initial user goals document from Firestore when auth loads
     useEffect(() => {
         if (!user) {
-            setPinnedGoalIds([]);
+            // Only clear state if user explicitly logged out from an active session
+            if (prevUserIdRef.current !== null) {
+                localStorage.removeItem('cutter-cubing-pinned-goals');
+                queueMicrotask(() => {
+                    setPinnedGoalIds([]);
+                });
+            }
+            prevUserIdRef.current = null;
             lastSyncedGoalsRef.current = null;
             return;
         }
 
+        prevUserIdRef.current = user.uid;
         const userGoalsRef = doc(db, 'users', user.uid, 'goals', 'progress');
         const unsubscribe = onSnapshot(userGoalsRef, (snapshot) => {
             if (snapshot.exists()) {
@@ -245,6 +272,10 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
                 if (Array.isArray(data.pinnedGoalIds)) {
                     setPinnedGoalIds(data.pinnedGoalIds);
                     localStorage.setItem('cutter-cubing-pinned-goals', JSON.stringify(data.pinnedGoalIds));
+                } else if (Array.isArray(user.pinnedGoalIds) && user.pinnedGoalIds.length > 0) {
+                    setPinnedGoalIds(user.pinnedGoalIds);
+                    localStorage.setItem('cutter-cubing-pinned-goals', JSON.stringify(user.pinnedGoalIds));
+                    setDoc(userGoalsRef, { pinnedGoalIds: user.pinnedGoalIds }, { merge: true }).catch(() => {});
                 }
                 if (data.categoryFilter) {
                     setSelectedCategoryState(data.categoryFilter);
@@ -254,6 +285,9 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
                     setStatusFilterState(data.statusFilter);
                     localStorage.setItem('cutter-cubing-goals-status', data.statusFilter);
                 }
+            } else if (Array.isArray(user.pinnedGoalIds) && user.pinnedGoalIds.length > 0) {
+                setPinnedGoalIds(user.pinnedGoalIds);
+                localStorage.setItem('cutter-cubing-pinned-goals', JSON.stringify(user.pinnedGoalIds));
             }
         }, (err) => {
             console.warn("Goals snapshot warning:", err.message);
@@ -281,6 +315,11 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
         return () => unsubscribe();
     }, [user]);
 
+    const pinnedGoalIdsRef = useRef(pinnedGoalIds);
+    useEffect(() => {
+        pinnedGoalIdsRef.current = pinnedGoalIds;
+    }, [pinnedGoalIds]);
+
     // Sync user progress & update global stats transactionally
     useEffect(() => {
         if (!user || isPrivateMode) return;
@@ -301,16 +340,6 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
 
         const syncGoals = async () => {
             try {
-                const userDocPayload: UserGoalsDoc = {
-                    completedGoalIds: currentCompletedIds,
-                    pinnedGoalIds,
-                    totalCompleted: currentCompletedCount,
-                    completionPercentage: overallCompletionPercent,
-                    categoryFilter: selectedCategory,
-                    statusFilter: statusFilter,
-                    updatedAt: new Date().toISOString()
-                };
-
                 // Transactionally update both user document and global stats
                 await runTransaction(db, async (transaction) => {
                     const userSnap = await transaction.get(userGoalsRef);
@@ -333,13 +362,39 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
 
                     let prevCompletedIds: string[] = [];
                     let prevCount: number | null = null;
+                    let effectivePinnedGoalIds = pinnedGoalIdsRef.current;
 
                     if (!userSnap.exists()) {
                         statsData.totalUsers = (statsData.totalUsers || 0) + 1;
+                        if (effectivePinnedGoalIds.length === 0 && Array.isArray(user.pinnedGoalIds) && user.pinnedGoalIds.length > 0) {
+                            effectivePinnedGoalIds = user.pinnedGoalIds;
+                        }
                     } else {
                         const prevData = userSnap.data() as Partial<UserGoalsDoc>;
                         prevCompletedIds = Array.isArray(prevData.completedGoalIds) ? prevData.completedGoalIds : [];
                         prevCount = typeof prevData.totalCompleted === 'number' ? prevData.totalCompleted : prevCompletedIds.length;
+
+                        // Preserve existing pinned goals in Firestore if local state is empty
+                        if (effectivePinnedGoalIds.length === 0 && Array.isArray(prevData.pinnedGoalIds) && prevData.pinnedGoalIds.length > 0) {
+                            effectivePinnedGoalIds = prevData.pinnedGoalIds;
+                        } else if (effectivePinnedGoalIds.length === 0 && Array.isArray(user.pinnedGoalIds) && user.pinnedGoalIds.length > 0) {
+                            effectivePinnedGoalIds = user.pinnedGoalIds;
+                        }
+                    }
+
+                    const userDocPayload: UserGoalsDoc = {
+                        completedGoalIds: currentCompletedIds,
+                        pinnedGoalIds: effectivePinnedGoalIds,
+                        totalCompleted: currentCompletedCount,
+                        completionPercentage: overallCompletionPercent,
+                        categoryFilter: selectedCategory,
+                        statusFilter: statusFilter,
+                        updatedAt: new Date().toISOString()
+                    };
+
+                    if (effectivePinnedGoalIds.length > 0 && pinnedGoalIdsRef.current.length === 0) {
+                        setPinnedGoalIds(effectivePinnedGoalIds);
+                        localStorage.setItem('cutter-cubing-pinned-goals', JSON.stringify(effectivePinnedGoalIds));
                     }
 
                     const prevCompletedSet = new Set(prevCompletedIds);
@@ -407,7 +462,7 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
 
         const timeout = setTimeout(syncGoals, 1000);
         return () => clearTimeout(timeout);
-    }, [user, isPrivateMode, completedGoalIds, overallCompletionPercent, pinnedGoalIds, selectedCategory, statusFilter]);
+    }, [user, isPrivateMode, completedGoalIds, overallCompletionPercent, selectedCategory, statusFilter]);
 
     const pinGoal = useCallback(async (goalId: string): Promise<boolean> => {
         if (pinnedGoalIds.includes(goalId)) return true;
@@ -419,10 +474,25 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
         setPinnedGoalIds(next);
         localStorage.setItem('cutter-cubing-pinned-goals', JSON.stringify(next));
 
+        const cachedProfileStr = localStorage.getItem('cached_user_profile');
+        if (cachedProfileStr) {
+            try {
+                const cached = JSON.parse(cachedProfileStr);
+                cached.pinnedGoalIds = next;
+                localStorage.setItem('cached_user_profile', JSON.stringify(cached));
+            } catch (err) {
+                console.debug("Failed to update cached profile:", err);
+            }
+        }
+
         if (user) {
             try {
+                const userDocRef = doc(db, 'users', user.uid);
                 const userGoalsRef = doc(db, 'users', user.uid, 'goals', 'progress');
-                await setDoc(userGoalsRef, { pinnedGoalIds: next }, { merge: true });
+                await Promise.all([
+                    setDoc(userDocRef, { pinnedGoalIds: next }, { merge: true }),
+                    setDoc(userGoalsRef, { pinnedGoalIds: next }, { merge: true })
+                ]);
             } catch (e) {
                 console.error("Failed to save pinned goal:", e);
             }
@@ -435,10 +505,25 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
         setPinnedGoalIds(next);
         localStorage.setItem('cutter-cubing-pinned-goals', JSON.stringify(next));
 
+        const cachedProfileStr = localStorage.getItem('cached_user_profile');
+        if (cachedProfileStr) {
+            try {
+                const cached = JSON.parse(cachedProfileStr);
+                cached.pinnedGoalIds = next;
+                localStorage.setItem('cached_user_profile', JSON.stringify(cached));
+            } catch (err) {
+                console.debug("Failed to update cached profile:", err);
+            }
+        }
+
         if (user) {
             try {
+                const userDocRef = doc(db, 'users', user.uid);
                 const userGoalsRef = doc(db, 'users', user.uid, 'goals', 'progress');
-                await setDoc(userGoalsRef, { pinnedGoalIds: next }, { merge: true });
+                await Promise.all([
+                    setDoc(userDocRef, { pinnedGoalIds: next }, { merge: true }),
+                    setDoc(userGoalsRef, { pinnedGoalIds: next }, { merge: true })
+                ]);
             } catch (e) {
                 console.error("Failed to unpin goal:", e);
             }

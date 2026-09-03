@@ -290,7 +290,7 @@ export default function Layout() {
     return (
         <div className="h-screen w-screen bg-bg-primary text-text-primary flex flex-col overflow-hidden font-sans">
             <Topbar />
-            <div ref={layoutRef} className="flex-1 flex flex-col md:flex-row overflow-hidden relative pb-16 md:pb-0">
+            <div ref={layoutRef} className="flex-1 flex flex-col md:flex-row overflow-hidden relative pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-0">
                 {/* Left Sidebar */}
                 {/* Left Sidebar */}
                 {!isSignInPage && (
@@ -316,7 +316,7 @@ export default function Layout() {
 
                 {/* Main Content */}
                 <main className="flex-1 flex flex-col relative bg-bg-primary min-w-0 overflow-hidden">
-                    <div className={`flex-1 w-full ${(location.pathname.startsWith('/logs') || location.pathname === '/account' || location.pathname === '/') ? (location.pathname === '/' ? 'overflow-hidden pt-3 px-3 pb-2 flex flex-col' : 'overflow-hidden p-0 flex flex-col') : 'p-6 overflow-y-auto custom-scrollbar'}`}>
+                    <div className={`flex-1 w-full ${(location.pathname.startsWith('/logs') || location.pathname === '/account' || location.pathname === '/') ? (location.pathname === '/' ? 'overflow-hidden pt-3 px-3 pb-2 flex flex-col' : 'overflow-hidden p-0 flex flex-col') : 'p-3 sm:p-6 overflow-y-auto custom-scrollbar'}`}>
                         <Outlet />
                     </div>
                     {(!location.pathname.startsWith('/logs') && location.pathname !== '/account') && (

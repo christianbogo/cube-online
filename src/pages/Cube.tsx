@@ -456,7 +456,7 @@ export default function Cube() {
             if (e.key === 'c' || e.key === 'C') { updateSettings({ scrambleType: 'clock' }); return; }
             if (e.key === 'm' || e.key === 'M') { updateSettings({ scrambleType: 'minx' }); return; }
             if (e.key === 'p' || e.key === 'P') { updateSettings({ scrambleType: 'pyram' }); return; }
-            if (e.key === 's' || e.key === 'S') { updateSettings({ scrambleType: 'skewb' }); return; }
+            if (e.key === 'k' || e.key === 'K') { updateSettings({ scrambleType: 'skewb' }); return; }
         }
     }, [timerState, settings.solveInspection, finishSolve, solves, updateSolve, updateSettings]);
 

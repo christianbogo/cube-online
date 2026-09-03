@@ -57,7 +57,8 @@ export default function Social() {
                     socials: data.socials || [],
                     lastSeenAt: data.lastSeenAt,
                     status: data.status,
-                    isGhostMode: data.isGhostMode ?? false
+                    isGhostMode: data.isGhostMode ?? false,
+                    pinnedGoalIds: Array.isArray(data.pinnedGoalIds) ? data.pinnedGoalIds : []
                 });
             });
             setAllUsers(usersList);
@@ -83,7 +84,8 @@ export default function Social() {
                         socials: data.socials || [],
                         lastSeenAt: data.lastSeenAt,
                         status: data.status,
-                        isGhostMode: data.isGhostMode ?? false
+                        isGhostMode: data.isGhostMode ?? false,
+                        pinnedGoalIds: Array.isArray(data.pinnedGoalIds) ? data.pinnedGoalIds : []
                     });
                 });
                 setAllUsers(usersList);
@@ -210,7 +212,8 @@ export default function Social() {
                         socials: data.socials || [],
                         lastSeenAt: data.lastSeenAt,
                         status: data.status,
-                        isGhostMode: data.isGhostMode ?? false
+                        isGhostMode: data.isGhostMode ?? false,
+                        pinnedGoalIds: Array.isArray(data.pinnedGoalIds) ? data.pinnedGoalIds : []
                     };
                     setDirectUser(targetUserData);
 
@@ -258,7 +261,8 @@ export default function Social() {
                         socials: data.socials || [],
                         lastSeenAt: data.lastSeenAt,
                         status: data.status,
-                        isGhostMode: data.isGhostMode ?? false
+                        isGhostMode: data.isGhostMode ?? false,
+                        pinnedGoalIds: Array.isArray(data.pinnedGoalIds) ? data.pinnedGoalIds : []
                     };
                     setDirectUser(targetUserData);
 
@@ -390,7 +394,7 @@ export default function Social() {
 
     return (
         <div className="flex-1 flex flex-col min-h-0 bg-bg-primary overflow-y-auto custom-scrollbar select-none">
-            <div className="max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col gap-8">
+            <div className="max-w-7xl w-full mx-auto px-2.5 py-4 sm:p-4 md:p-6 flex flex-col gap-8">
 
                 {/* USER PROFILE VIEW (When a user card is selected) */}
                 {routeUserId && !selectedUser ? (

@@ -60,9 +60,9 @@ export default function Goals() {
         }
     };
 
-    // Filter goals
+    // Filter and sort goals
     const filteredGoals = useMemo(() => {
-        return goalsProgress.filter(goal => {
+        const filtered = goalsProgress.filter(goal => {
             // Category filter
             if (selectedCategory !== 'all' && goal.category !== selectedCategory) {
                 return false;
@@ -74,6 +74,12 @@ export default function Goals() {
 
             return true;
         });
+
+        if (selectedCategory === 'all') {
+            return [...filtered].sort((a, b) => b.percentCompleted - a.percentCompleted);
+        }
+
+        return filtered;
     }, [goalsProgress, selectedCategory, statusFilter]);
 
     // Category progress breakdown
@@ -132,7 +138,7 @@ export default function Goals() {
 
     return (
         <div className="flex-1 flex flex-col min-h-0 bg-bg-primary overflow-y-auto custom-scrollbar select-none">
-            <div className="max-w-6xl w-full mx-auto p-4 md:p-6 flex flex-col gap-6">
+            <div className="max-w-6xl w-full mx-auto px-2.5 py-4 sm:p-4 md:p-6 flex flex-col gap-6">
 
                 {/* PERSONAL RECORDS TABLE */}
                 <RecordTable />

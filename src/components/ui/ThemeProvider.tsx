@@ -34,17 +34,18 @@ export function ThemeProvider({
 
         root.classList.remove("light", "dark")
 
+        let activeTheme = theme;
         if (theme === "system") {
-            const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-                .matches
-                ? "dark"
-                : "light"
-
-            root.classList.add(systemTheme)
-            return
+            activeTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
         }
 
-        root.classList.add(theme)
+        root.classList.add(activeTheme);
+
+        // Synchronize top status bar / island background with Topbar color
+        const themeColor = activeTheme === 'dark' ? '#161b22' : '#f6f8fa';
+        document.querySelectorAll('meta[name="theme-color"]').forEach(el => {
+            el.setAttribute('content', themeColor);
+        });
     }, [theme])
 
     const value = {

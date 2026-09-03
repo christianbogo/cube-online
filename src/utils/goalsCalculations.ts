@@ -498,9 +498,9 @@ export const CATEGORY_METADATA: Record<GoalCategory, { label: string; descriptio
 };
 
 export const ALL_TRACKED_KEYBINDS = [
-    'Escape', 'b', 'g', 'l', 'a', 'Tab', 'Shift',
+    'Escape', 'b', 'g', 'l', 's', 'a', 'Tab', 'Shift',
     'Space', 'd', 'f',
-    '1', '2', '3', '4', '5', '6', '7', 'c', 'm', 'p', 's'
+    '1', '2', '3', '4', '5', '6', '7', 'c', 'm', 'p', 'k'
 ] as const;
 
 export function formatTimeMs(ms: number): string {

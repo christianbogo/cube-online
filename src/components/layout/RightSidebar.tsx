@@ -115,7 +115,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
 
     if (collapsed) {
         return (
-            <aside className="h-full bg-bg-secondary w-[50px] flex flex-col border-l border-border transition-all duration-300">
+            <aside className="h-full bg-bg-secondary w-[50px] flex flex-col transition-all duration-300">
                 <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col items-center py-4 gap-1">
                     {currentSessionSolves.map(solve => (
                         <div key={solve.id} className="w-3 h-1.5 rounded-[1px] bg-text-secondary/20" title={formatTime(solve.time)} />

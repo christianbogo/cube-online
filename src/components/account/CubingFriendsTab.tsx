@@ -258,19 +258,19 @@ export default function CubingFriendsTab() {
                     </div>
 
                     <div className="flex flex-col min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-bold text-text-primary truncate group-hover:text-accent transition-colors">
+                        <div className="flex items-center gap-2 flex-wrap leading-none">
+                            <span className="text-sm font-bold text-text-primary truncate group-hover:text-accent transition-colors leading-tight">
                                 {targetUser.username || 'CubingUser'}
                             </span>
 
                             {/* Status: Online vs Last online */}
                             {isOnline ? (
-                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-500/10 text-green-500 border border-green-500/20 flex items-center gap-1">
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-500/10 text-green-500 border border-green-500/20 flex items-center gap-1 leading-none">
                                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)]" />
                                     Online
                                 </span>
                             ) : (
-                                <span className="text-[11px] text-text-secondary">
+                                <span className="text-[11px] text-text-secondary leading-none">
                                     Last online {getRelativeLastSeen(targetUser.lastSeenAt)}
                                 </span>
                             )}
@@ -278,7 +278,7 @@ export default function CubingFriendsTab() {
 
                         {/* Short ID with Copy */}
                         <div
-                            className="flex items-center gap-1 text-xs text-text-secondary group/code cursor-pointer w-fit mt-0.5 hover:text-text-primary transition-colors"
+                            className="flex items-center gap-1 text-xs text-text-secondary group/code cursor-pointer w-fit mt-0 hover:text-text-primary transition-colors"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 navigator.clipboard.writeText(targetUser.shortId || '');

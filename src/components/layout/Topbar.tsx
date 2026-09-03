@@ -7,7 +7,7 @@ export default function Topbar() {
     const navigate = useNavigate();
 
     return (
-        <header className="h-14 bg-bg-secondary border-b border-border flex items-center justify-between px-4 shrink-0 select-none z-20 transition-colors duration-200">
+        <header className="h-topbar pt-safe bg-bg-secondary border-b border-border flex items-center justify-between px-4 shrink-0 select-none z-20 transition-colors duration-200">
             {/* Left Side: Logo/Brand */}
             <div className="flex items-center gap-3">
                 <Link

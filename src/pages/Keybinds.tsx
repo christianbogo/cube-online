@@ -14,6 +14,7 @@ export default function Keybinds() {
                 { key: 'b', action: 'Go to Keybinds' },
                 { key: 'g', action: 'Go to Goals' },
                 { key: 'l', action: 'Go to Logs' },
+                { key: 's', action: 'Go to Social' },
                 { key: 'a', action: 'Go to Account' },
                 { key: 'Tab', action: 'Toggle Right Sidebar' },
                 { key: 'Shift', action: 'Toggle Left Sidebar' },
@@ -37,7 +38,7 @@ export default function Keybinds() {
                 { key: 'c', action: 'Clock Scramble' },
                 { key: 'm', action: 'Megaminx Scramble' },
                 { key: 'p', action: 'Pyraminx Scramble' },
-                { key: 's', action: 'Skewb Scramble' },
+                { key: 'k', action: 'Skewb Scramble' },
             ]
         },
         {

@@ -33,13 +33,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-            console.log("AuthContext: onAuthStateChanged", firebaseUser?.uid);
             if (firebaseUser) {
                 // Listen directly to the user's document at users/{AuthUID}
                 const userDocRef = doc(db, 'users', firebaseUser.uid);
 
                 const unsubscribeDoc = onSnapshot(userDocRef, (docSnap) => {
-                    console.log("AuthContext: Doc Snapshot", { exists: docSnap.exists() });
                     if (docSnap.exists()) {
                         const data = docSnap.data();
                         const followingList = data.following || data.starredUsers || [];
@@ -57,8 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             lastSeenAt: data.lastSeenAt,
                             status: data.status,
                             isGhostMode: data.isGhostMode ?? false,
+                            pinnedGoalIds: Array.isArray(data.pinnedGoalIds) ? data.pinnedGoalIds : [],
                         };
-                        console.log("AuthContext: Setting User", userData);
                         setUser(userData);
                         localStorage.setItem('cached_user_profile', JSON.stringify(userData));
                     } else {
@@ -69,7 +67,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                 return () => unsubscribeDoc();
             } else {
-                console.log("AuthContext: User signed out.");
                 setUser(null);
                 localStorage.removeItem('cached_user_profile');
                 setLoading(false);

@@ -66,7 +66,7 @@ export default function Logs() {
             if (e.key === 'c' || e.key === 'C') { updateSettings({ scrambleType: 'clock' }); return; }
             if (e.key === 'm' || e.key === 'M') { updateSettings({ scrambleType: 'minx' }); return; }
             if (e.key === 'p' || e.key === 'P') { updateSettings({ scrambleType: 'pyram' }); return; }
-            if (e.key === 's' || e.key === 'S') { updateSettings({ scrambleType: 'skewb' }); return; }
+            if (e.key === 'k' || e.key === 'K') { updateSettings({ scrambleType: 'skewb' }); return; }
         };
 
         window.addEventListener('keydown', handleKeyDown);
@@ -265,7 +265,7 @@ export default function Logs() {
     return (
         <div className="w-full h-full flex flex-col overflow-hidden relative">
             {/* Top Sub-Navigation Header */}
-            <nav className="sticky top-0 z-20 bg-bg-primary/95 backdrop-blur border-b border-border px-6 py-2.5 flex items-center justify-between gap-2 overflow-x-auto shrink-0">
+            <nav className="sticky top-0 z-20 bg-bg-primary/95 backdrop-blur border-b border-border px-3 py-2 sm:px-6 sm:py-2.5 flex items-center justify-between gap-2 overflow-x-auto shrink-0">
                 <div className="flex items-center gap-1.5 min-w-max">
                     {anomalySolves.length > 0 && (
                         <button
@@ -275,6 +275,13 @@ export default function Logs() {
                             <span>Anomalies ({anomalySolves.length})</span>
                         </button>
                     )}
+
+                    <button
+                        onClick={() => scrollToSection('section-overview')}
+                        className="flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors cursor-pointer"
+                    >
+                        <span>Overview</span>
+                    </button>
 
                     <button
                         onClick={() => scrollToSection('section-progression')}
@@ -312,7 +319,7 @@ export default function Logs() {
 
             <div className="flex-1 flex flex-row overflow-hidden relative">
                 {/* Main Scrollable Content */}
-                <div className="flex-1 flex flex-col gap-8 w-full min-w-0 pb-24 overflow-y-auto px-6 py-6 custom-scrollbar">
+                <div className="flex-1 flex flex-col gap-6 sm:gap-8 w-full min-w-0 pb-20 sm:pb-24 overflow-y-auto px-2.5 py-4 sm:px-6 sm:py-6 custom-scrollbar">
 
                     {/* Section: Anomalies (Rendered first when detected) */}
                     {anomalySolves.length > 0 && (
@@ -514,7 +521,7 @@ export default function Logs() {
                                             <Copy className="w-3 h-3 opacity-0 group-hover/scramble:opacity-100 transition-opacity shrink-0" />
                                         </div>
                                     ),
-                                    className: 'w-auto'
+                                    className: 'hidden sm:table-cell w-auto'
                                 },
                                 {
                                     header: 'Date',

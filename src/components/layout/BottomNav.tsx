@@ -13,7 +13,7 @@ export default function BottomNav() {
     ];
 
     return (
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-bg-secondary border-t border-border flex items-center justify-around px-2 z-[60] pb-safe">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-bottomnav bg-bg-secondary border-t border-border flex items-center justify-around px-2 z-[60] pb-safe">
             {navItems.map((item) => {
                 const isItemLocked = !user && ['Logs', 'Goals'].includes(item.name);
                 
