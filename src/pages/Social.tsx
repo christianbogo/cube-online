@@ -334,14 +334,6 @@ export default function Social() {
         return getMostGoalsLeaderboard(combinedUsers, allSolves, 'month', currentUser?.uid);
     }, [combinedUsers, allSolves, currentUser?.uid]);
 
-    const goalsYearSlots = useMemo(() => {
-        return getMostGoalsLeaderboard(combinedUsers, allSolves, 'year', currentUser?.uid);
-    }, [combinedUsers, allSolves, currentUser?.uid]);
-
-    const diverseWeekSlots = useMemo(() => {
-        return getMostDiverseLeaderboard(combinedUsers, allSolves, 'week', currentUser?.uid);
-    }, [combinedUsers, allSolves, currentUser?.uid]);
-
     const diverseMonthSlots = useMemo(() => {
         return getMostDiverseLeaderboard(combinedUsers, allSolves, 'month', currentUser?.uid);
     }, [combinedUsers, allSolves, currentUser?.uid]);
@@ -419,8 +411,8 @@ export default function Social() {
                     /* MAIN SOCIAL TABLES & DIRECTORY */
                     <div className="flex flex-col gap-10 animate-in fade-in duration-200">
 
-                        {/* 8 LEADERBOARDS GRID (No parenthesis in headers) */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 sm:gap-8">
+                        {/* 6 LEADERBOARDS GRID (No parenthesis in headers) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 sm:gap-8">
                             {/* 1. Most Solving Today */}
                             <SocialLeaderboardCard
                                 title="Most Solving Today"
@@ -442,37 +434,23 @@ export default function Social() {
                                 onSelectUser={handleSelectUser}
                             />
 
-                            {/* 4. Most Goals Past Year */}
-                            <SocialLeaderboardCard
-                                title="Most Goals Past Year"
-                                slots={goalsYearSlots}
-                                onSelectUser={handleSelectUser}
-                            />
-
-                            {/* 5. Most Diverse This Week */}
-                            <SocialLeaderboardCard
-                                title="Most Diverse This Week"
-                                slots={diverseWeekSlots}
-                                onSelectUser={handleSelectUser}
-                            />
-
-                            {/* 6. Most Diverse This Month */}
+                            {/* 4. Most Diverse This Month */}
                             <SocialLeaderboardCard
                                 title="Most Diverse This Month"
                                 slots={diverseMonthSlots}
                                 onSelectUser={handleSelectUser}
                             />
 
-                            {/* 7. Most Lucky Past Month */}
+                            {/* 5. Most Lucky Past Month */}
                             <SocialLeaderboardCard
                                 title="Most Lucky Past Month"
                                 slots={luckySlots}
                                 onSelectUser={handleSelectUser}
                             />
 
-                            {/* 8. Most Improved This Week */}
+                            {/* 6. Most Improved This Month */}
                             <SocialLeaderboardCard
-                                title="Most Improved This Week"
+                                title="Most Improved This Month"
                                 slots={improvedSlots}
                                 onSelectUser={handleSelectUser}
                             />

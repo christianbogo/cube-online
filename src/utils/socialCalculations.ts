@@ -340,7 +340,7 @@ export function getMostImprovedLeaderboard(
             records.forEach(rec => {
                 if (!rec || !rec.completedDate) return;
                 const tier = getRecencyTier(rec.completedDate);
-                if (tier === 'today' || tier === 'last_week') {
+                if (tier === 'today' || tier === 'last_week' || tier === 'last_month') {
                     brokenRecordsCount += 1;
                 }
             });
@@ -363,7 +363,7 @@ export function getMostImprovedLeaderboard(
         return (userSolvesMap.get(b.user.uid)?.length || 0) - (userSolvesMap.get(a.user.uid)?.length || 0);
     });
 
-    return createTopFiveSlots(entries.slice(0, 5), "Spot available — break a personal record this week!");
+    return createTopFiveSlots(entries.slice(0, 5), "Spot available — break a personal record this month!");
 }
 
 function createTopFiveSlots(rankedEntries: LeaderboardEntry[], defaultEmptyText: string): LeaderboardSlot[] {

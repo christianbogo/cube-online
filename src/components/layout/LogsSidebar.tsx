@@ -238,19 +238,21 @@ export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, colla
             <div className="grid grid-cols-1 md:grid-cols-2 border-b border-border/50 bg-bg-secondary/50 backdrop-blur-sm sticky top-0 z-10 text-text-primary divide-y md:divide-y-0 md:divide-x divide-border/40">
                 {/* Event Selector */}
                 <div className="p-2 flex items-center justify-center relative group">
-                    <select
-                        value={settings.scrambleType}
-                        onChange={(e) => {
-                            updateSettings({ scrambleType: e.target.value });
-                            e.target.blur();
-                        }}
-                        className="appearance-none bg-transparent font-bold hover:text-accent outline-none focus:outline-none focus:ring-0 cursor-pointer text-center text-xs w-full pr-3 z-10"
-                    >
-                        {SCRAMBLE_TYPES.map(opt => (
-                            <option key={opt.value} value={opt.value} className="bg-bg-secondary text-text-primary">{opt.label}</option>
-                        ))}
-                    </select>
-                    <ChevronDown className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
+                    <div className="inline-flex items-center justify-center relative max-w-full">
+                        <select
+                            value={settings.scrambleType}
+                            onChange={(e) => {
+                                updateSettings({ scrambleType: e.target.value });
+                                e.target.blur();
+                            }}
+                            className="appearance-none bg-transparent font-bold hover:text-accent outline-none focus:outline-none focus:ring-0 cursor-pointer text-center text-xs w-full pr-5 z-10"
+                        >
+                            {SCRAMBLE_TYPES.map(opt => (
+                                <option key={opt.value} value={opt.value} className="bg-bg-secondary text-text-primary">{opt.label}</option>
+                            ))}
+                        </select>
+                        <ChevronDown className="w-3 h-3 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none opacity-50 shrink-0" />
+                    </div>
                 </div>
 
                 {/* Grouping Selector */}
