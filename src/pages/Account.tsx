@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useIsMobile } from '../utils/useIsMobile';
 import { useLocation, Link } from 'react-router-dom';
 import {
-    Check, LogOut, Info, Trash2, Download, TriangleAlert, Loader2, RotateCcw, ShieldCheck, ChevronLeft, ChevronRight
+    Check, X, LogOut, Info, Trash2, Download, TriangleAlert, Loader2, RotateCcw, ShieldCheck, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 import { useSettings } from '../contexts/SettingsContext';
@@ -45,6 +45,8 @@ export default function Account() {
     // Profile State
     const [username, setUsername] = useState('');
     const [selectedColor, setSelectedColor] = useState('#ef4444');
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [tempName, setTempName] = useState('');
     const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
     const colorPickerRef = useRef<HTMLDivElement>(null);
     const [downloadLoading, setDownloadLoading] = useState(false);
@@ -98,6 +100,26 @@ export default function Account() {
         }
     };
 
+    const handleNameSubmit = () => {
+        const cleaned = tempName.trim();
+        if (!cleaned) return;
+
+        // 1. Format Check: a-z, 0-9, _
+        if (!/^[a-zA-Z0-9_]+$/.test(cleaned)) {
+            alert("Username can only contain letters, numbers, and underscores.");
+            return;
+        }
+
+        // 2. Profanity Check
+        import('leo-profanity').then(filter => {
+            if (filter.check(cleaned)) {
+                alert("Username contains inappropriate language.");
+                return;
+            }
+            saveProfileUpdate(cleaned, undefined);
+            setIsEditingName(false);
+        });
+    };
 
     const handleColorSelect = (c: string) => {
         setSelectedColor(c);
@@ -557,9 +579,57 @@ export default function Account() {
 
                                 {/* Info */}
                                 <div className="flex-1 flex flex-col items-center sm:items-start text-center sm:text-left min-w-0">
-                                    <h2 className="text-2xl font-bold truncate text-center sm:text-left text-text-primary">
-                                        {username}
-                                    </h2>
+                                    {isEditingName ? (
+                                        <div className="flex items-center gap-2 justify-center sm:justify-start animate-in fade-in">
+                                            <input
+                                                autoFocus
+                                                type="text"
+                                                value={tempName}
+                                                onChange={e => setTempName(e.target.value)}
+                                                className="bg-bg-primary border border-border text-text-primary text-xl font-bold px-3 py-1 rounded focus:border-accent outline-none w-48 text-center sm:text-left"
+                                                onKeyDown={e => e.key === 'Enter' && handleNameSubmit()}
+                                            />
+                                            <button onClick={handleNameSubmit} className="p-2 bg-accent/10 text-accent rounded hover:bg-accent/20 cursor-pointer" title="Save">
+                                                <Check className="w-5 h-5" />
+                                            </button>
+                                            <button onClick={() => setIsEditingName(false)} className="p-2 text-text-secondary hover:bg-bg-tertiary rounded cursor-pointer" title="Cancel">
+                                                <X className="w-5 h-5" />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="group/name flex items-center justify-center sm:justify-start gap-2 w-full sm:w-auto">
+                                            <h2 className={`text-2xl font-bold truncate text-center sm:text-left transition-colors ${
+                                                !user.emailVerified ? 'text-text-secondary/50 select-none' : 'text-text-primary'
+                                            }`}>
+                                                {username}
+                                            </h2>
+                                            {!user.emailVerified ? (
+                                                <div className="relative group/verifytip flex items-center">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            alert("Please verify your email address to edit your profile name.");
+                                                        }}
+                                                        className="p-1 text-text-secondary/40 hover:text-text-secondary transition-colors cursor-not-allowed"
+                                                        aria-label="Email verification required to edit username"
+                                                    >
+                                                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                                                    </button>
+                                                    <div className="absolute left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 bottom-full mb-1.5 px-2.5 py-1 bg-bg-secondary border border-border text-[11px] text-text-secondary rounded shadow-lg whitespace-nowrap opacity-0 pointer-events-none group-hover/verifytip:opacity-100 transition-opacity z-20">
+                                                        Verify your email to edit username
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => { setTempName(username); setIsEditingName(true); }}
+                                                    className="opacity-0 group-hover/name:opacity-100 p-1 text-text-secondary hover:text-accent transition-all cursor-pointer"
+                                                    title="Edit Username"
+                                                >
+                                                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
 
                                     <p className="text-text-secondary text-sm mt-1 text-center sm:text-left w-full sm:w-auto">{user.email}</p>
 
