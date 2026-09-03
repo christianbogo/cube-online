@@ -13,7 +13,7 @@ import {
     Plus,
     Ghost,
     Search,
-    SkipForward,
+    ChevronRight,
     CheckCircle2,
     X,
     Maximize2
@@ -618,7 +618,7 @@ export default function Cube() {
             >
                 {/* PINNED GOALS BANNER (Always Rendered & Interactive) */}
                 {user && pinnedGoals.length > 0 && (
-                    <div className="mb-4 w-full max-w-lg px-2 opacity-65 hover:opacity-100 transition-opacity animate-in fade-in duration-200 overflow-visible">
+                    <div className="mb-7 w-full max-w-lg px-2 opacity-65 hover:opacity-100 transition-opacity animate-in fade-in duration-200 overflow-visible">
                         <div className="flex items-center justify-center gap-2 flex-wrap overflow-visible">
                             {pinnedGoals.map(goal => (
                                 <div key={goal.goalId} className="relative group/goal flex-1 min-w-[120px] max-w-[170px] overflow-visible">
@@ -705,9 +705,9 @@ export default function Cube() {
                             <button
                                 onClick={generateNewScramble}
                                 className="hover:text-accent transition-colors cursor-pointer"
-                                title="Skip Scramble"
+                                title="Next Scramble"
                             >
-                                <SkipForward className="w-5 h-5" />
+                                <ChevronRight className="w-5 h-5" />
                             </button>
                         </div>
 
