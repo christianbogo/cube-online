@@ -110,7 +110,13 @@ export default function Account() {
             return;
         }
 
-        // 2. Profanity Check
+        // 2. Length Check (max 23 characters)
+        if (cleaned.length > 23) {
+            alert("Username cannot be longer than 23 characters.");
+            return;
+        }
+
+        // 3. Profanity Check
         import('leo-profanity').then(filter => {
             if (filter.check(cleaned)) {
                 alert("Username contains inappropriate language.");
@@ -586,6 +592,7 @@ export default function Account() {
                                                 type="text"
                                                 value={tempName}
                                                 onChange={e => setTempName(e.target.value)}
+                                                maxLength={23}
                                                 className="bg-bg-primary border border-border text-text-primary text-xl font-bold px-3 py-1 rounded focus:border-accent outline-none w-48 text-center sm:text-left"
                                                 onKeyDown={e => e.key === 'Enter' && handleNameSubmit()}
                                             />

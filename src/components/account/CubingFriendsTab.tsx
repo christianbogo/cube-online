@@ -348,7 +348,7 @@ export default function CubingFriendsTab() {
                                 onChange={(e) => setSearchQueryText(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && onSearchSubmit()}
                                 className="w-full bg-bg-secondary border border-border rounded-lg pl-9 pr-3 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent"
-                                maxLength={20}
+                                maxLength={23}
                             />
                         </div>
                         <button
