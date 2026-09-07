@@ -1,5 +1,7 @@
 import type { LeaderboardSlot } from '../../utils/socialCalculations';
 import type { UserData } from '../../types';
+import { UserAvatar } from '../ui/UserAvatar';
+import { hasLinkedWca } from '../../utils/wca';
 import { ChevronRight } from 'lucide-react';
 
 export interface SocialLeaderboardCardProps {
@@ -73,17 +75,30 @@ export function SocialLeaderboardCard({
                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                     {getRankBadge(slot.rank)}
 
-                                    {/* Simple User Card: Square Avatar */}
-                                    <div
-                                        className="w-6 h-6 rounded-md shrink-0 shadow-2xs transition-transform group-hover:scale-105"
-                                        style={{ backgroundColor: user.color || '#3b82f6' }}
+                                    {/* Simple User Card: Avatar */}
+                                    <UserAvatar
+                                        user={user}
+                                        className={`w-6 h-6 shrink-0 transition-transform group-hover:scale-105 ${
+                                            hasLinkedWca(user) ? 'drop-shadow-2xs' : 'rounded-md shadow-2xs'
+                                        }`}
+                                        roundedClassName="rounded-md"
                                     />
 
                                     {/* Name + Main Stat directly beneath name */}
                                     <div className="flex flex-col min-w-0 flex-1">
-                                        <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors">
-                                            {user.username || 'CubingUser'}
-                                        </span>
+                                        <div className="flex items-center gap-1 min-w-0">
+                                            <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors">
+                                                {user.username || 'CubingUser'}
+                                            </span>
+                                            {hasLinkedWca(user) && (
+                                                <span
+                                                    title={`Verified WCA Competitor (${user.wcaId || 'Linked'})`}
+                                                    className="inline-flex items-center align-middle shrink-0"
+                                                >
+                                                    <UserAvatar user={user} hasWca={true} className="w-3.5 h-3.5 drop-shadow-2xs" />
+                                                </span>
+                                            )}
+                                        </div>
                                         <span className="text-[10px] text-text-secondary font-mono truncate">
                                             {scoreDisplay}
                                         </span>

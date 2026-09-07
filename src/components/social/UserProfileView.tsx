@@ -6,6 +6,8 @@ import { db } from '../../lib/firebase';
 import { evaluateUserGoals } from '../../utils/goalsCalculations';
 import { isAdmin, eraseUserProfileAndData } from '../../utils/admin';
 import RecordTable from '../records/RecordTable';
+import { UserAvatar } from '../ui/UserAvatar';
+import { hasLinkedWca } from '../../utils/wca';
 import {
     ArrowLeft,
     Copy,
@@ -202,6 +204,7 @@ export function UserProfileView({
                     starredUsers: data.following || data.starredUsers || [],
                     blockedUsers: data.blockedUsers || [],
                     socials: data.socials || [],
+                    wcaId: data.wcaId || initialUser.wcaId,
                     lastSeenAt: data.lastSeenAt,
                     status: data.status,
                     isGhostMode: data.isGhostMode ?? false,
@@ -228,6 +231,7 @@ export function UserProfileView({
                         starredUsers: data.following || data.starredUsers || [],
                         blockedUsers: data.blockedUsers || [],
                         socials: data.socials || [],
+                        wcaId: data.wcaId || initialUser.wcaId,
                         lastSeenAt: data.lastSeenAt,
                         status: data.status,
                         isGhostMode: data.isGhostMode ?? false,
@@ -421,9 +425,12 @@ export function UserProfileView({
                 <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
                     {/* Avatar */}
                     <div className="relative shrink-0">
-                        <div
-                            className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl shadow-md flex items-center justify-center transition-transform hover:scale-105"
-                            style={{ backgroundColor: liveUser.color || '#3b82f6' }}
+                        <UserAvatar
+                            user={liveUser}
+                            className={`w-20 h-20 sm:w-24 sm:h-24 transition-transform hover:scale-105 flex items-center justify-center ${
+                                hasLinkedWca(liveUser) ? 'drop-shadow-md' : 'rounded-2xl shadow-md'
+                            }`}
+                            roundedClassName="rounded-2xl"
                         />
                         {isOnline && (
                             <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-green-500 border-2 border-surface-elevation-1 rounded-full shadow-xs" />
@@ -433,8 +440,16 @@ export function UserProfileView({
                     {/* Info & All Inline Chips */}
                     <div className="flex-1 text-center sm:text-left min-w-0 flex flex-col gap-2.5">
                         <div className="flex items-center gap-3 justify-center sm:justify-start flex-wrap">
-                            <h2 className="text-2xl sm:text-3xl font-bold text-text-primary truncate">
-                                {liveUser.username || 'CubingUser'}
+                            <h2 className="text-2xl sm:text-3xl font-bold text-text-primary truncate flex items-center gap-2">
+                                <span>{liveUser.username || 'CubingUser'}</span>
+                                {hasLinkedWca(liveUser) && (
+                                    <span
+                                        title={`Verified WCA Competitor (${liveUser.wcaId || 'Linked'})`}
+                                        className="inline-flex items-center align-middle"
+                                    >
+                                        <UserAvatar user={liveUser} hasWca={true} className="w-6 h-6 drop-shadow-xs" />
+                                    </span>
+                                )}
                             </h2>
 
                             {/* Online / Last Seen Indicator */}
@@ -638,9 +653,12 @@ export function UserProfileView({
                                 onClick={() => onSelectUser(u)}
                                 className="flex items-center gap-2.5 p-2.5 rounded-xl border border-border/60 bg-surface-elevation-1 hover:bg-bg-hover hover:border-accent/40 transition-all cursor-pointer group shadow-2xs select-none"
                             >
-                                <div
-                                    className="w-7 h-7 rounded-lg shrink-0 shadow-2xs transition-transform group-hover:scale-105"
-                                    style={{ backgroundColor: u.color || '#3b82f6' }}
+                                <UserAvatar
+                                    user={u}
+                                    className={`w-7 h-7 shrink-0 transition-transform group-hover:scale-105 ${
+                                        hasLinkedWca(u) ? 'drop-shadow-2xs' : 'rounded-lg shadow-2xs'
+                                    }`}
+                                    roundedClassName="rounded-lg"
                                 />
                                 <div className="flex flex-col min-w-0">
                                     <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors leading-tight">

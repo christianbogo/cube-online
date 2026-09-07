@@ -14,8 +14,10 @@ import {
     SocialsTab,
     CubingFriendsTab,
     Logo,
-    ImportCsTimerModal
+    ImportCsTimerModal,
+    UserAvatar
 } from '../components';
+import { hasLinkedWca } from '../utils/wca';
 
 const AVAILABLE_COLORS = [
     { name: 'Red', hex: '#ef4444' },
@@ -37,6 +39,7 @@ export default function Account() {
     const { deleteAllSolves } = useSolves();
     const location = useLocation();
     const isMobile = useIsMobile();
+    const isWcaVerified = hasLinkedWca(user);
 
     // Profile State
     const [username, setUsername] = useState('');
@@ -387,11 +390,16 @@ export default function Account() {
                             <div className="flex flex-col sm:flex-row items-center gap-6 p-6 relative z-30 group">
                                 {/* Avatar */}
                                 <div className="relative shrink-0">
-                                    <div
-                                        className="w-24 h-24 rounded-2xl shadow-lg cursor-pointer transition-transform hover:scale-105 active:scale-95 flex items-center justify-center"
-                                        style={{ backgroundColor: selectedColor }}
+                                    <UserAvatar
+                                        user={user}
+                                        color={selectedColor}
+                                        hasWca={isWcaVerified}
+                                        className={`w-24 h-24 cursor-pointer transition-transform hover:scale-105 active:scale-95 flex items-center justify-center ${
+                                            isWcaVerified ? 'drop-shadow-lg' : 'rounded-2xl shadow-lg'
+                                        }`}
+                                        roundedClassName="rounded-2xl"
                                         onClick={() => setIsColorPickerOpen(!isColorPickerOpen)}
-                                        title="Click to change profile color"
+                                        title={isWcaVerified ? "WCA Verified profile - Click to change color" : "Click to change profile color"}
                                     />
 
                                     {/* Color Picker Popover */}
@@ -419,7 +427,7 @@ export default function Account() {
                                                                     ? 'border-text-primary scale-110 shadow-md ring-2 ring-accent/30'
                                                                     : 'border-transparent hover:scale-105'
                                                             }`}
-                                                            style={{ backgroundColor: item.hex }}
+                                                            style={{ backgroundColor: item.hex === '#18181b' ? 'var(--profile-black, #2d333b)' : item.hex }}
                                                         >
                                                             {isSelected && <Check className="w-4 h-4 text-white stroke-[3] drop-shadow" />}
                                                         </button>
@@ -451,10 +459,18 @@ export default function Account() {
                                         </div>
                                     ) : (
                                         <div className="group/name flex items-center justify-center sm:justify-start gap-2 w-full sm:w-auto">
-                                            <h2 className={`text-2xl font-bold truncate text-center sm:text-left transition-colors ${
+                                            <h2 className={`text-2xl font-bold truncate text-center sm:text-left transition-colors flex items-center gap-1.5 ${
                                                 !user.emailVerified ? 'text-text-secondary/50 select-none' : 'text-text-primary'
                                             }`}>
-                                                {username}
+                                                <span>{username}</span>
+                                                {isWcaVerified && (
+                                                    <span
+                                                        title={`Verified WCA Competitor (${user.wcaId || 'Linked'})`}
+                                                        className="inline-flex items-center align-middle"
+                                                    >
+                                                        <UserAvatar user={user} color={selectedColor} hasWca={true} className="w-5 h-5 drop-shadow-xs" />
+                                                    </span>
+                                                )}
                                             </h2>
                                             {!user.emailVerified ? (
                                                 <div className="relative group/verifytip flex items-center">

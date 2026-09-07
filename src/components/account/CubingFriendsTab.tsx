@@ -4,6 +4,8 @@ import { TriangleAlert, Search, Loader2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { UserAvatar } from '../ui/UserAvatar';
+import { hasLinkedWca } from '../../utils/wca';
 
 const getRelativeLastSeen = (isoString?: string) => {
     if (!isoString) return 'Offline';
@@ -201,9 +203,12 @@ export default function CubingFriendsTab() {
                 >
                     {/* User Avatar */}
                     <div className="relative shrink-0">
-                        <div
-                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl shadow-sm transition-transform group-hover:scale-105"
-                            style={{ backgroundColor: targetUser.color || '#3b82f6' }}
+                        <UserAvatar
+                            user={targetUser}
+                            className={`w-10 h-10 sm:w-11 sm:h-11 transition-transform group-hover:scale-105 flex items-center justify-center ${
+                                hasLinkedWca(targetUser) ? 'drop-shadow-sm' : 'rounded-xl shadow-sm'
+                            }`}
+                            roundedClassName="rounded-xl"
                         />
                         {isOnline && (
                             <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-surface-elevation-1 rounded-full shadow-xs" />
@@ -211,9 +216,19 @@ export default function CubingFriendsTab() {
                     </div>
 
                     <div className="flex flex-col min-w-0 justify-center">
-                        <span className="text-sm sm:text-base font-bold text-text-primary truncate group-hover:text-accent transition-colors leading-tight">
-                            {targetUser.username || 'CubingUser'}
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-sm sm:text-base font-bold text-text-primary truncate group-hover:text-accent transition-colors leading-tight">
+                                {targetUser.username || 'CubingUser'}
+                            </span>
+                            {hasLinkedWca(targetUser) && (
+                                <span
+                                    title={`Verified WCA Competitor (${targetUser.wcaId || 'Linked'})`}
+                                    className="inline-flex items-center align-middle"
+                                >
+                                    <UserAvatar user={targetUser} hasWca={true} className="w-4 h-4 drop-shadow-2xs" />
+                                </span>
+                            )}
+                        </div>
 
                         {/* Status: Online vs Last online */}
                         <div className="flex items-center gap-1.5 mt-0.5 leading-none">

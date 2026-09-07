@@ -23,14 +23,16 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getGoalStreaks = exports.getDailyVolumeStats = exports.getLogsBottomStats = exports.getLogsSidebarData = exports.getPaginatedSolves = exports.getEventSolves = exports.getRecordsData = exports.backfillAllUsersStats = exports.updateLeaderboards = exports.backfillUserStats = exports.aggregateUserStats = void 0;
+exports.getGoalStreaks = exports.getDailyVolumeStats = exports.getLogsBottomStats = exports.getLogsSidebarData = exports.getPaginatedSolves = exports.getEventSolves = exports.getRecordsData = exports.backfillAllUsersStats = exports.purgeStalePresenceManual = exports.cleanupStalePresence = exports.updateLeaderboards = exports.backfillUserStats = exports.aggregateUserStats = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-admin/firestore");
 const socialCalculations_1 = require("./utils/socialCalculations");
 const calculations_1 = require("./utils/calculations");
 const recordCalculations_1 = require("./utils/recordCalculations");
-admin.initializeApp();
+admin.initializeApp({
+    databaseURL: 'https://cube-online-1-default-rtdb.firebaseio.com'
+});
 const db = admin.firestore();
 function calculateAverage(solves, size) {
     if (solves.length < size)
@@ -299,6 +301,52 @@ exports.updateLeaderboards = functions.pubsub.schedule('every 15 minutes').onRun
     }, { merge: true });
     console.log('Leaderboards updated successfully.');
     return null;
+});
+const TEN_MINUTES_MS = 10 * 60 * 1000;
+exports.cleanupStalePresence = functions.pubsub.schedule('every 10 minutes').onRun(async (context) => {
+    const rtdb = admin.database();
+    const presenceRef = rtdb.ref('presence');
+    const snapshot = await presenceRef.once('value');
+    const data = snapshot.val();
+    if (!data)
+        return null;
+    const now = Date.now();
+    const updates = {};
+    for (const [uid, userPresence] of Object.entries(data)) {
+        const timestamp = userPresence === null || userPresence === void 0 ? void 0 : userPresence.timestamp;
+        if (!timestamp || (now - timestamp) > TEN_MINUTES_MS) {
+            updates[uid] = null;
+        }
+    }
+    const count = Object.keys(updates).length;
+    if (count > 0) {
+        await presenceRef.update(updates);
+        console.log(`Cleaned up ${count} stale presence records:`, Object.keys(updates));
+    }
+    return null;
+});
+exports.purgeStalePresenceManual = functions.https.onRequest(async (req, res) => {
+    const rtdb = admin.database();
+    const presenceRef = rtdb.ref('presence');
+    const snapshot = await presenceRef.once('value');
+    const data = snapshot.val();
+    if (!data) {
+        res.json({ success: true, removedCount: 0 });
+        return;
+    }
+    const now = Date.now();
+    const updates = {};
+    for (const [uid, userPresence] of Object.entries(data)) {
+        const timestamp = userPresence === null || userPresence === void 0 ? void 0 : userPresence.timestamp;
+        if (!timestamp || (now - timestamp) > TEN_MINUTES_MS) {
+            updates[uid] = null;
+        }
+    }
+    const count = Object.keys(updates).length;
+    if (count > 0) {
+        await presenceRef.update(updates);
+    }
+    res.json({ success: true, removedCount: count, removedUids: Object.keys(updates) });
 });
 exports.backfillAllUsersStats = functions.https.onRequest(async (req, res) => {
     // SECURITY: In a real app, protect this with auth. For now, it's a manual trigger.

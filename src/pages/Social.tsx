@@ -6,6 +6,8 @@ import { db } from '../lib/firebase';
 import type { UserData } from '../types';
 import { SocialLeaderboardCard } from '../components/social/SocialLeaderboardCard';
 import { UserProfileView } from '../components/social/UserProfileView';
+import { UserAvatar } from '../components/ui/UserAvatar';
+import { hasLinkedWca } from '../utils/wca';
 import { Search, Loader2 } from 'lucide-react';
 
 // Module-level in-memory cache to prevent flashing "only my account" during page transitions
@@ -63,6 +65,7 @@ export default function Social() {
                     starredUsers: data.following || data.starredUsers || [],
                     blockedUsers: data.blockedUsers || [],
                     socials: data.socials || [],
+                    wcaId: data.wcaId,
                     lastSeenAt: data.lastSeenAt,
                     status: data.status,
                     isGhostMode: data.isGhostMode ?? false,
@@ -98,6 +101,7 @@ export default function Social() {
                         starredUsers: data.following || data.starredUsers || [],
                         blockedUsers: data.blockedUsers || [],
                         socials: data.socials || [],
+                        wcaId: data.wcaId,
                         lastSeenAt: data.lastSeenAt,
                         status: data.status,
                         isGhostMode: data.isGhostMode ?? false,
@@ -514,17 +518,30 @@ export default function Social() {
                                                         isSelf ? 'border-accent/40 ring-1 ring-accent/20' : 'border-border/60'
                                                     }`}
                                                 >
-                                                    {/* Square Avatar */}
-                                                    <div
-                                                        className="w-8 h-8 rounded-lg shrink-0 shadow-2xs transition-transform group-hover:scale-105"
-                                                        style={{ backgroundColor: userItem.color || '#3b82f6' }}
+                                                    {/* Avatar */}
+                                                    <UserAvatar
+                                                        user={userItem}
+                                                        className={`w-8 h-8 shrink-0 transition-transform group-hover:scale-105 flex items-center justify-center ${
+                                                            hasLinkedWca(userItem) ? 'drop-shadow-2xs' : 'rounded-lg shadow-2xs'
+                                                        }`}
+                                                        roundedClassName="rounded-lg"
                                                     />
 
                                                     {/* Name & Short ID */}
                                                     <div className="flex flex-col min-w-0">
-                                                        <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors">
-                                                            {userItem.username || 'CubingUser'}
-                                                        </span>
+                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                            <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors">
+                                                                {userItem.username || 'CubingUser'}
+                                                            </span>
+                                                            {hasLinkedWca(userItem) && (
+                                                                <span
+                                                                    title={`Verified WCA Competitor (${userItem.wcaId || 'Linked'})`}
+                                                                    className="inline-flex items-center align-middle shrink-0"
+                                                                >
+                                                                    <UserAvatar user={userItem} hasWca={true} className="w-3.5 h-3.5 drop-shadow-2xs" />
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <span className="text-[10px] text-text-secondary font-mono truncate">
                                                             #{userItem.shortId || '????'}
                                                         </span>

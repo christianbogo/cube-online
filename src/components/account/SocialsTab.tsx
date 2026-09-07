@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Trash2, Plus, ChevronUp, ChevronDown } from 'lucide-react';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteField } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import type { SocialProfile, SocialNetwork } from '../../types';
+import { hasLinkedWca } from '../../utils/wca';
 
 const NETWORK_LABELS: Record<string, string> = {
     'email': 'Email',
@@ -59,26 +60,35 @@ export default function SocialsTab() {
 
     // Filter out email from the main list, as it's pinned
     const otherSocials = socials.filter(s => s.network !== 'email');
-    const isWcaLinked = Boolean(user?.wcaId || socials.some(s => s.network === 'wca' && s.value));
+    const isWcaLinked = Boolean(hasLinkedWca(user) || socials.some(s => s.network === 'wca' && s.value));
 
     // Sync email value if it changes in auth
     if (emailEntry.value !== user?.email) emailEntry.value = user?.email || '';
 
-    const updateSocials = async (newSocialsList: SocialProfile[]) => {
+    const updateSocials = async (newSocialsList: SocialProfile[], newWcaId?: string | null) => {
         if (!user) return;
         try {
-            await setDoc(doc(db, 'users', user.uid), { socials: newSocialsList }, { merge: true });
+            const updates: Record<string, any> = { socials: newSocialsList };
+            if (newWcaId !== undefined) {
+                if (newWcaId === null) {
+                    updates.wcaId = deleteField();
+                } else {
+                    updates.wcaId = newWcaId;
+                }
+            }
+            await setDoc(doc(db, 'users', user.uid), updates, { merge: true });
         } catch (e) {
             console.error("Error updating socials", e);
         }
     };
 
     const handleAddSocial = () => {
-        if (!newValue.trim()) return;
+        const val = newValue.trim();
+        if (!val) return;
         const newEntry: SocialProfile = {
             id: crypto.randomUUID(),
             network: newNetwork as SocialNetwork,
-            value: newValue.trim(),
+            value: val,
             privacy: 'hidden'
         };
 
@@ -88,13 +98,23 @@ export default function SocialsTab() {
         }
         fullList.push(newEntry);
 
-        updateSocials(fullList);
+        if (newNetwork === 'wca') {
+            updateSocials(fullList, val);
+        } else {
+            updateSocials(fullList);
+        }
         setNewValue('');
     };
 
     const handleDeleteSocial = (id: string) => {
+        const toDelete = socials.find(s => s.id === id);
         const fullList = socials.filter(s => s.id !== id);
-        updateSocials(fullList);
+        if (toDelete?.network === 'wca') {
+            const remainingWca = fullList.find(s => s.network === 'wca');
+            updateSocials(fullList, remainingWca ? remainingWca.value : null);
+        } else {
+            updateSocials(fullList);
+        }
     };
 
     const cyclePrivacy = (id: string, currentPrivacy: string) => {

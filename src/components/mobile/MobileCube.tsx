@@ -28,6 +28,7 @@ import { useSession } from '../../contexts/SessionContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLive } from '../../contexts/LiveContext';
 import { useTheme } from '../ui/ThemeProvider';
+import { UserAvatar } from '../ui/UserAvatar';
 import { useEvents } from '../../hooks/useEvents';
 import { formatTime } from '../../utils/formatTime';
 import { MOCK_FRIENDS, USE_MOCK_USERS } from '../../utils/mockLiveUsers';
@@ -691,12 +692,13 @@ export default function MobileCube() {
                             className="flex items-center justify-between p-3 rounded-lg bg-bg-secondary border border-border/50 cursor-pointer active:scale-98"
                         >
                             <div className="flex items-center gap-3">
-                                <div
+                                <UserAvatar
+                                    user={user}
                                     className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-xs shadow-sm"
-                                    style={{ backgroundColor: user?.color || '#ef4444' }}
+                                    roundedClassName="rounded-lg"
                                 >
                                     {user ? user.username.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
-                                </div>
+                                </UserAvatar>
                                 <div className="text-left">
                                     <div className="text-sm font-semibold text-text-primary">{user ? user.username : 'Guest User'}</div>
                                     <div className="text-[11px] text-text-secondary">{user ? 'View Account & Profile' : 'Sign in to save solves'}</div>

@@ -1,13 +1,9 @@
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { BarChart2, Target, Users, User, Lock, Box, Swords, Construction } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { isAdmin } from '../../utils/admin';
 
 export default function BottomNav() {
     const { user } = useAuth();
-    const isDev = import.meta.env.DEV;
-    const userIsAdmin = isAdmin(user);
-    const canAccessArena = isDev || userIsAdmin;
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -24,8 +20,8 @@ export default function BottomNav() {
     return (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 h-bottomnav bg-bg-secondary border-t border-border flex items-center justify-around px-2 z-[60] pb-safe">
             {navItems.map((item) => {
-                const isUnderConstruction = (!!item.underConstruction || item.name === 'Arena') && !(item.name === 'Arena' && canAccessArena);
-                const isItemLocked = !isUnderConstruction && (!user && ['Logs', 'Goals', ...(canAccessArena && !isDev ? ['Arena'] : [])].includes(item.name));
+                const isUnderConstruction = !!item.underConstruction || item.name === 'Arena';
+                const isItemLocked = !isUnderConstruction && (!user && ['Logs', 'Goals'].includes(item.name));
                 
                 return (
                     <NavLink

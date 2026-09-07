@@ -15,6 +15,8 @@ export { default as Toast } from './ui/Toast';
 export type { ToastProps, ToastAction } from './ui/Toast';
 export { UserCard } from './ui/UserCard';
 export type { UserCardProps } from './ui/UserCard';
+export { UserAvatar, default as UserAvatarDefault } from './ui/UserAvatar';
+export type { UserAvatarProps } from './ui/UserAvatar';
 export { Logo } from './ui/Logo';
 export type { LogoProps } from './ui/Logo';
 export { default as KeybindTooltip, resetKeybindTooltips, setTooltipsDisabled, isTooltipsDisabled, KEYBIND_TOOLTIPS, type TooltipItem } from './ui/KeybindTooltip';

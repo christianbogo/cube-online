@@ -4,7 +4,6 @@ import { useTheme } from '../ui/ThemeProvider';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGoals } from '../../contexts/GoalsContext';
-import { isAdmin } from '../../utils/admin';
 
 export interface LeftSidebarProps {
     collapsed: boolean;
@@ -43,9 +42,6 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
     const { theme, setTheme } = useTheme();
     const { user } = useAuth();
     const { hasUnseenGoals } = useGoals();
-    const isDev = import.meta.env.DEV;
-    const userIsAdmin = isAdmin(user);
-    const canAccessArena = isDev || userIsAdmin;
 
     const navItems = user ? defaultNavItems : guestNavItems;
 
@@ -97,8 +93,8 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
             {/* Navigation Items */}
             <ul className="flex flex-col gap-1 px-2 pt-2 flex-1">
                 {navItems.map((item) => {
-                    const isUnderConstruction = (!!item.underConstruction || item.name === 'Arena') && !(item.name === 'Arena' && canAccessArena);
-                    const isItemLocked = !isUnderConstruction && (!!item.locked || (!user && ['Logs', 'Goals', 'Dev', ...(canAccessArena && !isDev ? ['Arena'] : [])].includes(item.name)));
+                    const isUnderConstruction = !!item.underConstruction || item.name === 'Arena';
+                    const isItemLocked = !isUnderConstruction && (!!item.locked || (!user && ['Logs', 'Goals', 'Dev'].includes(item.name)));
 
                     return (
                         <li key={item.name} className="relative group">

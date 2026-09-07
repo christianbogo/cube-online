@@ -2,6 +2,8 @@ import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatTime } from '../../utils/formatTime';
 import type { TimerState, LiveUser, SimpleSolve } from '../../types';
+import { UserAvatar } from './UserAvatar';
+import { hasLinkedWca } from '../../utils/wca';
 import { Minimize2 } from 'lucide-react';
 
 export interface UserCardProps {
@@ -77,12 +79,13 @@ export const UserCard = ({ user, onHide, draggable, onDragStart, className = '',
             className={`flex-shrink-0 w-28 h-20 bg-surface-elevation-1 rounded-xl border flex flex-col relative group hover:shadow-lg hover:z-10 transition-all outline-none focus:outline-none cursor-pointer ${className}
             ${getBorderColor(user.status)}`}
         >
-            {/* Header: Rounded Square Avatar + Name + Subtle Hide Button */}
+            {/* Header: Avatar + Name + Subtle Hide Button */}
             <div className="flex items-center justify-between px-2 pt-1.5 pb-0">
                 <div className="flex items-center gap-1.5 overflow-hidden min-w-0 flex-1">
-                    <div
-                        className="w-2.5 h-2.5 rounded-sm flex-shrink-0 shadow-xs"
-                        style={{ backgroundColor: user.color }}
+                    <UserAvatar
+                        user={user}
+                        className={`w-3.5 h-3.5 flex-shrink-0 ${hasLinkedWca(user) ? 'drop-shadow-2xs' : 'rounded-xs shadow-xs'}`}
+                        roundedClassName="rounded-xs"
                     />
                     <span className="font-semibold text-text-primary truncate text-xs">{user.username}</span>
                 </div>

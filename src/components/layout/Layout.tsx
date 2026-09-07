@@ -39,10 +39,16 @@ export default function Layout() {
 
     useEffect(() => {
         const presenceRef = ref(rtdb, 'presence');
+        const TEN_MINUTES_MS = 10 * 60 * 1000;
+
         const unsubscribe = onValue(presenceRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                setOnlineCubersCount(Object.keys(data).length);
+                const now = Date.now();
+                const activeCount = Object.values(data).filter(
+                    (u: any) => u && (now - (u.timestamp || 0)) <= TEN_MINUTES_MS
+                ).length;
+                setOnlineCubersCount(activeCount);
             } else {
                 setOnlineCubersCount(0);
             }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Logo } from '../ui/Logo';
+import { UserAvatar } from '../ui/UserAvatar';
 import { SlidersHorizontal, Info } from 'lucide-react';
 import TimerSettingsModal from '../timer/TimerSettingsModal';
 import { NotificationBell } from '../notifications';
@@ -68,9 +69,10 @@ export default function Topbar() {
                         <span className="font-medium text-sm text-text-primary hidden sm:block">
                             {user.username || 'CubingUser'}
                         </span>
-                        <div
+                        <UserAvatar
+                            user={user}
                             className="w-8 h-8 rounded-lg shadow-sm flex items-center justify-center font-bold text-white text-xs"
-                            style={{ backgroundColor: user.color || '#ef4444' }}
+                            roundedClassName="rounded-lg"
                         />
                     </Link>
                 ) : (

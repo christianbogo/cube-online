@@ -4,6 +4,7 @@ import { ref, onDisconnect, set, onValue, remove } from 'firebase/database';
 import { useAuth } from './AuthContext';
 import { useSolves } from './SolvesContext';
 import type { LiveUser, SimpleSolve, TimerState } from '../types';
+import { hasLinkedWca } from '../utils/wca';
 
 interface LiveContextType {
     isGhostMode: boolean;
@@ -114,6 +115,8 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         const currentRecent = formatRecentSolves();
 
         const updatePresence = () => {
+            const hasWca = hasLinkedWca(user);
+            const wcaId = user.wcaId || user.socials?.find(s => s.network === 'wca')?.value || null;
             const data: LiveUser = {
                 uid: user.uid,
                 shortId: user.shortId,
@@ -122,7 +125,9 @@ export function LiveProvider({ children }: { children: ReactNode }) {
                 status: liveTimerState,
                 lastSolveTime: (solves.length > 0 && typeof solves[0]?.time === 'number') ? solves[0].time : null,
                 recentSolves: currentRecent,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                hasWca,
+                wcaId
             };
             // Sanitize to remove any undefined properties that cause Firebase Realtime Database set() to throw
             const sanitizedData = JSON.parse(JSON.stringify(data));

@@ -48,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             emailVerified: firebaseUser.emailVerified,
                             username: data.username || 'CubingUser',
                             color: data.color || '#3b82f6',
+                            wcaId: data.wcaId,
                             following: followingList,
                             starredUsers: followingList,
                             blockedUsers: data.blockedUsers || [],

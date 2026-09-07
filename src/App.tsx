@@ -17,9 +17,7 @@ import Keybinds from './pages/Keybinds';
 import Dev from './pages/Dev';
 import Privacy from './pages/Privacy';
 import Info from './pages/Info';
-import Arena from './pages/Arena';
 import WCACallback from './pages/WCACallback';
-import { isAdmin } from './utils/admin';
 import type { ReactNode } from 'react';
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
@@ -30,14 +28,7 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
 };
 
 const ArenaRoute = () => {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  const isDev = import.meta.env.DEV;
-  const userIsAdmin = isAdmin(user);
-  if (!isDev && !userIsAdmin) {
-    return <Navigate to="/" replace />;
-  }
-  return <Arena />;
+  return <Navigate to="/" replace />;
 };
 
 function App() {

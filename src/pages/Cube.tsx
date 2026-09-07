@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { formatTime } from '../utils/formatTime';
 import type { LiveUser, TimerState } from '../types';
-import { UserCard, KeybindTooltip } from '../components';
+import { UserCard, KeybindTooltip, UserAvatar } from '../components';
 import { MOCK_FRIENDS, MOCK_COMMUNITY_USERS, USE_MOCK_USERS } from '../utils/mockLiveUsers';
 import { useIsMobile } from '../utils/useIsMobile';
 import MobileCube from '../components/mobile/MobileCube';
@@ -730,9 +730,10 @@ function DesktopCube() {
                                         title={`Show ${u.username}'s card`}
                                     >
                                         <div className="w-3 h-3 relative flex items-center justify-center flex-shrink-0">
-                                            <div
-                                                className="w-2.5 h-2.5 rounded-sm group-hover:scale-0 group-hover:opacity-0 shadow-2xs transition-all duration-150"
-                                                style={{ backgroundColor: u.color }}
+                                            <UserAvatar
+                                                user={u}
+                                                className="w-3 h-3 group-hover:scale-0 group-hover:opacity-0 transition-all duration-150"
+                                                roundedClassName="rounded-sm"
                                             />
                                             <Maximize2 className="w-3 h-3 text-accent absolute inset-0 m-auto scale-0 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-150" />
                                         </div>
@@ -993,9 +994,10 @@ function DesktopCube() {
                                         title={`Show ${u.username}'s card`}
                                     >
                                         <div className="w-3 h-3 relative flex items-center justify-center flex-shrink-0">
-                                            <div
-                                                className="w-2.5 h-2.5 rounded-sm group-hover:scale-0 group-hover:opacity-0 shadow-2xs transition-all duration-150"
-                                                style={{ backgroundColor: u.color }}
+                                            <UserAvatar
+                                                user={u}
+                                                className="w-3 h-3 group-hover:scale-0 group-hover:opacity-0 transition-all duration-150"
+                                                roundedClassName="rounded-sm"
                                             />
                                             <Maximize2 className="w-3 h-3 text-accent absolute inset-0 m-auto scale-0 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-150" />
                                         </div>
@@ -1026,9 +1028,10 @@ function DesktopCube() {
                                             className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border/40 hover:border-border bg-bg-secondary/30 hover:bg-bg-secondary text-xs text-text-secondary hover:text-text-primary transition-all cursor-pointer group select-none shadow-2xs outline-none focus:outline-none"
                                             title={`Follow ${u.username}`}
                                         >
-                                            <div
-                                                className="w-2.5 h-2.5 rounded-sm flex-shrink-0 transition-transform group-hover:scale-110 shadow-2xs"
-                                                style={{ backgroundColor: u.color }}
+                                            <UserAvatar
+                                                user={u}
+                                                className="w-2.5 h-2.5 flex-shrink-0 transition-transform group-hover:scale-110"
+                                                roundedClassName="rounded-sm"
                                             />
                                             <span className="font-medium truncate max-w-[120px]">{u.username}</span>
                                         </button>
@@ -1048,9 +1051,10 @@ function DesktopCube() {
                                             className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border/40 hover:border-border bg-bg-secondary/30 hover:bg-bg-secondary text-xs text-text-secondary hover:text-text-primary transition-all cursor-pointer group select-none shadow-2xs outline-none focus:outline-none"
                                             title={`Follow ${u.username}`}
                                         >
-                                            <div
-                                                className="w-2.5 h-2.5 rounded-sm flex-shrink-0 transition-transform group-hover:scale-110 shadow-2xs"
-                                                style={{ backgroundColor: u.color }}
+                                            <UserAvatar
+                                                user={u}
+                                                className="w-2.5 h-2.5 flex-shrink-0 transition-transform group-hover:scale-110"
+                                                roundedClassName="rounded-sm"
                                             />
                                             <span className="font-medium truncate max-w-[120px]">{u.username}</span>
                                         </button>

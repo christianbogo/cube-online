@@ -20,6 +20,7 @@
   --text-primary: #24292f;
   --text-secondary: #57606a;
   --accent-color: #0969da;
+  --profile-black: #18181b;
 
   color-scheme: light;
 }
@@ -33,6 +34,7 @@
   --text-primary: #c9d1d9;
   --text-secondary: #8b949e;
   --accent-color: #58a6ff;
+  --profile-black: #2d333b;
 
   color-scheme: dark;
 }

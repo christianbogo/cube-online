@@ -17,7 +17,9 @@ import {
 } from './utils/recordCalculations';
 import type { UserData, Solve } from './types';
 
-admin.initializeApp();
+admin.initializeApp({
+    databaseURL: 'https://cube-online-1-default-rtdb.firebaseio.com'
+});
 const db = admin.firestore();
 
 function calculateAverage(solves: any[], size: number): number | null {
@@ -295,6 +297,62 @@ export const updateLeaderboards = functions.pubsub.schedule('every 15 minutes').
 
     console.log('Leaderboards updated successfully.');
     return null;
+});
+
+const TEN_MINUTES_MS = 10 * 60 * 1000;
+
+export const cleanupStalePresence = functions.pubsub.schedule('every 10 minutes').onRun(async (context) => {
+    const rtdb = admin.database();
+    const presenceRef = rtdb.ref('presence');
+    const snapshot = await presenceRef.once('value');
+    const data = snapshot.val();
+    if (!data) return null;
+
+    const now = Date.now();
+    const updates: Record<string, null> = {};
+
+    for (const [uid, userPresence] of Object.entries(data as Record<string, any>)) {
+        const timestamp = userPresence?.timestamp;
+        if (!timestamp || (now - timestamp) > TEN_MINUTES_MS) {
+            updates[uid] = null;
+        }
+    }
+
+    const count = Object.keys(updates).length;
+    if (count > 0) {
+        await presenceRef.update(updates);
+        console.log(`Cleaned up ${count} stale presence records:`, Object.keys(updates));
+    }
+
+    return null;
+});
+
+export const purgeStalePresenceManual = functions.https.onRequest(async (req, res) => {
+    const rtdb = admin.database();
+    const presenceRef = rtdb.ref('presence');
+    const snapshot = await presenceRef.once('value');
+    const data = snapshot.val();
+    if (!data) {
+        res.json({ success: true, removedCount: 0 });
+        return;
+    }
+
+    const now = Date.now();
+    const updates: Record<string, null> = {};
+
+    for (const [uid, userPresence] of Object.entries(data as Record<string, any>)) {
+        const timestamp = userPresence?.timestamp;
+        if (!timestamp || (now - timestamp) > TEN_MINUTES_MS) {
+            updates[uid] = null;
+        }
+    }
+
+    const count = Object.keys(updates).length;
+    if (count > 0) {
+        await presenceRef.update(updates);
+    }
+
+    res.json({ success: true, removedCount: count, removedUids: Object.keys(updates) });
 });
 
 export const backfillAllUsersStats = functions.https.onRequest(async (req, res) => {

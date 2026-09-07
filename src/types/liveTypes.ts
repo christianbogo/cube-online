@@ -16,4 +16,7 @@ export interface LiveUser {
     lastSolveTime?: number | null;
     recentSolves?: SimpleSolve[];
     timestamp: number;
+    wcaId?: string | null;
+    hasWca?: boolean;
 }
+
