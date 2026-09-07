@@ -9,6 +9,9 @@
         "uid": {
           ".validate": "newData.isString() && newData.val() === auth.uid"
         },
+        "shortId": {
+          ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 20)"
+        },
         "username": {
           ".validate": "newData.isString() && newData.val().length <= 50"
         },
