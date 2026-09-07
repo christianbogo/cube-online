@@ -56,6 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             status: data.status,
                             isGhostMode: data.isGhostMode ?? false,
                             pinnedGoalIds: Array.isArray(data.pinnedGoalIds) ? data.pinnedGoalIds : [],
+                            customEvents: Array.isArray(data.customEvents) ? data.customEvents : [],
+                            logsTableSettings: data.logsTableSettings,
                         };
                         setUser(userData);
                         localStorage.setItem('cached_user_profile', JSON.stringify(userData));
@@ -134,7 +136,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             following: [],
             starredUsers: [],
             blockedUsers: [],
-            isGhostMode: false
+            isGhostMode: false,
+            customEvents: []
         });
 
         // Upload all past local-only solves to Firestore for the new account

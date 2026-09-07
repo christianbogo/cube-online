@@ -2,11 +2,13 @@ import { useSolves, type Solve } from '../../contexts/SolvesContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSession } from '../../contexts/SessionContext';
 import { useSettings } from '../../contexts/SettingsContext';
-import { Trash2, ChevronLeft, ChevronRight, EyeOff, ChevronDown } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useLive } from '../../contexts/LiveContext';
+import { Trash2, ChevronLeft, ChevronRight, Ghost, ChevronDown, Check, Plus } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage } from '../../utils/calculations';
-import { SCRAMBLE_TYPES } from '../../utils/constants';
+import { useEvents } from '../../hooks/useEvents';
+import CreateEventModal from '../timer/CreateEventModal';
 
 export interface RightSidebarProps {
     collapsed: boolean;
@@ -16,13 +18,30 @@ export interface RightSidebarProps {
 type StatsMode = 'best' | 'session';
 
 export default function RightSidebar({ onToggleCollapse, collapsed }: RightSidebarProps) {
-    const { solves: allSolves, updateSolve, deleteSolve, isPrivateMode, togglePrivateMode } = useSolves();
+    const { solves: allSolves, updateSolve, deleteSolve } = useSolves();
+    const { isGhostMode, toggleGhostMode } = useLive();
     const { user } = useAuth();
     const { currentSessionId } = useSession();
     const { settings, updateSettings } = useSettings();
+    const { allEvents, getEventLabel } = useEvents();
+
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!isDropdownOpen) return;
+        const handleClickOutside = (e: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+                setIsDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isDropdownOpen]);
 
     // -- Derived State --
-    const isLocalExperience = !user || isPrivateMode;
+    const isLocalExperience = !user;
 
     // Filter Solves
     const displaySolves = useMemo(() => {
@@ -49,10 +68,9 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
     const [statsMode, setStatsMode] = useState<StatsMode>('best');
 
     const currentSessionSolves = useMemo(() => {
-        if (isPrivateMode) return displaySolves;
         if (!currentSessionId) return [];
         return displaySolves.filter(s => s.sessionId === currentSessionId);
-    }, [displaySolves, currentSessionId, isPrivateMode]);
+    }, [displaySolves, currentSessionId]);
 
     const stats = useMemo(() => {
         const activeSolves = currentSessionSolves;
@@ -125,13 +143,13 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                 <div className="p-2 border-t border-border flex flex-col gap-2 items-center">
                     {user && (
                         <button
-                            onClick={togglePrivateMode}
+                            onClick={toggleGhostMode}
                             onFocus={(e) => e.target.blur()}
                             className={`w-full flex items-center justify-center p-1 rounded-md transition-colors
-                                ${isPrivateMode ? 'text-accent bg-bg-tertiary shadow-inner' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
-                            title={isPrivateMode ? "Exit Private Session" : "Enter Private Session"}
+                                ${isGhostMode ? 'text-accent bg-bg-tertiary shadow-inner' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
+                            title={isGhostMode ? "Ghost Mode Active (Click to go Live)" : "Ghost Mode (Disable Live Timing)"}
                         >
-                            <EyeOff className={`w-5 h-5 ${isPrivateMode ? 'animate-pulse' : ''}`} />
+                            <Ghost className={`w-5 h-5 ${isGhostMode ? 'opacity-100' : ''}`} />
                         </button>
                     )}
 
@@ -154,23 +172,56 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
             {/* Header Area (Stats) */}
             <div className="flex flex-col border-b border-border bg-bg-secondary sticky top-0 z-10">
                 {/* Event Selector */}
-                <div className="p-2 border-b border-border/50 flex justify-center relative group">
-                    <select
-                        value={settings.scrambleType}
-                        onChange={(e) => {
-                            updateSettings({ scrambleType: e.target.value });
-                            e.target.blur();
-                        }}
-                        className="appearance-none bg-transparent font-medium border-none hover:text-accent
-                                outline-none focus:outline-none focus:ring-0 cursor-pointer text-center text-sm w-full z-10"
+                <div ref={dropdownRef} className="p-2 border-b border-border/50 flex justify-center relative">
+                    <button
+                        type="button"
+                        onClick={() => setIsDropdownOpen(prev => !prev)}
+                        className="w-full flex items-center justify-center gap-1.5 py-1 px-3 rounded-lg hover:bg-bg-primary/50 text-text-primary font-medium text-sm transition-colors cursor-pointer outline-none group"
                     >
-                        {SCRAMBLE_TYPES.map(opt => (
-                            <option key={opt.value} value={opt.value} className="bg-bg-secondary text-text-primary">
-                                {opt.label}
-                            </option>
-                        ))}
-                    </select>
-                    <ChevronDown className="w-3 h-3 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
+                        <span className="truncate">{getEventLabel(settings.scrambleType)}</span>
+                        <ChevronDown className={`w-3.5 h-3.5 text-text-secondary transition-transform duration-200 shrink-0 ${isDropdownOpen ? 'rotate-180 text-accent' : 'group-hover:text-text-primary'}`} />
+                    </button>
+
+                    {isDropdownOpen && (
+                        <div className="absolute top-full left-2 right-2 mt-1 bg-bg-secondary border border-border/80 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-72 animate-in fade-in zoom-in-95 duration-150">
+                            <div className="overflow-y-auto custom-scrollbar flex-1 p-1 flex flex-col gap-0.5">
+                                {allEvents.map(opt => {
+                                    const isSelected = opt.value === settings.scrambleType;
+                                    return (
+                                        <button
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={() => {
+                                                updateSettings({ scrambleType: opt.value });
+                                                setIsDropdownOpen(false);
+                                            }}
+                                            className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                                                isSelected
+                                                    ? 'bg-accent text-white font-semibold'
+                                                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'
+                                            }`}
+                                        >
+                                            <span className="truncate">{opt.label}</span>
+                                            {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <div className="p-1 border-t border-border/60 bg-bg-primary/40">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsDropdownOpen(false);
+                                        setIsCreateEventOpen(true);
+                                    }}
+                                    className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold text-accent hover:bg-accent/10 transition-colors cursor-pointer"
+                                >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    <span>Add Event</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Stats Table */}
@@ -197,7 +248,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
             {/* Solve List */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {/* Permanent Guest Solves Save Prompt */}
-                {!user && !isPrivateMode && (
+                {!user && (
                     <div className="py-2 px-3 bg-accent/5 border-b border-border/40 text-center">
                         <Link
                             to="/account"
@@ -258,7 +309,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                             <ChevronRight className="w-6 h-6 opacity-20" />
                         </div>
                         <span className="text-sm">No solves yet</span>
-                        {!user && !isPrivateMode && <span className="text-xs opacity-50">Sign in to save solves.</span>}
+                        {!user && <span className="text-xs opacity-50">Sign in to save solves.</span>}
                     </div>
                 )}
             </div>
@@ -267,14 +318,14 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
             <div className="p-2 border-t border-border flex flex-col gap-2">
                 {user && (
                     <button
-                        onClick={togglePrivateMode}
+                        onClick={toggleGhostMode}
                         onFocus={(e) => e.target.blur()}
                         className={`w-full flex items-center justify-center gap-2 py-2 px-4 text-xs font-medium transition-colors border-b border-border/10
-                            ${isPrivateMode ? 'text-text-primary bg-bg-tertiary shadow-inner' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
-                        title={isPrivateMode ? "Exit Private Session" : "Enter Private Session"}
+                            ${isGhostMode ? 'text-text-primary bg-bg-tertiary shadow-inner' : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'}`}
+                        title={isGhostMode ? "Ghost Mode Active (Click to go Live)" : "Ghost Mode (Disable Live Timing)"}
                     >
-                        <EyeOff className={`w-3.5 h-3.5 ${isPrivateMode ? 'text-accent animate-pulse' : ''}`} />
-                        {isPrivateMode ? 'Private Session Active' : 'Private Session'}
+                        <Ghost className={`w-3.5 h-3.5 ${isGhostMode ? 'text-accent' : ''}`} />
+                        {isGhostMode ? 'Ghost Mode Active' : 'Ghost Mode'}
                     </button>
                 )}
 
@@ -290,6 +341,14 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                     )}
                 </button>
             </div>
+
+            <CreateEventModal
+                isOpen={isCreateEventOpen}
+                onClose={() => setIsCreateEventOpen(false)}
+                onCreated={(newEvent) => {
+                    updateSettings({ scrambleType: newEvent.id });
+                }}
+            />
         </aside>
     );
 }
@@ -358,11 +417,16 @@ const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onC
             `}
         >
             <div className="flex items-center justify-between px-4 py-2">
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
                     <span className="text-text-secondary/40 font-mono w-6 text-right text-[10px]">{number}</span>
                     <span className={`font-mono font-medium ${solve.penalty === 'DNF' ? 'text-red-500' : 'text-text-primary'}`}>
                         {formatTimeDisplay(solve)}
                     </span>
+                    {solve.source === 'cstimer' && (
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-blue-500/10 text-blue-400 font-mono border border-blue-500/20 leading-none shrink-0" title="Imported from csTimer">
+                            CSTimer
+                        </span>
+                    )}
                 </div>
             </div>
 

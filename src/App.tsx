@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { SolvesProvider } from './contexts/SolvesContext';
+import { NotificationsProvider } from './contexts/NotificationsContext';
 import { GoalsProvider } from './contexts/GoalsContext';
 import { SessionProvider } from './contexts/SessionContext';
 import { ConfirmationProvider } from './contexts/ConfirmationContext';
@@ -15,7 +16,10 @@ import Account from './pages/Account';
 import Keybinds from './pages/Keybinds';
 import Dev from './pages/Dev';
 import Privacy from './pages/Privacy';
+import Info from './pages/Info';
+import Arena from './pages/Arena';
 import WCACallback from './pages/WCACallback';
+import { isAdmin } from './utils/admin';
 import type { ReactNode } from 'react';
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
@@ -25,45 +29,59 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   return children;
 };
 
+const ArenaRoute = () => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  const isDev = import.meta.env.DEV;
+  const userIsAdmin = isAdmin(user);
+  if (!isDev && !userIsAdmin) {
+    return <Navigate to="/" replace />;
+  }
+  return <Arena />;
+};
+
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <SettingsProvider>
-          <ConfirmationProvider>
-            <SessionProvider>
-              <SolvesProvider>
-                <LiveProvider>
-                  <GoalsProvider>
-                    <Routes>
-                      <Route path="/" element={<Layout />}>
-                        <Route index element={<Cube />} />
-                        <Route path="logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
-                        <Route path="logs/:type/:id" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
-                        <Route path="data" element={<Navigate to="/logs" replace />} />
-                        <Route path="data/*" element={<Navigate to="/logs" replace />} />
-                        <Route path="stats" element={<Navigate to="/logs" replace />} />
-                        <Route path="stats/*" element={<Navigate to="/logs" replace />} />
-                        <Route path="records" element={<Navigate to="/goals" replace />} />
-                        <Route path="goals" element={<ProtectedRoute><Goals /></ProtectedRoute>} />
-                        <Route path="social" element={<Social />} />
-                        <Route path="social/:userId" element={<Social />} />
-                        <Route path="account" element={<Account />} />
-                        <Route path="keybinds" element={<Keybinds />} />
-                        <Route path="dev" element={<ProtectedRoute><Dev /></ProtectedRoute>} />
-                        <Route path="privacy" element={<Privacy />} />
-                        <Route path="callback" element={<WCACallback />} />
-                      </Route>
-                    </Routes>
-                  </GoalsProvider>
-                </LiveProvider>
-              </SolvesProvider>
-            </SessionProvider>
-          </ConfirmationProvider>
-        </SettingsProvider>
+        <NotificationsProvider>
+          <SettingsProvider>
+            <ConfirmationProvider>
+              <SessionProvider>
+                <SolvesProvider>
+                  <LiveProvider>
+                    <GoalsProvider>
+                      <Routes>
+                        <Route path="/" element={<Layout />}>
+                          <Route index element={<Cube />} />
+                          <Route path="arena" element={<ArenaRoute />} />
+                          <Route path="logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
+                          <Route path="logs/:type/:id" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
+                          <Route path="data" element={<Navigate to="/logs" replace />} />
+                          <Route path="data/*" element={<Navigate to="/logs" replace />} />
+                          <Route path="stats" element={<Navigate to="/logs" replace />} />
+                          <Route path="stats/*" element={<Navigate to="/logs" replace />} />
+                          <Route path="records" element={<Navigate to="/goals" replace />} />
+                          <Route path="goals" element={<ProtectedRoute><Goals /></ProtectedRoute>} />
+                          <Route path="social" element={<Social />} />
+                          <Route path="social/:userId" element={<Social />} />
+                          <Route path="account" element={<Account />} />
+                          <Route path="keybinds" element={<Keybinds />} />
+                          <Route path="dev" element={<ProtectedRoute><Dev /></ProtectedRoute>} />
+                          <Route path="privacy" element={<Privacy />} />
+                          <Route path="info" element={<Info />} />
+                          <Route path="callback" element={<WCACallback />} />
+                        </Route>
+                      </Routes>
+                    </GoalsProvider>
+                  </LiveProvider>
+                </SolvesProvider>
+              </SessionProvider>
+            </ConfirmationProvider>
+          </SettingsProvider>
+        </NotificationsProvider>
       </AuthProvider>
     </BrowserRouter>
   );
 }
-
 export default App;

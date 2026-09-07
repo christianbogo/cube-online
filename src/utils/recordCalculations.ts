@@ -9,7 +9,7 @@ export interface RecordDetail {
     firstSolveDate: string | null;
     completedDate: string | null;
     solves: Solve[]; // Solves in chronological order
-    droppedIndices: Set<number>; // Indices in `solves` that are non-counting (trimmed)
+    droppedIndices: number[]; // Indices in `solves` that are non-counting (trimmed)
     bestSolveTime: number | null;
     worstSolveTime: number | null;
     rawMean: number | null;
@@ -72,7 +72,7 @@ export const calculateWindowAverageDetails = (
         const sorted = [...indexedTimes].sort((a, b) => a.time - b.time);
         const droppedBest = sorted.slice(0, drops).map(x => x.idx);
         const droppedWorst = sorted.slice(sorted.length - drops).map(x => x.idx);
-        const droppedSet = new Set([...droppedBest, ...droppedWorst]);
+        const droppedSet = [...droppedBest, ...droppedWorst];
 
         return {
             type,
@@ -95,7 +95,7 @@ export const calculateWindowAverageDetails = (
     const sorted = [...indexedTimes].sort((a, b) => a.time - b.time);
     const droppedBest = sorted.slice(0, drops).map(x => x.idx);
     const droppedWorst = sorted.slice(sorted.length - drops).map(x => x.idx);
-    const droppedSet = new Set([...droppedBest, ...droppedWorst]);
+    const droppedSet = [...droppedBest, ...droppedWorst];
 
     const counting = sorted.slice(drops, sorted.length - drops);
     const sum = counting.reduce((acc, curr) => acc + curr.time, 0);
@@ -158,7 +158,7 @@ export const calculateBestSingleRecord = (solves: Solve[]): RecordDetail | null 
         firstSolveDate: targetSolve.date,
         completedDate: targetSolve.date,
         solves: [targetSolve],
-        droppedIndices: new Set(),
+        droppedIndices: [],
         bestSolveTime: bestTime,
         worstSolveTime: bestTime,
         rawMean: bestTime,
@@ -178,22 +178,57 @@ export const calculateBestAverageRecord = (
     if (solvesChronological.length < size) return null;
 
     let bestDetail: RecordDetail | null = null;
+    let bestValue: number | null = null;
 
-    for (let i = 0; i <= solvesChronological.length - size; i++) {
-        const window = solvesChronological.slice(i, i + size);
+    const precomputed = solvesChronological.map(s => ({
+        time: getEffectiveTime(s),
+        sessionId: s.sessionId
+    }));
 
+    const drops = getDropsCount(size);
+
+    for (let i = 0; i <= precomputed.length - size; i++) {
         if (!allowCrossSession) {
-            const firstSession = window[0].sessionId;
-            if (!firstSession || !window.every(s => s.sessionId === firstSession)) {
-                continue;
+            const firstSession = precomputed[i].sessionId;
+            if (!firstSession) continue;
+            let sameSession = true;
+            for (let j = 0; j < size; j++) {
+                if (precomputed[i + j].sessionId !== firstSession) {
+                    sameSession = false;
+                    break;
+                }
             }
+            if (!sameSession) continue;
         }
 
-        const detail = calculateWindowAverageDetails(window, size, type, label, allowCrossSession);
-        if (!detail || detail.value === 'DNF' || detail.value === null) continue;
+        // Fast average calculation
+        let dnfCount = 0;
+        for (let j = 0; j < size; j++) {
+            if (precomputed[i + j].time === Infinity) dnfCount++;
+        }
 
-        if (bestDetail === null || (typeof bestDetail.value === 'number' && detail.value < bestDetail.value)) {
-            bestDetail = detail;
+        if (dnfCount > drops) continue;
+
+        const times = [];
+        for (let j = 0; j < size; j++) {
+            times.push(precomputed[i + j].time);
+        }
+        times.sort((a, b) => a - b);
+
+        let sum = 0;
+        for (let j = drops; j < size - drops; j++) {
+            sum += times[j];
+        }
+        const avg = Math.round(sum / (size - 2 * drops));
+
+        if (bestValue === null || avg < bestValue) {
+            bestValue = avg;
+            const windowSolves = solvesChronological.slice(i, i + size);
+            const detail = calculateWindowAverageDetails(windowSolves, size, type, label, allowCrossSession);
+            if (detail && typeof detail.value === 'number') {
+                bestDetail = detail;
+                bestValue = detail.value; // ensure they stay in sync
+            }
         }
     }
 
@@ -240,4 +275,39 @@ export const getRecencyClasses = (tier: RecencyTier): string => {
         default:
             return 'text-text-primary font-medium';
     }
+};
+
+export const calculateEventRecordRow = (
+    eventId: string,
+    label: string,
+    solves: Solve[]
+): EventRecordRow => {
+    const chronological = [...solves].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const validTimes = chronological.map(s => getEffectiveTime(s)).filter(t => t !== Infinity);
+
+    let mean: number | null = null;
+    let std: number | null = null;
+    if (validTimes.length > 0) {
+        mean = Math.round(validTimes.reduce((a, b) => a + b, 0) / validTimes.length);
+        if (validTimes.length > 1) {
+            const variance = validTimes.reduce((acc, t) => acc + Math.pow(t - mean!, 2), 0) / validTimes.length;
+            std = Math.sqrt(variance);
+        }
+    }
+
+    return {
+        type: eventId,
+        label,
+        count: solves.length,
+        totalTime: validTimes.reduce((a, b) => a + b, 0),
+        mean,
+        std,
+        single: calculateBestSingleRecord(chronological),
+        ao5: calculateBestAverageRecord(chronological, 5, 'ao5', 'Ao5', true),
+        ao12: calculateBestAverageRecord(chronological, 12, 'ao12', 'Ao12', true),
+        ao50: calculateBestAverageRecord(chronological, 50, 'ao50', 'Ao50', true),
+        ao100: calculateBestAverageRecord(chronological, 100, 'ao100', 'Ao100', true),
+        ao250: calculateBestAverageRecord(chronological, 250, 'ao250', 'Ao250', true),
+        ao1000: calculateBestAverageRecord(chronological, 1000, 'ao1000', 'Ao1000', true),
+    };
 };

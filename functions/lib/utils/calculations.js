@@ -1,0 +1,111 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.standardDeviation = exports.formatTime = exports.calculateBestSingle = exports.calculateBestAverage = exports.calculateAverage = void 0;
+/**
+ * Calculates the average of a set of times, removing the best and worst X times.
+ * Returns 'DNF' if the count of DNFs is greater than the allowed drops.
+ */
+const calculateAverage = (solves, size) => {
+    if (solves.length < size)
+        return null;
+    const currentSet = solves.slice(0, size);
+    // Count DNFs
+    const dnfs = currentSet.filter(s => s.penalty === 'DNF' || s.inspectionPenalty === 'DNF');
+    // Logic for drops:
+    // Ao5: Drop 1 best, 1 worst (allowing 1 DNF to be the "worst")
+    // Ao12: Drop 1 best, 1 worst
+    // Ao100: Drop 5 best, 5 worst
+    let drops = 0;
+    if (size === 5 || size === 12)
+        drops = 1;
+    if (size === 100)
+        drops = 5;
+    // If more DNFs than we can drop (which is 'drops' amount of worst times), it's a DNF average
+    // Actually, in standard cubing (WCA), for Ao5/Ao12, you drop best and worst. 
+    // If you have 2 DNFs in Ao5, the average is DNF. (One counts as worst, one remains).
+    if (dnfs.length > drops)
+        return 'DNF';
+    // Get times in milliseconds, converting DNFs to Infinity for sorting
+    const times = currentSet.map(s => {
+        if (s.penalty === 'DNF' || s.inspectionPenalty === 'DNF')
+            return Infinity;
+        let t = s.time;
+        if (s.penalty === '+2')
+            t += 2000;
+        if (s.inspectionPenalty === '+2')
+            t += 2000;
+        return t;
+    });
+    // Sort times
+    times.sort((a, b) => a - b);
+    // Remove best X and worst X
+    // Worst times (Infinity) are at the end.
+    const validTimes = times.slice(drops, times.length - drops);
+    // Calculate mean
+    const sum = validTimes.reduce((acc, t) => acc + t, 0);
+    return Math.round(sum / validTimes.length);
+};
+exports.calculateAverage = calculateAverage;
+const calculateBestAverage = (solves, size) => {
+    let best = null;
+    for (let i = 0; i <= solves.length - size; i++) {
+        const window = solves.slice(i, i + size);
+        // Strict Session Check: All solves must be from the same session
+        const firstSessionId = window[0].sessionId;
+        const allSameSession = window.every(s => s.sessionId === firstSessionId);
+        if (!allSameSession)
+            continue;
+        const avg = (0, exports.calculateAverage)(window, size);
+        if (typeof avg === 'number') {
+            if (best === null || avg < best) {
+                best = avg;
+            }
+        }
+    }
+    return best;
+};
+exports.calculateBestAverage = calculateBestAverage;
+const calculateBestSingle = (solves) => {
+    const validSingles = solves
+        .map(s => {
+        if (s.penalty === 'DNF' || s.inspectionPenalty === 'DNF')
+            return Infinity;
+        let t = s.time;
+        if (s.penalty === '+2')
+            t += 2000;
+        if (s.inspectionPenalty === '+2')
+            t += 2000;
+        return t;
+    })
+        .filter(t => t !== Infinity);
+    return validSingles.length > 0 ? Math.min(...validSingles) : null;
+};
+exports.calculateBestSingle = calculateBestSingle;
+const formatTime_1 = require("./formatTime");
+const formatTime = (ms) => {
+    if (ms === null)
+        return '-';
+    if (ms === 'DNF')
+        return 'DNF';
+    return (0, formatTime_1.formatTime)(ms);
+};
+exports.formatTime = formatTime;
+const standardDeviation = (solves) => {
+    const validTimes = solves
+        .filter(s => s.penalty !== 'DNF' && s.inspectionPenalty !== 'DNF')
+        .map(s => {
+        let t = s.time;
+        if (s.penalty === '+2')
+            t += 2000;
+        if (s.inspectionPenalty === '+2')
+            t += 2000;
+        return t;
+    });
+    if (validTimes.length === 0)
+        return 0;
+    const mean = validTimes.reduce((acc, t) => acc + t, 0) / validTimes.length;
+    const variance = validTimes.reduce((acc, t) => acc + Math.pow(t - mean, 2), 0) / validTimes.length;
+    return Math.sqrt(variance);
+};
+exports.standardDeviation = standardDeviation;
+//# sourceMappingURL=calculations.js.map

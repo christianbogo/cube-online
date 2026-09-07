@@ -25,6 +25,7 @@ export default function Keybinds() {
             description: 'Start, stop, and penalty shortcuts',
             binds: [
                 { key: 'Space', action: 'Start / Stop Timer', note: 'Hold to prime' },
+                { key: 'p', action: 'Pass Scramble', note: 'Generate next scramble' },
                 { key: 'd', action: 'DNF Penalty', note: 'Within 5s after solve' },
                 { key: 'f', action: '+2 Penalty (Fault)', note: 'Within 5s after solve' },
             ]
@@ -37,8 +38,9 @@ export default function Keybinds() {
                 { key: '1', action: 'Square-1 Scramble' },
                 { key: 'c', action: 'Clock Scramble' },
                 { key: 'm', action: 'Megaminx Scramble' },
-                { key: 'p', action: 'Pyraminx Scramble' },
+                { key: 'y', action: 'Pyraminx Scramble' },
                 { key: 'k', action: 'Skewb Scramble' },
+                { key: 'f', action: 'FTO Scramble' },
             ]
         },
         {
@@ -52,7 +54,7 @@ export default function Keybinds() {
     ];
 
     return (
-        <div className="max-w-6xl w-full mx-auto p-4 md:p-6 flex flex-col gap-6 select-none">
+        <div className="max-w-6xl w-full mx-auto px-2 py-2.5 sm:px-3 sm:py-3 md:px-4 md:py-4 flex flex-col gap-5 select-none">
             <div className="mb-2">
                 <h1 className="text-3xl font-bold text-text-primary mb-2">
                     Keybinds & Shortcuts

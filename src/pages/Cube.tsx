@@ -6,14 +6,10 @@ import { useSession } from '../contexts/SessionContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useGoals } from '../contexts/GoalsContext';
 import { useLive } from '../contexts/LiveContext';
+import { useEvents } from '../hooks/useEvents';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-    EyeOff,
-    Minus,
-    Plus,
-    Ghost,
     Search,
-    ChevronRight,
     CheckCircle2,
     X,
     Maximize2
@@ -22,15 +18,18 @@ import { formatTime } from '../utils/formatTime';
 import type { LiveUser, TimerState } from '../types';
 import { UserCard, KeybindTooltip } from '../components';
 import { MOCK_FRIENDS, MOCK_COMMUNITY_USERS, USE_MOCK_USERS } from '../utils/mockLiveUsers';
+import { useIsMobile } from '../utils/useIsMobile';
+import MobileCube from '../components/mobile/MobileCube';
 
-export default function Cube() {
+function DesktopCube() {
     const navigate = useNavigate();
     const { settings, updateSettings } = useSettings();
-    const { solves, addSolve, updateSolve, currentScramble, setCurrentScramble, isPrivateMode } = useSolves();
+    const { solves, addSolve, updateSolve, currentScramble, setCurrentScramble } = useSolves();
     const { currentSessionId, setCurrentSessionId, checkSessionStatus } = useSession();
     const { user, toggleStarUser } = useAuth();
     const { pinnedGoals } = useGoals();
-    const { isLiveMode, isGhostMode, toggleGhostMode, connectedUsers, setLiveTimerState } = useLive();
+    const { isLiveMode, connectedUsers, setLiveTimerState } = useLive();
+    const { getBaseScrambleType } = useEvents();
 
     const scrambleType = settings.scrambleType;
 
@@ -45,6 +44,27 @@ export default function Cube() {
     const [searchQuery, setSearchQuery] = useState('');
     const bottomContainerRef = useRef<HTMLDivElement>(null);
     const [isBottomOverflowing, setIsBottomOverflowing] = useState(false);
+
+    // Popular Mode Drag & Drop State
+    const [popularPositions, setPopularPositions] = useState<Record<string, 'top' | 'bottom'>>(() => {
+        try {
+            const saved = localStorage.getItem('cube_popular_positions');
+            return saved ? JSON.parse(saved) : {};
+        } catch {
+            return {};
+        }
+    });
+
+    const moveUserPosition = useCallback((uid: string, target: 'top' | 'bottom') => {
+        setPopularPositions(prev => {
+            const next = { ...prev, [uid]: target };
+            localStorage.setItem('cube_popular_positions', JSON.stringify(next));
+            return next;
+        });
+    }, []);
+
+    const [isTopDragOver, setIsTopDragOver] = useState(false);
+    const [isBottomDragOver, setIsBottomDragOver] = useState(false);
 
     // Minimized / Hidden top friends chips
     const [hiddenUserIds, setHiddenUserIds] = useState<string[]>(() => {
@@ -120,7 +140,6 @@ export default function Cube() {
     const [time, setTime] = useState(0);
     const [inspectionTime, setInspectionTime] = useState(15);
     const [primingProgress, setPrimingProgress] = useState(0);
-    const [scrambleVisible, setScrambleVisible] = useState(true);
     const [isCopied, setIsCopied] = useState(false);
 
     // Sync timerState with LiveContext for RTDB broadcast
@@ -169,9 +188,21 @@ export default function Cube() {
         const combinedFavs = [...mockFavs, ...liveFavs];
         const combinedComms = [...mockComms, ...liveComms];
 
+        const favsMap = new Map<string, LiveUser>();
+        combinedFavs.forEach(u => {
+            if (!blocked.includes(u.uid)) favsMap.set(u.uid, u);
+        });
+
+        const commsMap = new Map<string, LiveUser>();
+        combinedComms.forEach(u => {
+            if (!blocked.includes(u.uid) && !favsMap.has(u.uid) && filterFn(u)) {
+                commsMap.set(u.uid, u);
+            }
+        });
+
         return {
-            favoriteUsers: combinedFavs.filter(u => !blocked.includes(u.uid)),
-            communityUsers: combinedComms.filter(u => !blocked.includes(u.uid) && filterFn(u))
+            favoriteUsers: Array.from(favsMap.values()),
+            communityUsers: Array.from(commsMap.values())
         };
     }, [connectedUsers, user, searchQuery]);
 
@@ -189,10 +220,93 @@ export default function Cube() {
         return { visibleFavoriteUsers: visible, hiddenFavoriteUsers: hidden };
     }, [favoriteUsers, hiddenUserIds]);
 
+    const followerDisplay = settings.followerDisplay || 'default';
+
+    const {
+        topChips,
+        topCards,
+        bottomChips,
+        bottomCards,
+        hasTopUsers,
+        hasBottomUsers
+    } = useMemo(() => {
+        if (followerDisplay === 'minimal') {
+            return {
+                topChips: [] as LiveUser[],
+                topCards: visibleFavoriteUsers,
+                bottomChips: hiddenFavoriteUsers,
+                bottomCards: [] as LiveUser[],
+                hasTopUsers: visibleFavoriteUsers.length > 0,
+                hasBottomUsers: hiddenFavoriteUsers.length > 0
+            };
+        }
+
+        if (followerDisplay === 'popular') {
+            const tChips: LiveUser[] = [];
+            const tCards: LiveUser[] = [];
+            const bChips: LiveUser[] = [];
+            const bCards: LiveUser[] = [];
+
+            // Popular mode: ONLY followed cubers (favoriteUsers) at either top or bottom
+            favoriteUsers.forEach(u => {
+                const pos = popularPositions[u.uid] || 'top';
+                const isHidden = hiddenUserIds.includes(u.uid);
+
+                if (pos === 'top') {
+                    if (isHidden) {
+                        tChips.push(u);
+                    } else {
+                        tCards.push(u);
+                    }
+                } else {
+                    if (isHidden) {
+                        bChips.push(u);
+                    } else {
+                        bCards.push(u);
+                    }
+                }
+            });
+
+            return {
+                topChips: tChips,
+                topCards: tCards,
+                bottomChips: bChips,
+                bottomCards: bCards,
+                hasTopUsers: favoriteUsers.length > 0,
+                hasBottomUsers: favoriteUsers.length > 0
+            };
+        }
+
+        // Default: Hidden chips at top, open cards also at top, unfollowed chips at bottom
+        return {
+            topChips: hiddenFavoriteUsers,
+            topCards: visibleFavoriteUsers,
+            bottomChips: communityUsers,
+            bottomCards: [] as LiveUser[],
+            hasTopUsers: hiddenFavoriteUsers.length > 0 || visibleFavoriteUsers.length > 0,
+            hasBottomUsers: communityUsers.length > 0 || searchQuery.length > 0
+        };
+    }, [
+        followerDisplay,
+        visibleFavoriteUsers,
+        hiddenFavoriteUsers,
+        communityUsers,
+        popularPositions,
+        hiddenUserIds,
+        favoriteUsers,
+        searchQuery
+    ]);
+
     // Scramble generation
     const generateNewScramble = useCallback(async () => {
         try {
-            const s = await randomScrambleForEvent(scrambleType);
+            const baseScrambleType = getBaseScrambleType(scrambleType);
+            if (baseScrambleType === 'none') {
+                setScramble('No Scramble');
+                setCurrentScramble('No Scramble');
+                return;
+            }
+            const s = await randomScrambleForEvent(baseScrambleType);
             const scrambleStr = s.toString();
             setScramble(scrambleStr);
             setCurrentScramble(scrambleStr);
@@ -202,7 +316,7 @@ export default function Cube() {
             setScramble(fallback);
             setCurrentScramble(fallback);
         }
-    }, [setCurrentScramble, scrambleType]);
+    }, [setCurrentScramble, scrambleType, getBaseScrambleType]);
 
     // Initial scramble on mount if none saved
     const mountedRef = useRef(false);
@@ -318,7 +432,7 @@ export default function Cube() {
         });
 
         // Trigger account creation prompt for guests every 5 solves
-        if (!user && !isPrivateMode) {
+        if (!user) {
             const nextSolveCount = solves.length + 1;
             if (nextSolveCount > 0 && nextSolveCount % 5 === 0) {
                 setShowGuestPrompt(true);
@@ -334,7 +448,6 @@ export default function Cube() {
         inspectionTime,
         scrambleType,
         user,
-        isPrivateMode,
         solves.length
     ]);
 
@@ -445,6 +558,13 @@ export default function Cube() {
                 }
             }
 
+            // Pass Scramble Shortcut ('p' or 'P')
+            if (e.key === 'p' || e.key === 'P') {
+                e.preventDefault();
+                generateNewScramble();
+                return;
+            }
+
             // Scrambler Shortcuts
             if (e.key === '2') { updateSettings({ scrambleType: '222' }); return; }
             if (e.key === '3') { updateSettings({ scrambleType: '333' }); return; }
@@ -455,10 +575,11 @@ export default function Cube() {
             if (e.key === '1') { updateSettings({ scrambleType: 'sq1' }); return; }
             if (e.key === 'c' || e.key === 'C') { updateSettings({ scrambleType: 'clock' }); return; }
             if (e.key === 'm' || e.key === 'M') { updateSettings({ scrambleType: 'minx' }); return; }
-            if (e.key === 'p' || e.key === 'P') { updateSettings({ scrambleType: 'pyram' }); return; }
+            if (e.key === 'y' || e.key === 'Y') { updateSettings({ scrambleType: 'pyram' }); return; }
             if (e.key === 'k' || e.key === 'K') { updateSettings({ scrambleType: 'skewb' }); return; }
+            if (e.key === 'f' || e.key === 'F') { updateSettings({ scrambleType: 'fto' }); return; }
         }
-    }, [timerState, settings.solveInspection, finishSolve, solves, updateSolve, updateSettings]);
+    }, [timerState, settings.solveInspection, finishSolve, solves, updateSolve, updateSettings, generateNewScramble]);
 
     const handleKeyUp = useCallback((e: KeyboardEvent) => {
         const target = e.target as HTMLElement | null;
@@ -513,14 +634,13 @@ export default function Cube() {
         return 'text-red-500';
     };
 
+    const isNoScramble = getBaseScrambleType(scrambleType) === 'none' || scramble === 'No Scramble';
+
     const handleCopyScramble = () => {
+        if (isNoScramble) return;
         navigator.clipboard.writeText(scramble);
         setIsCopied(true);
         setTimeout(() => setIsCopied(false), 2000);
-    };
-
-    const changeScrambleSize = (delta: number) => {
-        updateSettings({ scrambleSize: Math.max(0.8, Math.min(3, settings.scrambleSize + delta)) });
     };
 
     const getScrambleSizeMultiplier = () => {
@@ -530,6 +650,7 @@ export default function Cube() {
             case '444bf':
             case '555bf':
             case 'sq1':
+            case 'fto':
                 return 0.7;
             case '666':
             case '777':
@@ -542,17 +663,21 @@ export default function Cube() {
 
     // Overflow tracking for community chips at the bottom
     useEffect(() => {
+        if (followerDisplay !== 'default') {
+            setIsBottomOverflowing(false);
+            return;
+        }
         const check = () => {
             if (bottomContainerRef.current) {
                 const containerWidth = bottomContainerRef.current.clientWidth;
-                const totalEstimatedWidth = communityUsers.length * 120;
+                const totalEstimatedWidth = bottomChips.length * 120 + bottomCards.length * 180;
                 setIsBottomOverflowing(totalEstimatedWidth > containerWidth);
             }
         };
         check();
         window.addEventListener('resize', check);
         return () => window.removeEventListener('resize', check);
-    }, [communityUsers]);
+    }, [bottomChips, bottomCards, followerDisplay]);
 
     const formatRunningTime = (ms: number) => {
         const seconds = Math.floor(ms / 1000);
@@ -566,18 +691,42 @@ export default function Cube() {
         <div className="flex flex-col h-full relative overflow-hidden">
 
             {/* LIVE BAR (Top - Followed Cubers & Minimized Chips) */}
-            {isLiveMode && favoriteUsers.length > 0 && (
-                <div className="flex-shrink-0 w-full px-2 pt-1 pb-1 flex flex-col items-center gap-1.5 z-10 animate-in slide-in-from-top-4 fade-in duration-300">
-                    {/* Top Minimized/Hidden Friends Chips Row (Above Cards) */}
-                    {hiddenFavoriteUsers.length > 0 && (
+            {isLiveMode && hasTopUsers && (
+                <div
+                    className={`flex-shrink-0 w-full px-2 pt-1 pb-1 flex flex-col items-center gap-1.5 z-10 animate-in slide-in-from-top-4 fade-in duration-300 transition-all ${isTopDragOver ? 'bg-accent/10 rounded-xl border-2 border-dashed border-accent/40' : ''}`}
+                    onDragOver={(e) => {
+                        if (followerDisplay === 'popular') {
+                            e.preventDefault();
+                            setIsTopDragOver(true);
+                        }
+                    }}
+                    onDragLeave={() => setIsTopDragOver(false)}
+                    onDrop={(e) => {
+                        e.preventDefault();
+                        setIsTopDragOver(false);
+                        const uid = e.dataTransfer.getData('text/plain');
+                        if (uid) moveUserPosition(uid, 'top');
+                    }}
+                >
+                    {/* Empty Drop Zone for Popular Mode at Top */}
+                    {followerDisplay === 'popular' && topCards.length === 0 && topChips.length === 0 && (
+                        <div className={`py-2 px-6 rounded-xl border border-dashed text-xs text-text-secondary/50 transition-colors my-1 select-none ${isTopDragOver ? 'border-accent text-accent bg-accent/10' : 'border-border/30'}`}>
+                            Drag cubers here to move to top
+                        </div>
+                    )}
+
+                    {/* Top Minimized/Hidden Chips Row */}
+                    {topChips.length > 0 && (
                         <div className="w-full flex items-center justify-center overflow-x-auto no-scrollbar py-1 px-4 mask-fade-edges">
                             <div className="flex items-center gap-2 flex-nowrap min-w-max mx-auto justify-center">
-                                {hiddenFavoriteUsers.map(u => (
+                                {topChips.map(u => (
                                     <button
-                                        key={`hidden-${u.uid}`}
+                                        key={`hidden-top-${u.uid}`}
                                         type="button"
+                                        draggable={followerDisplay === 'popular'}
+                                        onDragStart={(e) => e.dataTransfer.setData('text/plain', u.uid)}
                                         onClick={() => unhideUser(u.uid)}
-                                        className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border/40 hover:border-accent/60 bg-bg-secondary/40 hover:bg-bg-secondary text-xs text-text-secondary hover:text-text-primary transition-all cursor-pointer group select-none shadow-2xs"
+                                        className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border/40 hover:border-accent/60 bg-bg-secondary/40 hover:bg-bg-secondary text-xs text-text-secondary hover:text-text-primary transition-all cursor-pointer group select-none shadow-2xs outline-none focus:outline-none"
                                         title={`Show ${u.username}'s card`}
                                     >
                                         <div className="w-3 h-3 relative flex items-center justify-center flex-shrink-0">
@@ -594,15 +743,17 @@ export default function Cube() {
                         </div>
                     )}
 
-                    {/* Unhidden Followed Players Cards Row - Always Centered */}
-                    {visibleFavoriteUsers.length > 0 && (
-                        <div className="w-full flex items-center overflow-x-auto min-h-[146px] py-2 px-4 no-scrollbar mask-fade-edges-cards">
-                            <div className="flex items-center gap-4 min-w-max mx-auto px-4 justify-center">
-                                {visibleFavoriteUsers.map(u => (
+                    {/* Open Cards Row */}
+                    {topCards.length > 0 && (
+                        <div className="w-full flex items-center overflow-x-auto min-h-[112px] py-4 px-4 no-scrollbar mask-fade-edges-cards">
+                            <div className="flex items-center gap-3 min-w-max mx-auto px-4 justify-center">
+                                {topCards.map(u => (
                                     <UserCard
                                         key={u.uid}
                                         user={u}
                                         onHide={() => hideUser(u.uid)}
+                                        draggable={followerDisplay === 'popular'}
+                                        onDragStart={(e) => e.dataTransfer.setData('text/plain', u.uid)}
                                     />
                                 ))}
                             </div>
@@ -669,114 +820,95 @@ export default function Cube() {
                     </div>
                 )}
 
-                {/* Scramble Toolbar & Content */}
-                {scrambleVisible ? (
-                    <>
-                        <div className="flex items-center gap-6 mb-4 text-text-secondary transition-opacity hover:text-text-primary">
-                            {user && user.emailVerified && (
-                                <div className="flex items-center gap-6">
-                                    <button
-                                        onClick={toggleGhostMode}
-                                        className="flex items-center transition-all cursor-pointer"
-                                        style={{ color: isGhostMode ? (user.color || '#ef4444') : undefined }}
-                                        title={isGhostMode ? "Ghost Mode Active (Live Disabled) — Click to go Live" : "Ghost Mode (Disable Live Timing)"}
-                                    >
-                                        <Ghost className={`w-5 h-5 transition-transform hover:scale-110 ${isGhostMode ? 'opacity-100 drop-shadow-sm' : 'text-text-secondary hover:text-text-primary'}`} />
-                                    </button>
-                                    <div className="w-[1px] h-5 bg-border/50" />
-                                </div>
-                            )}
-
-
-
-                            <button onClick={() => setScrambleVisible(false)} className="hover:text-accent transition-colors cursor-pointer" title="Hide Scramble">
-                                <EyeOff className="w-5 h-5" />
-                            </button>
-
-                            <div className="flex items-center gap-4">
-                                <button onClick={() => changeScrambleSize(-0.4)} className="hover:text-accent transition-colors cursor-pointer" title="Smaller">
-                                    <Minus className="w-5 h-5" />
-                                </button>
-                                <button onClick={() => changeScrambleSize(0.4)} className="hover:text-accent transition-colors cursor-pointer" title="Larger">
-                                    <Plus className="w-5 h-5" />
-                                </button>
-                            </div>
-
-                            <button
-                                onClick={generateNewScramble}
-                                className="hover:text-accent transition-colors cursor-pointer"
-                                title="Next Scramble"
-                            >
-                                <ChevronRight className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        {/* Scramble Text */}
-                        <div className="mb-8 text-center max-w-2xl min-h-[4rem] flex flex-col items-center justify-center relative">
-                            {isCopied && (
-                                <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-700 text-white text-[11px] font-medium px-2.5 py-0.5 rounded shadow-lg animate-in fade-in zoom-in-95 pointer-events-none whitespace-nowrap z-20 flex items-center gap-1">
-                                    <CheckCircle2 className="w-3 h-3 text-green-400" />
-                                    <span>Scramble copied!</span>
-                                </div>
-                            )}
-                            <p
-                                onClick={handleCopyScramble}
-                                className="font-mono text-text-secondary leading-relaxed text-center cursor-pointer hover:text-text-primary active:scale-95"
-                                style={{
-                                    fontSize: `${settings.scrambleSize * getScrambleSizeMultiplier()}rem`,
-                                    color: isCopied ? '#22c55e' : undefined
-                                }}
-                                title="Click to copy"
-                            >
-                                {scramble}
-                            </p>
-                        </div>
-                    </>
-                ) : (
+                {/* Scramble Display */}
+                {isNoScramble ? (
+                    <div className="mb-8 min-h-[4rem]" />
+                ) : settings.hideScramble ? (
                     <div className="mb-8 min-h-[4rem] flex items-center justify-center">
                         <button
-                            onClick={() => setScrambleVisible(true)}
+                            onClick={() => updateSettings({ hideScramble: false })}
                             className="font-mono text-text-secondary/50 italic hover:text-text-primary transition-colors cursor-pointer"
                         >
                             Scramble hidden
                         </button>
+                    </div>
+                ) : (
+                    <div className="mb-8 text-center max-w-2xl min-h-[4rem] flex flex-col items-center justify-center relative">
+                        {isCopied && (
+                            <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-700 text-white text-[11px] font-medium px-2.5 py-0.5 rounded shadow-lg animate-in fade-in zoom-in-95 pointer-events-none whitespace-nowrap z-20 flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-green-400" />
+                                <span>Scramble copied!</span>
+                            </div>
+                        )}
+                        <p
+                            onClick={handleCopyScramble}
+                            className="font-mono text-text-secondary leading-relaxed text-center cursor-pointer hover:text-text-primary active:scale-95"
+                            style={{
+                                fontSize: `${(settings.scrambleSize || 1.8) * getScrambleSizeMultiplier()}rem`,
+                                color: isCopied ? '#22c55e' : undefined
+                            }}
+                            title="Click to copy"
+                        >
+                            {scramble}
+                        </p>
                     </div>
                 )}
 
                 {/* BIG TIMER DISPLAY */}
                 <div className="text-center">
                     {timerState === 'INSPECTION' ? (
-                        <h1 className={`text-9xl font-normal font-mono ${getInspectionColor()}`}>
+                        <h1
+                            className={`font-normal font-mono ${getInspectionColor()}`}
+                            style={{ fontSize: `${settings.timerSize || 8}rem`, lineHeight: 1 }}
+                        >
                             {Math.abs(inspectionTime)}
                         </h1>
                     ) : timerState === 'RUNNING' ? (
                         settings.showLiveTimer ? (
-                            <h1 className="text-9xl font-normal font-mono text-text-primary">
+                            <h1
+                                className="font-normal font-mono text-text-primary"
+                                style={{ fontSize: `${settings.timerSize || 8}rem`, lineHeight: 1 }}
+                            >
                                 {formatRunningTime(time)}
                             </h1>
                         ) : (
-                            <h1 className="text-9xl font-normal font-mono text-text-primary tracking-widest">
+                            <h1
+                                className="font-normal font-mono text-text-primary tracking-widest"
+                                style={{ fontSize: `${settings.timerSize || 8}rem`, lineHeight: 1 }}
+                            >
                                 SOLVE
                             </h1>
                         )
                     ) : timerState === 'PRIMING' ? (
                         primingProgress >= 1 ? (
-                            <h1 className="text-9xl font-normal font-mono text-green-500">
+                            <h1
+                                className="font-normal font-mono text-green-500"
+                                style={{ fontSize: `${settings.timerSize || 8}rem`, lineHeight: 1 }}
+                            >
                                 Ready
                             </h1>
                         ) : (
                             prevTimerState === 'INSPECTION' ? (
-                                <h1 className={`text-9xl font-normal font-mono ${getInspectionColor()}`}>
+                                <h1
+                                    className={`font-normal font-mono ${getInspectionColor()}`}
+                                    style={{ fontSize: `${settings.timerSize || 8}rem`, lineHeight: 1 }}
+                                >
                                     {Math.abs(inspectionTime)}
                                 </h1>
                             ) : (
-                                <h1 className={`text-9xl font-normal font-mono text-text-primary ${primingProgress < 1 ? 'opacity-50' : ''}`}>
+                                <h1
+                                    className={`font-normal font-mono text-text-primary ${primingProgress < 1 ? 'opacity-50' : ''}`}
+                                    style={{ fontSize: `${settings.timerSize || 8}rem`, lineHeight: 1 }}
+                                >
                                     {formatTime(time)}
                                 </h1>
                             )
                         )
                     ) : (
-                        <h1 className="text-9xl font-normal font-mono text-text-primary">
+                        <h1
+                            className="font-normal font-mono text-text-primary"
+                            style={{ fontSize: `${settings.timerSize || 8}rem`, lineHeight: 1 }}
+                        >
                             {formatTime(time)}
                         </h1>
                     )}
@@ -788,11 +920,50 @@ export default function Cube() {
                 </div>
             </div>
 
-            {/* LIVE BAR (Bottom - Non-Following Active Cubers) */}
-            {isLiveMode && (
-                <div className="flex-shrink-0 w-full pb-3 pt-1 px-4 z-10 flex flex-col items-center justify-end">
-                    {/* Subtle Search Input - only visible if there are enough bottom chips to justify scrolling, or search is active */}
-                    {(isBottomOverflowing || searchQuery.length > 0) && (
+            {/* LIVE BAR (Bottom) */}
+            {isLiveMode && hasBottomUsers && (
+                <div
+                    className={`flex-shrink-0 w-full pb-2 pt-1 px-2.5 z-10 flex flex-col items-center justify-end transition-all ${isBottomDragOver ? 'bg-accent/10 rounded-xl border-2 border-dashed border-accent/40' : ''}`}
+                    onDragOver={(e) => {
+                        if (followerDisplay === 'popular') {
+                            e.preventDefault();
+                            setIsBottomDragOver(true);
+                        }
+                    }}
+                    onDragLeave={() => setIsBottomDragOver(false)}
+                    onDrop={(e) => {
+                        e.preventDefault();
+                        setIsBottomDragOver(false);
+                        const uid = e.dataTransfer.getData('text/plain');
+                        if (uid) moveUserPosition(uid, 'bottom');
+                    }}
+                >
+                    {/* Bottom Cards Row (in Popular mode) */}
+                    {bottomCards.length > 0 && (
+                        <div className="w-full flex items-center overflow-x-auto min-h-[112px] py-4 px-4 no-scrollbar mask-fade-edges-cards mb-1">
+                            <div className="flex items-center gap-3 min-w-max mx-auto px-4 justify-center">
+                                {bottomCards.map(u => (
+                                    <UserCard
+                                        key={u.uid}
+                                        user={u}
+                                        onHide={() => hideUser(u.uid)}
+                                        draggable={followerDisplay === 'popular'}
+                                        onDragStart={(e) => e.dataTransfer.setData('text/plain', u.uid)}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Empty Drop Zone for Popular Mode */}
+                    {followerDisplay === 'popular' && bottomCards.length === 0 && bottomChips.length === 0 && (
+                        <div className={`py-2 px-6 rounded-xl border border-dashed text-xs text-text-secondary/50 transition-colors my-1 select-none ${isBottomDragOver ? 'border-accent text-accent bg-accent/10' : 'border-border/30'}`}>
+                            Drag cubers here to move to bottom
+                        </div>
+                    )}
+
+                    {/* Subtle Search Input - only visible in default mode when overflowing or searching */}
+                    {followerDisplay === 'default' && (isBottomOverflowing || searchQuery.length > 0) && (
                         <div className="flex items-center justify-center mb-2 animate-in fade-in duration-200">
                             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-bg-secondary/30 hover:bg-bg-secondary/60 focus-within:bg-bg-secondary/80 transition-colors">
                                 <Search className="w-3 h-3 text-text-secondary/50" />
@@ -807,63 +978,87 @@ export default function Cube() {
                         </div>
                     )}
 
-                    {/* Chips Container */}
-                    <div
-                        ref={bottomContainerRef}
-                        className={`w-full overflow-hidden flex items-center min-h-[32px] ${isBottomOverflowing ? 'justify-start mask-fade-edges' : 'justify-center'}`}
-                    >
-                        {communityUsers.length === 0 ? (
-                            searchQuery ? (
-                                <div className="w-full text-text-secondary/50 text-xs italic text-center py-1">
-                                    No cubers matching &quot;{searchQuery}&quot;
+                    {/* Popular & Minimal Mode: Bottom Followed Chips (Exact same behavior and styling as top chips) */}
+                    {(followerDisplay === 'popular' || followerDisplay === 'minimal') && bottomChips.length > 0 && (
+                        <div className="w-full flex items-center justify-center overflow-x-auto no-scrollbar py-1 px-4 mask-fade-edges">
+                            <div className="flex items-center gap-2 flex-nowrap min-w-max mx-auto justify-center">
+                                {bottomChips.map(u => (
+                                    <button
+                                        key={`hidden-bottom-${u.uid}`}
+                                        type="button"
+                                        draggable={followerDisplay === 'popular'}
+                                        onDragStart={(e) => e.dataTransfer.setData('text/plain', u.uid)}
+                                        onClick={() => unhideUser(u.uid)}
+                                        className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border/40 hover:border-accent/60 bg-bg-secondary/40 hover:bg-bg-secondary text-xs text-text-secondary hover:text-text-primary transition-all cursor-pointer group select-none shadow-2xs outline-none focus:outline-none"
+                                        title={`Show ${u.username}'s card`}
+                                    >
+                                        <div className="w-3 h-3 relative flex items-center justify-center flex-shrink-0">
+                                            <div
+                                                className="w-2.5 h-2.5 rounded-sm group-hover:scale-0 group-hover:opacity-0 shadow-2xs transition-all duration-150"
+                                                style={{ backgroundColor: u.color }}
+                                            />
+                                            <Maximize2 className="w-3 h-3 text-accent absolute inset-0 m-auto scale-0 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-150" />
+                                        </div>
+                                        <span className="font-medium truncate max-w-[110px]">{u.username}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Default Mode: Community / Unfollowed Users */}
+                    {followerDisplay === 'default' && bottomChips.length > 0 && (
+                        <div
+                            ref={bottomContainerRef}
+                            className={`w-full overflow-hidden flex items-center min-h-[32px] ${isBottomOverflowing ? 'justify-start mask-fade-edges' : 'justify-center'}`}
+                        >
+                            {isBottomOverflowing ? (
+                                <div className="animate-marquee-slow flex items-center gap-2 py-0.5 flex-nowrap pr-2">
+                                    {[...bottomChips, ...bottomChips].map((u, idx) => (
+                                        <button
+                                            key={`comm-${u.uid}-${idx}`}
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                toggleStarUser(u.uid);
+                                            }}
+                                            className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border/40 hover:border-border bg-bg-secondary/30 hover:bg-bg-secondary text-xs text-text-secondary hover:text-text-primary transition-all cursor-pointer group select-none shadow-2xs outline-none focus:outline-none"
+                                            title={`Follow ${u.username}`}
+                                        >
+                                            <div
+                                                className="w-2.5 h-2.5 rounded-sm flex-shrink-0 transition-transform group-hover:scale-110 shadow-2xs"
+                                                style={{ backgroundColor: u.color }}
+                                            />
+                                            <span className="font-medium truncate max-w-[120px]">{u.username}</span>
+                                        </button>
+                                    ))}
                                 </div>
-                            ) : null
-                        ) : isBottomOverflowing ? (
-                            <div className="animate-marquee-slow flex items-center gap-2 py-0.5 flex-nowrap pr-2">
-                                {[...communityUsers, ...communityUsers].map((u, idx) => (
-                                    <button
-                                        key={`${u.uid}-${idx}`}
-                                        type="button"
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            toggleStarUser(u.uid);
-                                        }}
-                                        className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border/40 hover:border-border bg-bg-secondary/30 hover:bg-bg-secondary text-xs text-text-secondary hover:text-text-primary transition-all cursor-pointer group select-none shadow-2xs outline-none focus:outline-none"
-                                        title={`Follow ${u.username}`}
-                                    >
-                                        <div
-                                            className="w-2.5 h-2.5 rounded-sm flex-shrink-0 transition-transform group-hover:scale-110 shadow-2xs"
-                                            style={{ backgroundColor: u.color }}
-                                        />
-                                        <span className="font-medium truncate max-w-[120px]">{u.username}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="flex flex-nowrap justify-center items-center gap-2 py-0.5 max-w-full overflow-x-auto no-scrollbar">
-                                {communityUsers.map(u => (
-                                    <button
-                                        key={u.uid}
-                                        type="button"
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            toggleStarUser(u.uid);
-                                        }}
-                                        className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border/40 hover:border-border bg-bg-secondary/30 hover:bg-bg-secondary text-xs text-text-secondary hover:text-text-primary transition-all cursor-pointer group select-none shadow-2xs outline-none focus:outline-none"
-                                        title={`Follow ${u.username}`}
-                                    >
-                                        <div
-                                            className="w-2.5 h-2.5 rounded-sm flex-shrink-0 transition-transform group-hover:scale-110 shadow-2xs"
-                                            style={{ backgroundColor: u.color }}
-                                        />
-                                        <span className="font-medium truncate max-w-[120px]">{u.username}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                            ) : (
+                                <div className="flex flex-nowrap justify-center items-center gap-2 py-0.5 max-w-full overflow-x-auto no-scrollbar">
+                                    {bottomChips.map(u => (
+                                        <button
+                                            key={`comm-${u.uid}`}
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                toggleStarUser(u.uid);
+                                            }}
+                                            className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border/40 hover:border-border bg-bg-secondary/30 hover:bg-bg-secondary text-xs text-text-secondary hover:text-text-primary transition-all cursor-pointer group select-none shadow-2xs outline-none focus:outline-none"
+                                            title={`Follow ${u.username}`}
+                                        >
+                                            <div
+                                                className="w-2.5 h-2.5 rounded-sm flex-shrink-0 transition-transform group-hover:scale-110 shadow-2xs"
+                                                style={{ backgroundColor: u.color }}
+                                            />
+                                            <span className="font-medium truncate max-w-[120px]">{u.username}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -918,4 +1113,9 @@ export default function Cube() {
             <KeybindTooltip timerState={timerState} totalSolves={solves.length} />
         </div>
     );
+}
+
+export default function Cube() {
+    const isMobile = useIsMobile();
+    return isMobile ? <MobileCube /> : <DesktopCube />;
 }

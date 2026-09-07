@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import type { UserData, Solve, SocialProfile } from '../../types';
+import type { UserData, SocialProfile } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
@@ -54,7 +54,7 @@ const NETWORK_LABELS: Record<string, string> = {
 
 export interface UserProfileViewProps {
     targetUser: UserData;
-    solves: Solve[];
+    userStats?: any;
     allUsers: UserData[];
     onBack: () => void;
     onSelectUser: (user: UserData) => void;
@@ -62,7 +62,7 @@ export interface UserProfileViewProps {
 
 export function UserProfileView({
     targetUser: initialUser,
-    solves,
+    userStats,
     allUsers,
     onBack,
     onSelectUser
@@ -279,15 +279,18 @@ export function UserProfileView({
         };
     }, [initialUser.uid]);
 
-    // Filter solves for this specific user
-    const userSolves = useMemo(() => {
-        return solves.filter(s => s.userId === liveUser.uid);
-    }, [solves, liveUser.uid]);
-
     // Compute goals progress for this user
     const allGoalsProgress = useMemo(() => {
-        return evaluateUserGoals(userSolves, liveUser);
-    }, [userSolves, liveUser]);
+        return evaluateUserGoals([], liveUser, [], userStats);
+    }, [liveUser, userStats]);
+
+    // Active events with at least one solve
+    const activeEvents = useMemo(() => {
+        if (!userStats?.validSolvesPerEvent) return undefined;
+        return Object.entries(userStats.validSolvesPerEvent)
+            .filter(([_, count]) => (count as number) > 0)
+            .map(([e]) => e);
+    }, [userStats?.validSolvesPerEvent]);
 
     // Pinned goals or fallback top goals
     const displayedPinnedGoals = useMemo(() => {
@@ -367,13 +370,7 @@ export function UserProfileView({
         });
     }, [liveUser.socials, isSelf, isFollowing, isFollower]);
 
-    // Following list for target user
-    const userFollowing = useMemo(() => {
-        const followingIds = new Set(liveUser.following || liveUser.starredUsers || []);
-        return allUsers.filter(u => followingIds.has(u.uid) && (u.username || '').toLowerCase() !== 'cubinguser');
-    }, [liveUser.following, liveUser.starredUsers, allUsers]);
-
-    // Followers list for target user
+    // Followers list for target user (who they are followed by)
     const userFollowers = useMemo(() => {
         return allUsers.filter(u => {
             if ((u.username || '').toLowerCase() === 'cubinguser') return false;
@@ -556,7 +553,11 @@ export function UserProfileView({
                 <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider px-1">
                     Personal Records
                 </h3>
-                <RecordTable solves={userSolves} userId={liveUser.uid} hideFootnote={true} />
+                <RecordTable 
+                    userId={liveUser.uid} 
+                    hideFootnote={true} 
+                    activeEvents={activeEvents}
+                />
             </div>
 
             {/* 2. PINNED GOALS & PROGRESS */}
@@ -623,79 +624,40 @@ export function UserProfileView({
                 )}
             </div>
 
-            {/* 3. PROFILES THEY FOLLOW & PROFILES THEY ARE FOLLOWED BY */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                {/* Following */}
-                <div className="flex flex-col gap-3">
-                    <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider px-1">
-                        Following ({userFollowing.length})
-                    </h3>
+            {/* 3. PROFILES THEY ARE FOLLOWED BY */}
+            <div className="flex flex-col gap-3 pt-2">
+                <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider px-1">
+                    Followers ({userFollowers.length})
+                </h3>
 
-                    {userFollowing.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            {userFollowing.map(u => (
+                {userFollowers.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+                        {userFollowers.map(u => (
+                            <div
+                                key={u.uid}
+                                onClick={() => onSelectUser(u)}
+                                className="flex items-center gap-2.5 p-2.5 rounded-xl border border-border/60 bg-surface-elevation-1 hover:bg-bg-hover hover:border-accent/40 transition-all cursor-pointer group shadow-2xs select-none"
+                            >
                                 <div
-                                    key={u.uid}
-                                    onClick={() => onSelectUser(u)}
-                                    className="flex items-center gap-2.5 p-2.5 rounded-xl border border-border/60 bg-surface-elevation-1 hover:bg-bg-hover hover:border-accent/40 transition-all cursor-pointer group shadow-2xs select-none"
-                                >
-                                    <div
-                                        className="w-7 h-7 rounded-lg shrink-0 shadow-2xs transition-transform group-hover:scale-105"
-                                        style={{ backgroundColor: u.color || '#3b82f6' }}
-                                    />
-                                    <div className="flex flex-col min-w-0">
-                                        <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors leading-tight">
-                                            {u.username || 'CubingUser'}
-                                        </span>
-                                        <span className="text-[10px] text-text-secondary font-mono truncate leading-none">
-                                            #{u.shortId || '????'}
-                                        </span>
-                                    </div>
+                                    className="w-7 h-7 rounded-lg shrink-0 shadow-2xs transition-transform group-hover:scale-105"
+                                    style={{ backgroundColor: u.color || '#3b82f6' }}
+                                />
+                                <div className="flex flex-col min-w-0">
+                                    <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors leading-tight">
+                                        {u.username || 'CubingUser'}
+                                    </span>
+                                    <span className="text-[10px] text-text-secondary font-mono truncate leading-none">
+                                        #{u.shortId || '????'}
+                                    </span>
                                 </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="py-6 text-center text-text-secondary/60 text-xs italic bg-surface-elevation-1/40 rounded-xl border border-dashed border-border/40">
-                            Not following anyone yet.
-                        </div>
-                    )}
-                </div>
-
-                {/* Followers */}
-                <div className="flex flex-col gap-3">
-                    <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider px-1">
-                        Followers ({userFollowers.length})
-                    </h3>
-
-                    {userFollowers.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            {userFollowers.map(u => (
-                                <div
-                                    key={u.uid}
-                                    onClick={() => onSelectUser(u)}
-                                    className="flex items-center gap-2.5 p-2.5 rounded-xl border border-border/60 bg-surface-elevation-1 hover:bg-bg-hover hover:border-accent/40 transition-all cursor-pointer group shadow-2xs select-none"
-                                >
-                                    <div
-                                        className="w-7 h-7 rounded-lg shrink-0 shadow-2xs transition-transform group-hover:scale-105"
-                                        style={{ backgroundColor: u.color || '#3b82f6' }}
-                                    />
-                                    <div className="flex flex-col min-w-0">
-                                        <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors leading-tight">
-                                            {u.username || 'CubingUser'}
-                                        </span>
-                                        <span className="text-[10px] text-text-secondary font-mono truncate leading-none">
-                                            #{u.shortId || '????'}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="py-6 text-center text-text-secondary/60 text-xs italic bg-surface-elevation-1/40 rounded-xl border border-dashed border-border/40">
-                            No followers yet.
-                        </div>
-                    )}
-                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="py-6 text-center text-text-secondary/60 text-xs italic bg-surface-elevation-1/40 rounded-xl border border-dashed border-border/40">
+                        No followers yet.
+                    </div>
+                )}
             </div>
 
             {/* ADMIN ONLY: ERASE PROFILE BUTTON */}

@@ -59,6 +59,7 @@ export default function SocialsTab() {
 
     // Filter out email from the main list, as it's pinned
     const otherSocials = socials.filter(s => s.network !== 'email');
+    const isWcaLinked = Boolean(user?.wcaId || socials.some(s => s.network === 'wca' && s.value));
 
     // Sync email value if it changes in auth
     if (emailEntry.value !== user?.email) emailEntry.value = user?.email || '';
@@ -267,19 +268,23 @@ export default function SocialsTab() {
                                 <span>Add</span>
                             </button>
                         </div>
-                        <div className="w-px h-8 bg-border hidden lg:block" />
-                        <button
-                            onClick={() => {
-                                const wcaClientId = import.meta.env.VITE_WCA_CLIENT_ID;
-                                const redirectUri = window.location.origin.includes('localhost')
-                                    ? 'http://localhost:5173/callback'
-                                    : 'https://cubeonline.org/callback';
-                                window.location.href = `https://www.worldcubeassociation.org/oauth/authorize?client_id=${wcaClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=public`;
-                            }}
-                            className="bg-[#FF9900] text-white px-4 py-2 rounded text-sm font-bold hover:brightness-110 transition-all flex items-center justify-center gap-1.5 w-full lg:w-auto shrink-0"
-                        >
-                            Link WCA
-                        </button>
+                        {!isWcaLinked && (
+                            <>
+                                <div className="w-px h-8 bg-border hidden lg:block" />
+                                <button
+                                    onClick={() => {
+                                        const wcaClientId = import.meta.env.VITE_WCA_CLIENT_ID;
+                                        const redirectUri = window.location.origin.includes('localhost')
+                                            ? 'http://localhost:5173/callback'
+                                            : 'https://cubeonline.org/callback';
+                                        window.location.href = `https://www.worldcubeassociation.org/oauth/authorize?client_id=${wcaClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=public`;
+                                    }}
+                                    className="bg-[#FF9900] text-white px-4 py-2 rounded text-sm font-bold hover:brightness-110 transition-all flex items-center justify-center gap-1.5 w-full lg:w-auto shrink-0"
+                                >
+                                    Link WCA
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             )}

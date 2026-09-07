@@ -1,33 +1,33 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { collection, onSnapshot, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import type { UserData, Solve } from '../types';
-import {
-    getMostSolvingLeaderboard,
-    getMostGoalsLeaderboard,
-    getMostDiverseLeaderboard,
-    getMostLuckyLeaderboard,
-    getMostImprovedLeaderboard
-} from '../utils/socialCalculations';
+import type { UserData } from '../types';
 import { SocialLeaderboardCard } from '../components/social/SocialLeaderboardCard';
 import { UserProfileView } from '../components/social/UserProfileView';
 import { Search, Loader2 } from 'lucide-react';
 
+// Module-level in-memory cache to prevent flashing "only my account" during page transitions
+let cachedUsers: UserData[] = [];
+let cachedHasLoaded = false;
+let cachedLeaderboards: any = null;
+
 export default function Social() {
+    const scrollRef = useRef<HTMLDivElement>(null);
     const { user: currentUser } = useAuth();
     const { userId: routeUserId } = useParams<{ userId?: string }>();
     const navigate = useNavigate();
 
-    // Data states from Firestore
-    const [allUsers, setAllUsers] = useState<UserData[]>([]);
-    const [allSolves, setAllSolves] = useState<Solve[]>([]);
-    const [loadingData, setLoadingData] = useState(true);
+    // Data states from Firestore (seeded with cache to avoid blank flash on re-visiting)
+    const [allUsers, setAllUsers] = useState<UserData[]>(cachedUsers);
+    const [leaderboards, setLeaderboards] = useState<any>(cachedLeaderboards);
+    const [loadingUsers, setLoadingUsers] = useState<boolean>(!cachedHasLoaded);
+    const [loadingLeaderboards, setLoadingLeaderboards] = useState<boolean>(!cachedLeaderboards);
 
     // Direct single user fetch state (for direct deep links or unauthenticated visits)
     const [directUser, setDirectUser] = useState<UserData | null>(null);
-    const [directSolves, setDirectSolves] = useState<Solve[]>([]);
+    const [directUserStats, setDirectUserStats] = useState<any>(null);
     const [loadingDirectUser, setLoadingDirectUser] = useState(false);
 
     // Selected user for profile view
@@ -39,6 +39,14 @@ export default function Social() {
     useEffect(() => {
         let isMounted = true;
         const usersRef = collection(db, 'users');
+
+        // Failsafe timeout to prevent infinite spinner on poor/offline connection
+        const failsafeTimer = setTimeout(() => {
+            if (isMounted) {
+                setLoadingUsers(false);
+            }
+        }, 4000);
+
         const unsubUsers = onSnapshot(usersRef, (snapshot) => {
             if (!isMounted) return;
             const usersList: UserData[] = [];
@@ -62,7 +70,15 @@ export default function Social() {
                 });
             });
             setAllUsers(usersList);
-            setLoadingData(false);
+            cachedUsers = usersList;
+
+            // If the snapshot is from local cache and has <= 1 document (usually just current user's profile from auth),
+            // wait for the server snapshot before marking initial loading as complete.
+            const isPartialCache = snapshot.metadata.fromCache && usersList.length <= 1;
+            if (!isPartialCache) {
+                cachedHasLoaded = true;
+                setLoadingUsers(false);
+            }
         }, async (err) => {
             console.warn("Users subscription warning:", err.message);
             try {
@@ -89,78 +105,78 @@ export default function Social() {
                     });
                 });
                 setAllUsers(usersList);
+                cachedUsers = usersList;
+                cachedHasLoaded = true;
             } catch (fallbackErr) {
                 console.error("Users fallback read error:", fallbackErr);
             } finally {
-                if (isMounted) setLoadingData(false);
+                if (isMounted) setLoadingUsers(false);
             }
         });
 
         return () => {
             isMounted = false;
+            clearTimeout(failsafeTimer);
             unsubUsers();
         };
     }, []);
 
-    // Fetch / subscribe to all solves in Firestore
+    // Fetch / subscribe to global leaderboards in Firestore
     useEffect(() => {
         let isMounted = true;
-        const solvesRef = collection(db, 'solves');
-        const unsubSolves = onSnapshot(solvesRef, (snapshot) => {
+        const leaderboardsRef = doc(db, 'global_stats', 'leaderboards');
+
+        const failsafeTimer = setTimeout(() => {
+            if (isMounted) {
+                setLoadingLeaderboards(false);
+            }
+        }, 4000);
+
+        const unsubLeaderboards = onSnapshot(leaderboardsRef, (docSnap) => {
             if (!isMounted) return;
-            const solvesList: Solve[] = [];
-            snapshot.docs.forEach(docSnap => {
+            if (docSnap.exists()) {
                 const data = docSnap.data();
-                solvesList.push({
-                    id: docSnap.id,
-                    time: data.time,
-                    scramble: data.scramble,
-                    date: data.date,
-                    penalty: data.penalty,
-                    inspectionTime: data.inspectionTime,
-                    inspectionPenalty: data.inspectionPenalty,
-                    sessionId: data.sessionId,
-                    userId: data.userId,
-                    scrambleType: data.scrambleType || '333',
-                    anomalyApproved: data.anomalyApproved
-                });
-            });
-            setAllSolves(solvesList);
+                setLeaderboards(data);
+                cachedLeaderboards = data;
+            }
+            setLoadingLeaderboards(false);
         }, async (err) => {
-            console.warn("Solves subscription warning:", err.message);
+            console.warn("Leaderboards subscription warning:", err.message);
             try {
-                const snapshot = await getDocs(solvesRef);
+                const docSnap = await getDoc(leaderboardsRef);
                 if (!isMounted) return;
-                const solvesList: Solve[] = [];
-                snapshot.docs.forEach(docSnap => {
+                if (docSnap.exists()) {
                     const data = docSnap.data();
-                    solvesList.push({
-                        id: docSnap.id,
-                        time: data.time,
-                        scramble: data.scramble,
-                        date: data.date,
-                        penalty: data.penalty,
-                        inspectionTime: data.inspectionTime,
-                        inspectionPenalty: data.inspectionPenalty,
-                        sessionId: data.sessionId,
-                        userId: data.userId,
-                        scrambleType: data.scrambleType || '333',
-                        anomalyApproved: data.anomalyApproved
-                    });
-                });
-                setAllSolves(solvesList);
+                    setLeaderboards(data);
+                    cachedLeaderboards = data;
+                }
             } catch (fallbackErr) {
-                console.error("Solves fallback read error:", fallbackErr);
+                console.error("Leaderboards fallback read error:", fallbackErr);
+            } finally {
+                if (isMounted) setLoadingLeaderboards(false);
             }
         });
 
         return () => {
             isMounted = false;
-            unsubSolves();
+            clearTimeout(failsafeTimer);
+            unsubLeaderboards();
         };
     }, []);
 
     // Combined list of users (ensuring current user and direct user are included)
+
+    // Track last scrolled ID to prevent auto-scrolling when simply re-rendering
+    const lastScrolledUserId = useRef<string | null>(null);
+
+    // Auto-scroll to top when viewing a profile
+    useEffect(() => {
+        if (routeUserId && scrollRef.current && lastScrolledUserId.current !== routeUserId) {
+            scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+            lastScrolledUserId.current = routeUserId;
+        }
+    }, [routeUserId]);
+
     const combinedUsers = useMemo(() => {
         let base = allUsers;
         if (currentUser && !base.some(u => u.uid === currentUser.uid)) {
@@ -176,118 +192,112 @@ export default function Social() {
     useEffect(() => {
         if (!routeUserId) {
             setDirectUser(null);
-            setDirectSolves([]);
+            setDirectUserStats(null);
             setLoadingDirectUser(false);
             return;
         }
 
         const cleanTarget = routeUserId.replace('#', '').trim();
         const existingInCombined = combinedUsers.find(
-            u => u.uid === cleanTarget || u.shortId?.toLowerCase() === cleanTarget.toLowerCase()
+            u => u.uid === cleanTarget ||
+                 u.shortId?.toLowerCase() === cleanTarget.toLowerCase() ||
+                 u.username.toLowerCase() === cleanTarget.toLowerCase()
         );
 
-        if (existingInCombined) {
-            setDirectUser(existingInCombined);
-            return;
-        }
-
         let isMounted = true;
-        const fetchDirectProfile = async () => {
+        const fetchDirectData = async () => {
             setLoadingDirectUser(true);
             try {
-                // 1. Try finding by Auth UID
-                const userDocSnap = await getDoc(doc(db, 'users', cleanTarget));
-                if (userDocSnap.exists() && isMounted) {
-                    const data = userDocSnap.data();
-                    const targetUserData: UserData = {
-                        uid: userDocSnap.id,
-                        shortId: data.shortId,
-                        email: data.email || null,
-                        emailVerified: data.emailVerified ?? true,
-                        username: data.username || 'CubingUser',
-                        color: data.color || '#3b82f6',
-                        following: data.following || data.starredUsers || [],
-                        starredUsers: data.following || data.starredUsers || [],
-                        blockedUsers: data.blockedUsers || [],
-                        socials: data.socials || [],
-                        lastSeenAt: data.lastSeenAt,
-                        status: data.status,
-                        isGhostMode: data.isGhostMode ?? false,
-                        pinnedGoalIds: Array.isArray(data.pinnedGoalIds) ? data.pinnedGoalIds : []
-                    };
-                    setDirectUser(targetUserData);
+                let targetUserData = existingInCombined;
 
-                    // Fetch solves for this user directly
-                    const solvesSnap = await getDocs(query(collection(db, 'solves'), where('userId', '==', targetUserData.uid)));
-                    if (isMounted) {
-                        const directSolvesList: Solve[] = [];
-                        solvesSnap.docs.forEach(docSnap => {
-                            const sData = docSnap.data();
-                            directSolvesList.push({
-                                id: docSnap.id,
-                                time: sData.time,
-                                scramble: sData.scramble,
-                                date: sData.date,
-                                penalty: sData.penalty,
-                                inspectionTime: sData.inspectionTime,
-                                inspectionPenalty: sData.inspectionPenalty,
-                                sessionId: sData.sessionId,
-                                userId: sData.userId,
-                                scrambleType: sData.scrambleType || '333',
-                                anomalyApproved: sData.anomalyApproved
-                            });
-                        });
-                        setDirectSolves(directSolvesList);
+                // 1. If not in combinedUsers, fetch from Firestore
+                if (!targetUserData) {
+                    const userDocSnap = await getDoc(doc(db, 'users', cleanTarget));
+                    if (userDocSnap.exists()) {
+                        const data = userDocSnap.data();
+                        targetUserData = {
+                            uid: userDocSnap.id,
+                            shortId: data.shortId,
+                            email: data.email || null,
+                            emailVerified: data.emailVerified ?? true,
+                            username: data.username || 'CubingUser',
+                            color: data.color || '#3b82f6',
+                            following: data.following || data.starredUsers || [],
+                            starredUsers: data.following || data.starredUsers || [],
+                            blockedUsers: data.blockedUsers || [],
+                            socials: data.socials || [],
+                            lastSeenAt: data.lastSeenAt,
+                            status: data.status,
+                            isGhostMode: data.isGhostMode ?? false,
+                            pinnedGoalIds: Array.isArray(data.pinnedGoalIds) ? data.pinnedGoalIds : []
+                        };
+                    } else {
+                        // 2. Try by shortId
+                        const shortIdQuery = query(collection(db, 'users'), where('shortId', '==', cleanTarget));
+                        const shortIdSnap = await getDocs(shortIdQuery);
+                        if (!shortIdSnap.empty) {
+                            const docSnap = shortIdSnap.docs[0];
+                            const data = docSnap.data();
+                            targetUserData = {
+                                uid: docSnap.id,
+                                shortId: data.shortId,
+                                email: data.email || null,
+                                emailVerified: data.emailVerified ?? true,
+                                username: data.username || 'CubingUser',
+                                color: data.color || '#3b82f6',
+                                following: data.following || data.starredUsers || [],
+                                starredUsers: data.following || data.starredUsers || [],
+                                blockedUsers: data.blockedUsers || [],
+                                socials: data.socials || [],
+                                lastSeenAt: data.lastSeenAt,
+                                status: data.status,
+                                isGhostMode: data.isGhostMode ?? false,
+                                pinnedGoalIds: Array.isArray(data.pinnedGoalIds) ? data.pinnedGoalIds : []
+                            };
+                        } else {
+                            // 3. Try by username
+                            const usernameQuery = query(collection(db, 'users'), where('username', '==', cleanTarget));
+                            const usernameSnap = await getDocs(usernameQuery);
+                            if (!usernameSnap.empty) {
+                                const docSnap = usernameSnap.docs[0];
+                                const data = docSnap.data();
+                                targetUserData = {
+                                    uid: docSnap.id,
+                                    shortId: data.shortId,
+                                    email: data.email || null,
+                                    emailVerified: data.emailVerified ?? true,
+                                    username: data.username || 'CubingUser',
+                                    color: data.color || '#3b82f6',
+                                    following: data.following || data.starredUsers || [],
+                                    starredUsers: data.following || data.starredUsers || [],
+                                    blockedUsers: data.blockedUsers || [],
+                                    socials: data.socials || [],
+                                    lastSeenAt: data.lastSeenAt,
+                                    status: data.status,
+                                    isGhostMode: data.isGhostMode ?? false,
+                                    pinnedGoalIds: Array.isArray(data.pinnedGoalIds) ? data.pinnedGoalIds : []
+                                };
+                            }
+                        }
                     }
-                    return;
                 }
 
-                // 2. Try finding by shortId
-                const shortIdQuery = query(collection(db, 'users'), where('shortId', '==', cleanTarget));
-                const shortIdSnap = await getDocs(shortIdQuery);
-                if (!shortIdSnap.empty && isMounted) {
-                    const docSnap = shortIdSnap.docs[0];
-                    const data = docSnap.data();
-                    const targetUserData: UserData = {
-                        uid: docSnap.id,
-                        shortId: data.shortId,
-                        email: data.email || null,
-                        emailVerified: data.emailVerified ?? true,
-                        username: data.username || 'CubingUser',
-                        color: data.color || '#3b82f6',
-                        following: data.following || data.starredUsers || [],
-                        starredUsers: data.following || data.starredUsers || [],
-                        blockedUsers: data.blockedUsers || [],
-                        socials: data.socials || [],
-                        lastSeenAt: data.lastSeenAt,
-                        status: data.status,
-                        isGhostMode: data.isGhostMode ?? false,
-                        pinnedGoalIds: Array.isArray(data.pinnedGoalIds) ? data.pinnedGoalIds : []
-                    };
-                    setDirectUser(targetUserData);
+                if (!isMounted) return;
 
-                    // Fetch solves for this user directly
-                    const solvesSnap = await getDocs(query(collection(db, 'solves'), where('userId', '==', targetUserData.uid)));
+                if (targetUserData) {
+                    setDirectUser(targetUserData);
+                    // Fetch user's stats document
+                    const statsDocSnap = await getDoc(doc(db, 'users', targetUserData.uid, 'stats', 'overview'));
                     if (isMounted) {
-                        const directSolvesList: Solve[] = [];
-                        solvesSnap.docs.forEach(dSnap => {
-                            const sData = dSnap.data();
-                            directSolvesList.push({
-                                id: dSnap.id,
-                                time: sData.time,
-                                scramble: sData.scramble,
-                                date: sData.date,
-                                penalty: sData.penalty,
-                                inspectionTime: sData.inspectionTime,
-                                inspectionPenalty: sData.inspectionPenalty,
-                                sessionId: sData.sessionId,
-                                userId: sData.userId,
-                                scrambleType: sData.scrambleType || '333',
-                                anomalyApproved: sData.anomalyApproved
-                            });
-                        });
-                        setDirectSolves(directSolvesList);
+                        if (statsDocSnap.exists()) {
+                            setDirectUserStats(statsDocSnap.data());
+                        } else {
+                            setDirectUserStats(null);
+                        }
                     }
+                } else {
+                    setDirectUser(null);
+                    setDirectUserStats(null);
                 }
             } catch (err) {
                 console.warn("Direct profile fetch warning:", err);
@@ -296,7 +306,7 @@ export default function Social() {
             }
         };
 
-        fetchDirectProfile();
+        fetchDirectData();
 
         return () => {
             isMounted = false;
@@ -310,60 +320,72 @@ export default function Social() {
         const found = combinedUsers.find(
             u => u.uid === selectedUserUid ||
                  u.shortId?.toLowerCase() === cleanTarget ||
-                 u.uid.toLowerCase() === cleanTarget
+                 u.uid.toLowerCase() === cleanTarget ||
+                 u.username.toLowerCase() === cleanTarget
         );
         return found || directUser || null;
     }, [selectedUserUid, combinedUsers, directUser]);
 
-    // Solves to pass into UserProfileView
-    const effectiveSolves = useMemo(() => {
-        if (allSolves.length > 0) return allSolves;
-        return directSolves;
-    }, [allSolves, directSolves]);
+    // Stats to pass into UserProfileView
+    const effectiveUserStats = directUserStats;
 
     // Leaderboard calculations for each timeframe table
-    const solvingDaySlots = useMemo(() => {
-        return getMostSolvingLeaderboard(combinedUsers, allSolves, 'day', currentUser?.uid);
-    }, [combinedUsers, allSolves, currentUser?.uid]);
+    
+    const fillEmptySlots = (slots: any[] | undefined, defaultText: string) => {
+        if (slots && slots.length > 0) return slots;
+        const fallback = [];
+        for (let i = 1; i <= 5; i++) {
+            fallback.push({
+                rank: i,
+                entry: null,
+                isEmpty: true,
+                emptyText: `#${i} ${defaultText}`
+            });
+        }
+        return fallback;
+    };
 
-    const solvingWeekSlots = useMemo(() => {
-        return getMostSolvingLeaderboard(combinedUsers, allSolves, 'week', currentUser?.uid);
-    }, [combinedUsers, allSolves, currentUser?.uid]);
+    const solvingDaySlots = fillEmptySlots(leaderboards?.solvingDaySlots, "Spot available — start cubing to claim!");
+    const solvingWeekSlots = fillEmptySlots(leaderboards?.solvingWeekSlots, "Spot available — start cubing to claim!");
+    const goalsMonthSlots = fillEmptySlots(leaderboards?.goalsMonthSlots, "Spot available — complete goals to claim!");
+    const diverseMonthSlots = fillEmptySlots(leaderboards?.diverseMonthSlots, "Spot available — try different puzzles to claim!");
+    const luckySlots = fillEmptySlots(leaderboards?.luckySlots, "Spot available — set a new PB single to claim!");
+    const improvedSlots = fillEmptySlots(leaderboards?.improvedSlots, "Spot available — break a personal record this month!");
 
-    const goalsMonthSlots = useMemo(() => {
-        return getMostGoalsLeaderboard(combinedUsers, allSolves, 'month', currentUser?.uid);
-    }, [combinedUsers, allSolves, currentUser?.uid]);
+    
+    // Tag current user manually since backend calculation doesn't know who is looking at it
+    const tagCurrentUser = (slots: any[]) => {
+        return slots.map(slot => ({
+            ...slot,
+            entry: slot.entry ? {
+                ...slot.entry,
+                isCurrentUser: slot.entry.user?.uid === currentUser?.uid
+            } : null
+        }));
+    };
 
-    const diverseMonthSlots = useMemo(() => {
-        return getMostDiverseLeaderboard(combinedUsers, allSolves, 'month', currentUser?.uid);
-    }, [combinedUsers, allSolves, currentUser?.uid]);
 
-    const luckySlots = useMemo(() => {
-        return getMostLuckyLeaderboard(combinedUsers, allSolves, currentUser?.uid);
-    }, [combinedUsers, allSolves, currentUser?.uid]);
-
-    const improvedSlots = useMemo(() => {
-        return getMostImprovedLeaderboard(combinedUsers, allSolves, currentUser?.uid);
-    }, [combinedUsers, allSolves, currentUser?.uid]);
-
-    // Filter directory cubers - Hide profiles with name "CubingUser"
+    // Filter directory cubers - Hide profiles with default placeholder name unless searching or is current user
     const filteredCubers = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
 
         return combinedUsers.filter(u => {
             const username = (u.username || '').trim();
-            if (username.toLowerCase() === 'cubinguser') return false;
+            if (!q && username.toLowerCase() === 'cubinguser' && u.uid !== currentUser?.uid) {
+                return false;
+            }
 
             if (!q) return true;
             const nameMatch = username.toLowerCase().includes(q);
             const idMatch = (u.shortId || '').toLowerCase().includes(q.replace('#', ''));
             return nameMatch || idMatch;
         });
-    }, [combinedUsers, searchQuery]);
+    }, [combinedUsers, searchQuery, currentUser?.uid]);
 
     const handleSelectUser = (userToSelect: UserData) => {
+        const identifier = userToSelect.shortId || userToSelect.uid;
         setManualSelectedUserUid(userToSelect.uid);
-        navigate(`/social/${userToSelect.uid}`);
+        navigate(`/social/${identifier}`);
     };
 
     const handleBackFromProfile = () => {
@@ -371,7 +393,9 @@ export default function Social() {
         navigate('/social');
     };
 
-    if ((loadingData && combinedUsers.length === 0) || (routeUserId && loadingDirectUser && !selectedUser)) {
+    const isInitialLoading = (loadingUsers || loadingLeaderboards) && (allUsers.length <= 1 || !leaderboards);
+
+    if (isInitialLoading || (routeUserId && loadingDirectUser && !selectedUser)) {
         return (
             <div className="flex-1 flex items-center justify-center min-h-[400px]">
                 <div className="flex flex-col items-center gap-3 text-text-secondary">
@@ -385,8 +409,8 @@ export default function Social() {
     }
 
     return (
-        <div className="flex-1 flex flex-col min-h-0 bg-bg-primary overflow-y-auto custom-scrollbar select-none">
-            <div className="max-w-7xl w-full mx-auto px-2.5 py-4 sm:p-4 md:p-6 flex flex-col gap-8">
+        <div ref={scrollRef} className="flex-1 flex flex-col min-h-0 bg-bg-primary overflow-y-auto custom-scrollbar select-none">
+            <div className="max-w-7xl w-full mx-auto px-1.5 py-2.5 sm:px-3 sm:py-3 md:px-4 md:py-4 flex flex-col gap-6 @container">
 
                 {/* USER PROFILE VIEW (When a user card is selected) */}
                 {routeUserId && !selectedUser ? (
@@ -402,7 +426,7 @@ export default function Social() {
                 ) : selectedUser ? (
                     <UserProfileView
                         targetUser={selectedUser}
-                        solves={effectiveSolves}
+                        userStats={effectiveUserStats}
                         allUsers={combinedUsers}
                         onBack={handleBackFromProfile}
                         onSelectUser={handleSelectUser}
@@ -411,47 +435,47 @@ export default function Social() {
                     /* MAIN SOCIAL TABLES & DIRECTORY */
                     <div className="flex flex-col gap-10 animate-in fade-in duration-200">
 
-                        {/* 6 LEADERBOARDS GRID (No parenthesis in headers) */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 sm:gap-8">
+                        {/* 6 LEADERBOARDS GRID (Render 3 to a row if there is room) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 @sm:grid-cols-2 @3xl:grid-cols-3 gap-6 sm:gap-8">
                             {/* 1. Most Solving Today */}
                             <SocialLeaderboardCard
                                 title="Most Solving Today"
-                                slots={solvingDaySlots}
+                                slots={tagCurrentUser(solvingDaySlots)}
                                 onSelectUser={handleSelectUser}
                             />
 
                             {/* 2. Most Solving This Week */}
                             <SocialLeaderboardCard
                                 title="Most Solving This Week"
-                                slots={solvingWeekSlots}
+                                slots={tagCurrentUser(solvingWeekSlots)}
                                 onSelectUser={handleSelectUser}
                             />
 
                             {/* 3. Most Goals Past Month */}
                             <SocialLeaderboardCard
                                 title="Most Goals Past Month"
-                                slots={goalsMonthSlots}
+                                slots={tagCurrentUser(goalsMonthSlots)}
                                 onSelectUser={handleSelectUser}
                             />
 
                             {/* 4. Most Diverse This Month */}
                             <SocialLeaderboardCard
                                 title="Most Diverse This Month"
-                                slots={diverseMonthSlots}
+                                slots={tagCurrentUser(diverseMonthSlots)}
                                 onSelectUser={handleSelectUser}
                             />
 
                             {/* 5. Most Lucky Past Month */}
                             <SocialLeaderboardCard
                                 title="Most Lucky Past Month"
-                                slots={luckySlots}
+                                slots={tagCurrentUser(luckySlots)}
                                 onSelectUser={handleSelectUser}
                             />
 
                             {/* 6. Most Improved This Month */}
                             <SocialLeaderboardCard
                                 title="Most Improved This Month"
-                                slots={improvedSlots}
+                                slots={tagCurrentUser(improvedSlots)}
                                 onSelectUser={handleSelectUser}
                             />
                         </div>

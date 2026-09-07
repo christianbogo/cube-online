@@ -17,6 +17,7 @@ export interface TableProps<T> {
     headerClassName?: string;
     rowClassName?: string;
     className?: string;
+    tableClassName?: string;
 }
 
 export default function Table<T extends { id: string | number }>({
@@ -27,11 +28,12 @@ export default function Table<T extends { id: string | number }>({
     onHeaderClick,
     headerClassName,
     rowClassName,
-    className
+    className,
+    tableClassName
 }: TableProps<T>) {
     return (
         <div className={`w-full overflow-x-auto ${className || 'border border-border rounded-lg'}`}>
-            <table className="w-full text-left text-sm border-collapse">
+            <table className={`w-full text-left text-sm border-collapse ${tableClassName || ''}`}>
                 <thead className={headerClassName || "bg-bg-hover"}>
                     <tr>
                         {columns.map((col, index) => (

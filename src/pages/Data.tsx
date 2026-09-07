@@ -22,7 +22,7 @@ import { calculateAverage } from '../utils/calculations';
 import { startOfYear, startOfMonth, startOfWeek, startOfDay, format } from 'date-fns';
 
 export default function Data() {
-    const { solves, updateSolve, deleteSolve } = useSolves();
+    const { solves, updateSolve, deleteSolve, userStats } = useSolves();
     const { settings } = useSettings();
     const { user } = useAuth();
     const [searchParams] = useSearchParams();
@@ -172,66 +172,66 @@ export default function Data() {
 
 
     // -- Prepare Data for Charts --
-    const chartData = useMemo(() => {
-        return filteredSolves.map((s, i) => {
-            // Calculate Moving Ao5
-            // Get previous 4 + current
+    const [chartDataState, setChartDataState] = useState<{ displayedChartData: any[], boxPlotStats: any | null }>({ displayedChartData: [], boxPlotStats: null });
+    const [isLoadingCharts, setIsLoadingCharts] = useState(false);
+
+    useEffect(() => {
+        if (!user) return;
+        setIsLoadingCharts(true);
+
+        const localChartData = filteredSolves.map((s, i) => {
             let ao5Current: number | null = null;
             if (i >= 4) {
                 const window = filteredSolves.slice(i - 4, i + 1);
-                const avg = calculateAverage(window, 5); // Uses shared calculation
+                const avg = calculateAverage(window, 5);
                 if (typeof avg === 'number') ao5Current = avg;
             }
-
             const timeVal = (s.penalty === 'DNF' || s.inspectionPenalty === 'DNF') ? null : (s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0));
-
             return {
                 id: s.id,
                 index: i + 1,
                 date: new Date(s.date).toLocaleDateString(),
-                time: timeVal, // filtered out DNFs for scatter y-axis usually? or check if Recharts handles null
+                time: timeVal,
                 ao5: ao5Current,
                 solve: s
             };
         });
-    }, [filteredSolves]);
-
-    // -- Downsample Chart Data for Performance --
-    const displayedChartData = useMemo(() => {
-        const MAX_POINTS = 300;
-        let data = chartData;
-
-        // Downsample if too many points
-        if (chartData.length > MAX_POINTS) {
-            const step = Math.ceil(chartData.length / MAX_POINTS);
-            data = chartData.filter((_, i) => i % step === 0);
+        
+        let localDisplayed = localChartData;
+        if (localChartData.length > 300) {
+            const step = Math.ceil(localChartData.length / 300);
+            localDisplayed = localChartData.filter((_, i) => i % step === 0);
         }
-
-        // Always sanitize data for Recharts to prevent rendering crashes
-        return data.map(d => ({
+        localDisplayed = localDisplayed.map(d => ({
             ...d,
             time: (typeof d.time === 'number' && isFinite(d.time)) ? d.time : null,
             ao5: (typeof d.ao5 === 'number' && isFinite(d.ao5)) ? d.ao5 : null
         }));
-    }, [chartData]);
-
-    // -- Box Plot Data Calculation --
-    const boxPlotStats = useMemo(() => {
+        
         const validTimes = filteredSolves
             .filter(s => s.penalty !== 'DNF' && s.inspectionPenalty !== 'DNF')
             .map(s => s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0))
             .sort((a, b) => a - b);
+            
+        let localBoxPlot = null;
+        if (validTimes.length > 0) {
+            localBoxPlot = {
+                min: validTimes[0],
+                max: validTimes[validTimes.length - 1],
+                q1: validTimes[Math.floor(validTimes.length * 0.25)],
+                median: validTimes[Math.floor(validTimes.length * 0.5)],
+                q3: validTimes[Math.floor(validTimes.length * 0.75)]
+            };
+        }
+        
+        setChartDataState({
+            displayedChartData: localDisplayed,
+            boxPlotStats: localBoxPlot
+        });
+        setIsLoadingCharts(false);
+    }, [user, settings.scrambleType, filteredSolves]);
 
-        if (validTimes.length === 0) return null;
-
-        const min = validTimes[0];
-        const max = validTimes[validTimes.length - 1];
-        const q1 = validTimes[Math.floor(validTimes.length * 0.25)];
-        const median = validTimes[Math.floor(validTimes.length * 0.5)];
-        const q3 = validTimes[Math.floor(validTimes.length * 0.75)];
-
-        return { min, q1, median, q3, max };
-    }, [filteredSolves]);
+    const { displayedChartData, boxPlotStats } = chartDataState;
 
 
     // -- Detail Pane State --
@@ -247,17 +247,17 @@ export default function Data() {
 
     // -- Render --
     if (!user) {
-        return <div className="p-8 text-center text-text-secondary">Please sign in to view data analysis.</div>;
+        return <div className="p-4 text-center text-text-secondary">Please sign in to view data analysis.</div>;
     }
 
     if (filteredSolves.length === 0) {
-        return <div className="p-8 text-center text-text-secondary">No solves selected or available.</div>;
+        return <div className="p-4 text-center text-text-secondary">No solves selected or available.</div>;
     }
 
     return (
         <div className="w-full h-full flex flex-row overflow-hidden relative">
             {/* Main Content */}
-            <div className={`flex-1 flex flex-col gap-6 w-full min-w-0 pb-20 overflow-y-auto px-6 py-6`}>
+            <div className={`flex-1 flex flex-col gap-5 w-full min-w-0 pb-16 overflow-y-auto px-2 py-3 sm:px-4 sm:py-4`}>
 
                 {/* Graphs Container */}
                 {filteredSolves.length < 12 ? (
@@ -267,6 +267,10 @@ export default function Data() {
                         <p className="text-xs text-text-secondary mt-1 max-w-[250px]">
                             Need at least 12 solves to generate meaningful analysis graphs.
                         </p>
+                    </div>
+                ) : isLoadingCharts ? (
+                    <div className="w-full h-48 flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
                     </div>
                 ) : (
                     <>
@@ -337,7 +341,7 @@ export default function Data() {
                         </div>
 
                         {/* 2. Activity Calendar */}
-                        <ActivityCalendar solves={filteredSolves} />
+                        <ActivityCalendar solves={filteredSolves} userStats={userStats} />
 
                         {/* 3. Horizontal Box Plot */}
                         {boxPlotStats && (
@@ -368,9 +372,16 @@ export default function Data() {
                                     {
                                         header: 'Time',
                                         accessor: (s: Solve) => (
-                                            <span className={`font-mono font-medium ${s.penalty === 'DNF' ? 'text-red-500' : 'text-yellow-500'}`}>
-                                                {formatTime(s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0))}
-                                            </span>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className={`font-mono font-medium ${s.penalty === 'DNF' ? 'text-red-500' : 'text-yellow-500'}`}>
+                                                    {formatTime(s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0))}
+                                                </span>
+                                                {s.source === 'cstimer' && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono border border-blue-500/20 leading-none" title="Imported from csTimer">
+                                                        CST
+                                                    </span>
+                                                )}
+                                            </div>
                                         )
                                     },
                                     {
@@ -430,12 +441,19 @@ export default function Data() {
                                     key: 'time',
                                     sortable: true,
                                     accessor: (s: Solve) => (
-                                        <span className={`font-mono font-medium ${s.penalty === 'DNF' ? 'text-red-500' : ''}`}>
-                                            {s.penalty === 'DNF' ? 'DNF' : formatTime(s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0))}
-                                            {s.penalty === '+2' && '+'}
-                                        </span>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className={`font-mono font-medium ${s.penalty === 'DNF' ? 'text-red-500' : ''}`}>
+                                                {s.penalty === 'DNF' ? 'DNF' : formatTime(s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0))}
+                                                {s.penalty === '+2' && '+'}
+                                            </span>
+                                            {s.source === 'cstimer' && (
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono border border-blue-500/20 leading-none" title="Imported from csTimer">
+                                                    CST
+                                                </span>
+                                            )}
+                                        </div>
                                     ),
-                                    className: 'w-24'
+                                    className: 'w-36'
                                 },
                                 {
                                     header: 'Scramble',
@@ -530,7 +548,14 @@ function SidebarPane({ solve, onClose, allSolves, onAction, selectedSolveId }: {
             <div className="p-4 flex flex-col gap-4">
                 <div className="flex justify-between items-start">
                     <div className="flex flex-col">
-                        <h2 className="text-xl font-bold text-text-primary">Solve Details</h2>
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-xl font-bold text-text-primary">Solve Details</h2>
+                            {solve.source === 'cstimer' && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono border border-blue-500/20 font-medium">
+                                    CSTimer
+                                </span>
+                            )}
+                        </div>
                         <span className="text-xs text-text-secondary font-mono">#{selectedSolveId?.slice(0, 8)}</span>
                     </div>
                     <button onClick={onClose} className="p-1 hover:bg-bg-hover rounded text-text-secondary">
@@ -568,6 +593,16 @@ function SidebarPane({ solve, onClose, allSolves, onAction, selectedSolveId }: {
                             {solve.scramble}
                         </div>
                     </div>
+                    {solve.source === 'cstimer' && (
+                        <div>
+                            <div className="text-text-secondary text-xs uppercase font-bold mb-1">Origin</div>
+                            <div className="text-text-primary text-xs flex items-center gap-1.5">
+                                <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono border border-blue-500/20 font-semibold text-[11px]">
+                                    Imported from csTimer
+                                </span>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Outlier Analysis Details */}
@@ -598,18 +633,26 @@ function SidebarPane({ solve, onClose, allSolves, onAction, selectedSolveId }: {
 
 
 // -- Activity Calendar Component --
-function ActivityCalendar({ solves }: { solves: Solve[] }) {
+function ActivityCalendar({ solves, userStats }: { solves: Solve[], userStats: any }) {
     // Generates dates dynamically based on solve history, up to 25 days
     const range = useMemo(() => {
-        if (solves.length === 0) return [];
         const today = startOfDay(new Date());
 
-        // Find earliest solve date
         let earliest = today;
-        solves.forEach(s => {
-            const d = startOfDay(new Date(s.date));
-            if (d < earliest) earliest = d;
-        });
+        
+        if (userStats?.dailySolvesCount) {
+            Object.keys(userStats.dailySolvesCount).forEach(d => {
+                const dDate = startOfDay(new Date(d));
+                if (dDate < earliest) earliest = dDate;
+            });
+        } else if (solves.length > 0) {
+            solves.forEach(s => {
+                const d = startOfDay(new Date(s.date));
+                if (d < earliest) earliest = d;
+            });
+        } else {
+            return [];
+        }
 
         const daysDiff = Math.floor((today.getTime() - earliest.getTime()) / (1000 * 60 * 60 * 24)) + 1;
         const countToShow = Math.min(25, Math.max(1, daysDiff)); // At least 1, max 25
@@ -621,17 +664,20 @@ function ActivityCalendar({ solves }: { solves: Solve[] }) {
             d.push(format(date, 'yyyy-MM-dd'));
         }
         return d;
-    }, [solves]);
+    }, [solves, userStats]);
 
     // Create Map of Date -> Solve Count
     const counts = useMemo(() => {
+        if (userStats?.dailySolvesCount) {
+            return userStats.dailySolvesCount;
+        }
         const c: Record<string, number> = {};
         solves.forEach(s => {
             const key = format(startOfDay(new Date(s.date)), 'yyyy-MM-dd');
             c[key] = (c[key] || 0) + 1;
         });
         return c;
-    }, [solves]);
+    }, [solves, userStats]);
 
     const getColor = (count: number) => {
         if (count === 0) return 'bg-zinc-500/10 text-transparent'; // Muted for empty

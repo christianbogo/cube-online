@@ -2,23 +2,19 @@ import { useState, useRef, useEffect } from 'react';
 import { useIsMobile } from '../utils/useIsMobile';
 import { useLocation, Link } from 'react-router-dom';
 import {
-    Check, X, LogOut, Info, Trash2, Download, TriangleAlert, Loader2, RotateCcw, ShieldCheck, ChevronLeft, ChevronRight
+    Check, X, LogOut, Trash2, Download, Upload, TriangleAlert, Loader2, ShieldCheck, Copy
 } from 'lucide-react';
 
-import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useSolves } from '../contexts/SolvesContext';
 import { doc, setDoc, getDoc, getDocs, collection, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import {
     Tabs,
-    FriendSidebar,
     SocialsTab,
     CubingFriendsTab,
     Logo,
-    resetKeybindTooltips,
-    setTooltipsDisabled,
-    isTooltipsDisabled,
-    KEYBIND_TOOLTIPS
+    ImportCsTimerModal
 } from '../components';
 
 const AVAILABLE_COLORS = [
@@ -37,8 +33,8 @@ const AVAILABLE_COLORS = [
 ];
 
 export default function Account() {
-    const { settings, updateSettings } = useSettings();
-    const { user, emailSignUp, emailSignIn, resendVerificationEmail, logout, updateGhostMode } = useAuth();
+    const { user, emailSignUp, emailSignIn, resendVerificationEmail, logout } = useAuth();
+    const { deleteAllSolves } = useSolves();
     const location = useLocation();
     const isMobile = useIsMobile();
 
@@ -49,7 +45,11 @@ export default function Account() {
     const [tempName, setTempName] = useState('');
     const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
     const colorPickerRef = useRef<HTMLDivElement>(null);
+    const [copiedProfileCode, setCopiedProfileCode] = useState(false);
     const [downloadLoading, setDownloadLoading] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [isDeleteSolvesModalOpen, setIsDeleteSolvesModalOpen] = useState(false);
+    const [deleteSolvesLoading, setDeleteSolvesLoading] = useState(false);
 
     // Auth State
     const [email, setEmail] = useState('');
@@ -191,217 +191,70 @@ export default function Account() {
         }
     };
 
-    const SettingRow = ({ label, description, children }: { label: string, description: string, children: React.ReactNode }) => (
-        <div className="flex items-center justify-between py-2 group border-b border-border/20 last:border-0">
-            <div className="flex items-center gap-2">
-                <span className="text-text-primary font-medium text-sm">{label}</span>
-                <div className="relative group/info">
-                    <Info className="w-3.5 h-3.5 text-text-secondary/50 cursor-help" />
-                    <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 w-48 p-2 bg-bg-secondary border border-border rounded shadow-lg text-xs text-text-secondary opacity-0 invisible group-hover/info:opacity-100 group-hover/info:visible transition-all z-10 pointer-events-none">
-                        {description}
-                    </div>
-                </div>
-            </div>
-            {children}
-        </div>
-    );
-
-    const TimerSettingsTab = () => {
-        const [isSubscribed, setIsSubscribed] = useState(() => !isTooltipsDisabled());
-        const [resetSuccess, setResetSuccess] = useState(false);
-        const [viewingIndex, setViewingIndex] = useState(0);
-
-        useEffect(() => {
-            const handleUpdate = () => {
-                setIsSubscribed(!isTooltipsDisabled());
-            };
-            window.addEventListener('cube-tooltips-updated', handleUpdate);
-            window.addEventListener('cube-tooltips-reset', handleUpdate);
-            return () => {
-                window.removeEventListener('cube-tooltips-updated', handleUpdate);
-                window.removeEventListener('cube-tooltips-reset', handleUpdate);
-            };
-        }, []);
-
-        const handleToggleSubscription = () => {
-            const next = !isSubscribed;
-            setTooltipsDisabled(!next);
-            setIsSubscribed(next);
-        };
-
-        const handleReset = () => {
-            resetKeybindTooltips();
-            setIsSubscribed(true);
-            setResetSuccess(true);
-            setTimeout(() => setResetSuccess(false), 2000);
-        };
-
-        const currentTip = KEYBIND_TOOLTIPS[viewingIndex] || KEYBIND_TOOLTIPS[0];
-
-        return (
-            <div className="flex flex-col gap-3 p-2 max-w-lg">
-                <SettingRow label="Show Inspection" description="Enable 15s inspection timer before solving">
-                    <button
-                        onClick={() => updateSettings({ solveInspection: !settings.solveInspection })}
-                        className={`relative w-10 h-5 rounded-full transition-colors ${settings.solveInspection ? 'bg-accent' : 'bg-text-secondary/20'}`}
-                    >
-                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${settings.solveInspection ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </button>
-                </SettingRow>
-
-                <SettingRow label="Show Timer" description="Show the timer while solving">
-                    <button
-                        onClick={() => updateSettings({ showLiveTimer: !settings.showLiveTimer })}
-                        className={`relative w-10 h-5 rounded-full transition-colors ${settings.showLiveTimer ? 'bg-accent' : 'bg-text-secondary/20'}`}
-                    >
-                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${settings.showLiveTimer ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </button>
-                </SettingRow>
-
-                <SettingRow label="Ghost Mode" description="Disable live timing broadcasts and hide live active cubers (live is on by default)">
-                    <button
-                        onClick={() => updateGhostMode(!user?.isGhostMode)}
-                        className={`relative w-10 h-5 rounded-full transition-colors ${user?.isGhostMode ? '' : 'bg-text-secondary/20'}`}
-                        style={user?.isGhostMode ? { backgroundColor: user.color || '#ef4444' } : undefined}
-                        title={user?.isGhostMode ? "Disable Ghost Mode (Go Live)" : "Enable Ghost Mode"}
-                    >
-                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${user?.isGhostMode ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </button>
-                </SettingRow>
-
-                <SettingRow
-                    label="Practice Tooltips"
-                    description={isSubscribed ? "Subscribed to timer & keybind hints" : "Unsubscribed from practice tooltips"}
-                >
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={handleToggleSubscription}
-                            className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer ${isSubscribed ? 'bg-accent' : 'bg-text-secondary/20'}`}
-                            title={isSubscribed ? "Click to unsubscribe from tooltips" : "Click to subscribe to tooltips"}
-                        >
-                            <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${isSubscribed ? 'translate-x-5' : 'translate-x-0'}`} />
-                        </button>
-                        {isSubscribed && (
-                            <button
-                                onClick={handleReset}
-                                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
-                                    resetSuccess
-                                        ? 'bg-green-500/10 text-green-500 border-green-500/30'
-                                        : 'bg-bg-primary text-text-secondary hover:text-text-primary hover:bg-bg-hover border-border'
-                                }`}
-                                title="Reset tooltips order & history"
-                            >
-                                {resetSuccess ? (
-                                    <>
-                                        <Check className="w-3 h-3" />
-                                        <span>Reset!</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <RotateCcw className="w-3 h-3" />
-                                        <span>Reset</span>
-                                    </>
-                                )}
-                            </button>
-                        )}
-                    </div>
-                </SettingRow>
-
-                {/* Individual Tooltip Viewer */}
-                <div className="mt-2 pt-4 border-t border-border/50 flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h4 className="text-xs font-semibold text-text-primary">Practice Tooltip Library</h4>
-                            <p className="text-[11px] text-text-secondary">View and explore each tip individually.</p>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <button
-                                onClick={() => setViewingIndex(prev => (prev - 1 + KEYBIND_TOOLTIPS.length) % KEYBIND_TOOLTIPS.length)}
-                                className="p-1 rounded-md bg-bg-primary hover:bg-bg-hover border border-border text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
-                                title="Previous Tip"
-                            >
-                                <ChevronLeft className="w-4 h-4" />
-                            </button>
-                            <span className="text-[11px] font-mono font-medium text-text-secondary px-1 text-center min-w-[36px]">
-                                {viewingIndex + 1} / {KEYBIND_TOOLTIPS.length}
-                            </span>
-                            <button
-                                onClick={() => setViewingIndex(prev => (prev + 1) % KEYBIND_TOOLTIPS.length)}
-                                className="p-1 rounded-md bg-bg-primary hover:bg-bg-hover border border-border text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
-                                title="Next Tip"
-                            >
-                                <ChevronRight className="w-4 h-4" />
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Tooltip Card Preview */}
-                    <div className="bg-bg-primary border border-border rounded-xl p-3 flex flex-col gap-2 shadow-sm">
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="font-bold text-text-primary text-xs">
-                                {currentTip.title}
-                            </span>
-                            <span className="bg-bg-secondary border border-border text-text-secondary px-1.5 py-0.5 rounded text-[10px] font-mono font-medium">
-                                {currentTip.badge}
-                            </span>
-                        </div>
-                        <p className="text-text-secondary text-[11px] leading-relaxed">
-                            {currentTip.description}
-                        </p>
-                    </div>
-
-                    {/* Quick navigation pill selector */}
-                    <div className="flex flex-wrap gap-1 pt-0.5">
-                        {KEYBIND_TOOLTIPS.map((tip, idx) => (
-                            <button
-                                key={tip.id}
-                                onClick={() => setViewingIndex(idx)}
-                                className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors cursor-pointer ${
-                                    viewingIndex === idx
-                                        ? 'bg-accent/15 text-accent border-accent/40 font-semibold'
-                                        : 'bg-bg-primary text-text-secondary hover:text-text-primary border-border hover:bg-bg-hover'
-                                }`}
-                            >
-                                {tip.title}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        );
+    const handleConfirmDeleteSolves = async () => {
+        setDeleteSolvesLoading(true);
+        try {
+            await deleteAllSolves();
+            setIsDeleteSolvesModalOpen(false);
+        } catch (e) {
+            console.error("Failed to delete all solves:", e);
+            alert("Failed to delete all solves. Please try again.");
+        } finally {
+            setDeleteSolvesLoading(false);
+        }
     };
 
     const DangerZoneTab = () => (
         <div className="p-4 flex flex-col items-start gap-4 max-w-lg">
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded text-sm text-red-500 flex items-start gap-2">
-                <TriangleAlert className="w-5 h-5 shrink-0" />
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-500 flex items-start gap-2.5 w-full">
+                <TriangleAlert className="w-5 h-5 shrink-0 mt-0.5" />
                 <span>
                     These actions are irreversible. Please proceed with caution.
                 </span>
             </div>
 
-            <button
-                onClick={handleDownloadData}
-                disabled={downloadLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-bg-secondary border border-border rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors text-sm w-full md:w-auto justify-center cursor-pointer disabled:opacity-50"
-            >
-                {downloadLoading ? (
-                    <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Compiling Data...</span>
-                    </>
-                ) : (
-                    <>
-                        <Download className="w-4 h-4" />
-                        <span>Download My Data</span>
-                    </>
-                )}
-            </button>
-            <button
-                className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/20 rounded text-red-500 hover:bg-red-500/20 transition-colors text-sm w-full md:w-auto justify-center"
-            >
-                <Trash2 className="w-4 h-4" /> Delete Account
-            </button>
+            <div className="flex flex-col gap-2.5 w-full sm:w-64">
+                <button
+                    onClick={handleDownloadData}
+                    disabled={downloadLoading}
+                    className="flex items-center gap-2.5 px-4 py-2.5 bg-surface-elevation-1 border border-border/70 hover:border-border hover:bg-bg-hover text-text-primary rounded-xl transition-all text-sm font-medium w-full justify-start cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
+                >
+                    {downloadLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-text-secondary shrink-0" />
+                    ) : (
+                        <Download className="w-4 h-4 text-text-secondary shrink-0" />
+                    )}
+                    <span>{downloadLoading ? 'Compiling Data...' : 'Download My Data'}</span>
+                </button>
+
+                <button
+                    onClick={() => setIsImportModalOpen(true)}
+                    className="flex items-center gap-2.5 px-4 py-2.5 bg-surface-elevation-1 border border-border/70 hover:border-border hover:bg-bg-hover text-text-primary rounded-xl transition-all text-sm font-medium w-full justify-start cursor-pointer shadow-2xs"
+                >
+                    <Upload className="w-4 h-4 text-text-secondary shrink-0" />
+                    <span>Import csTimer Solves</span>
+                </button>
+
+                <button
+                    onClick={() => setIsDeleteSolvesModalOpen(true)}
+                    disabled={deleteSolvesLoading}
+                    className="flex items-center gap-2.5 px-4 py-2.5 bg-surface-elevation-1 border border-red-500/25 hover:bg-red-500/10 hover:border-red-500/40 text-red-500 rounded-xl transition-all text-sm font-medium w-full justify-start cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {deleteSolvesLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-red-500 shrink-0" />
+                    ) : (
+                        <Trash2 className="w-4 h-4 text-red-500 shrink-0" />
+                    )}
+                    <span>{deleteSolvesLoading ? 'Deleting Solves...' : 'Delete All Solves'}</span>
+                </button>
+
+                <button
+                    className="flex items-center gap-2.5 px-4 py-2.5 bg-surface-elevation-1 border border-red-500/25 hover:bg-red-500/10 hover:border-red-500/40 text-red-500 rounded-xl transition-all text-sm font-medium w-full justify-start cursor-pointer shadow-2xs"
+                >
+                    <Trash2 className="w-4 h-4 text-red-500 shrink-0" />
+                    <span>Delete Account</span>
+                </button>
+            </div>
 
             <div className="pt-2 border-t border-border/50 w-full flex items-center justify-between text-xs text-text-secondary">
                 <span>Looking for data rights &amp; retention terms?</span>
@@ -421,11 +274,11 @@ export default function Account() {
                     </div>
                 )}
 
-                <main className={`flex-1 overflow-y-auto no-scrollbar w-full ${user ? 'max-w-3xl mx-auto p-4 md:p-8' : 'p-4 sm:p-6'}`}>
+                <main className={`flex-1 overflow-y-auto no-scrollbar w-full ${user ? 'max-w-3xl mx-auto px-2.5 py-3 sm:px-4 sm:py-4 md:px-5 md:py-5' : 'px-3 py-3 sm:px-4 sm:py-4'}`}>
                     {!user ? (
                         // Not Signed In
-                        <div className="min-h-full flex flex-col items-center justify-center py-4 sm:py-8">
-                            <div className="w-full max-w-md my-auto animate-in fade-in duration-300 bg-bg-secondary/40 border border-border/60 rounded-2xl p-6 sm:p-8 shadow-sm">
+                        <div className="min-h-full flex flex-col items-center justify-center py-2 sm:py-4">
+                            <div className="w-full max-w-md my-auto animate-in fade-in duration-300 bg-bg-secondary/40 border border-border/60 rounded-2xl p-4 sm:p-6 shadow-sm">
                                 <div className="flex flex-col items-center text-center gap-1.5 mb-6">
                                     <Logo className="w-10 h-10 mb-1" />
                                     <h1 className="text-2xl sm:text-3xl font-bold text-text-primary tracking-tight">
@@ -635,12 +488,28 @@ export default function Account() {
 
                                     {/* Short ID */}
                                     {user.shortId && (
-                                        <div
-                                            onClick={() => navigator.clipboard.writeText(user.shortId || '')}
-                                            className="mt-1 text-xs text-text-secondary/50 font-mono cursor-pointer hover:text-text-primary transition-colors flex items-center gap-1 justify-center sm:justify-start w-fit"
-                                            title="Click to copy ID"
-                                        >
-                                            #{user.shortId}
+                                        <div className="relative inline-flex items-center mt-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (!user.shortId) return;
+                                                    navigator.clipboard.writeText(user.shortId);
+                                                    setCopiedProfileCode(true);
+                                                    setTimeout(() => setCopiedProfileCode(false), 2000);
+                                                }}
+                                                className="text-xs text-text-secondary/60 hover:text-text-primary font-mono cursor-pointer transition-colors flex items-center gap-1.5 justify-center sm:justify-start w-fit group py-0.5 px-1 rounded hover:bg-bg-secondary/60"
+                                                title="Click to copy profile code"
+                                            >
+                                                <span>#{user.shortId}</span>
+                                                <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            </button>
+
+                                            {copiedProfileCode && (
+                                                <div className="absolute left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 bottom-full mb-1.5 px-2.5 py-1 bg-bg-secondary border border-border text-xs font-semibold text-green-500 rounded-lg shadow-xl whitespace-nowrap animate-in fade-in zoom-in-95 duration-150 flex items-center gap-1.5 z-40">
+                                                    <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                                                    <span>Copied to clipboard!</span>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 
@@ -687,9 +556,8 @@ export default function Account() {
                             <div className="relative z-10">
                                 <Tabs
                                     tabs={[
-                                        { label: "Connections", id: "connections", content: <CubingFriendsTab /> },
-                                        { label: "Public Profile", id: "socials", content: <SocialsTab /> },
-                                        ...(isMobile ? [] : [{ label: "Timer Settings", id: "timer", content: <TimerSettingsTab /> }]),
+                                        { label: "Following", id: "following", content: <CubingFriendsTab /> },
+                                        { label: "Profile", id: "profile", content: <SocialsTab /> },
                                         ...(isMobile ? [] : [{ label: "Danger Zone", id: "danger", content: <DangerZoneTab /> }]),
                                     ]}
                                 />
@@ -699,7 +567,83 @@ export default function Account() {
                 </main>
             </div>
 
-            {user && <FriendSidebar />}
+            <ImportCsTimerModal
+                isOpen={isImportModalOpen}
+                onClose={() => setIsImportModalOpen(false)}
+            />
+
+            {/* Delete All Solves Confirmation Modal */}
+            {isDeleteSolvesModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200">
+                    <div
+                        className="bg-bg-secondary border border-border rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden"
+                        role="dialog"
+                        aria-modal="true"
+                    >
+                        {/* Header */}
+                        <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500">
+                                    <Trash2 className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h2 className="text-base font-bold text-text-primary">Delete All Solves</h2>
+                                    <p className="text-xs text-text-secondary">This action cannot be undone</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => !deleteSolvesLoading && setIsDeleteSolvesModalOpen(false)}
+                                disabled={deleteSolvesLoading}
+                                className="p-1.5 hover:bg-bg-tertiary rounded-lg text-text-secondary hover:text-text-primary transition-colors cursor-pointer disabled:opacity-50"
+                                aria-label="Close"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-6 flex flex-col gap-4">
+                            <p className="text-sm text-text-secondary leading-relaxed">
+                                Are you sure you want to permanently delete all of your solves? This will wipe your entire solve history, session logs, and personal best records across all puzzles.
+                            </p>
+                            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2.5 text-xs text-red-400">
+                                <TriangleAlert className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+                                <span>These actions are irreversible. Please proceed with caution.</span>
+                            </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="px-6 py-4 border-t border-border/60 bg-bg-secondary/60 flex items-center justify-end gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setIsDeleteSolvesModalOpen(false)}
+                                disabled={deleteSolvesLoading}
+                                className="px-4 py-2 rounded-xl text-sm font-medium text-text-secondary hover:bg-bg-hover transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmDeleteSolves}
+                                disabled={deleteSolvesLoading}
+                                className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl text-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                            >
+                                {deleteSolvesLoading ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span>Deleting Solves...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Trash2 className="w-4 h-4" />
+                                        <span>Delete All Solves</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

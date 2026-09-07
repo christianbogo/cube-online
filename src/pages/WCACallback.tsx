@@ -100,7 +100,7 @@ export default function WCACallback() {
 
     return (
         <div className="flex h-full w-full items-center justify-center bg-bg-primary">
-            <div className="flex flex-col items-center gap-4 p-8 bg-bg-secondary border border-border rounded-xl shadow-lg max-w-sm text-center">
+            <div className="flex flex-col items-center gap-4 p-5 sm:p-6 bg-bg-secondary border border-border rounded-xl shadow-lg max-w-sm text-center">
                 {status === 'loading' && <Loader2 className="w-12 h-12 text-accent animate-spin" />}
                 {status === 'success' && <CheckCircle2 className="w-12 h-12 text-green-500" />}
                 {status === 'error' && <XCircle className="w-12 h-12 text-red-500" />}

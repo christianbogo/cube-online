@@ -1,12 +1,14 @@
 import { useSolves } from '../../contexts/SolvesContext';
 import { useMemo } from 'react';
 import { calculateBestSingle, formatTime, calculateBestAverage } from '../../utils/calculations';
-import { SCRAMBLE_TYPES, SUPPORTED_EVENT_IDS } from '../../utils/constants';
+import { SUPPORTED_EVENT_IDS } from '../../utils/constants';
+import { useEvents } from '../../hooks/useEvents';
 import { Link } from 'react-router-dom';
 import { Trophy, ArrowRight } from 'lucide-react';
 
 export default function ProfileStatsTab() {
     const { solves } = useSolves();
+    const { allEvents } = useEvents();
 
     // Group solves for statistics
     const stats = useMemo(() => {
@@ -107,7 +109,7 @@ export default function ProfileStatsTab() {
                     </thead>
                     <tbody className="divide-y divide-border/50">
                         {stats.events.map(event => {
-                            const opt = SCRAMBLE_TYPES.find(o => o.value === event.type);
+                            const opt = allEvents.find(o => o.value === event.type);
                             const eventName = opt ? opt.label : event.type;
                             return (
                                 <tr key={event.type} className="hover:bg-bg-hover/50 transition-colors">

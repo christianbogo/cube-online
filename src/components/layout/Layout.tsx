@@ -14,16 +14,11 @@ import BottomNav from './BottomNav';
 export default function Layout() {
     const navigate = useNavigate();
     const location = useLocation();
-    const { isPrivateMode, togglePrivateMode, syncStatus } = useSolves();
+    const { syncStatus } = useSolves();
     const { user } = useAuth();
     const isSignInPage = location.pathname === '/account' && !user;
     const isMobile = useIsMobile();
-
-    useEffect(() => {
-        if (isMobile && location.pathname === '/') {
-            navigate('/account', { replace: true });
-        }
-    }, [isMobile, location.pathname, navigate]);
+    const isMobileCubePage = isMobile && location.pathname === '/';
 
     // Online presence and network status
     const [onlineCubersCount, setOnlineCubersCount] = useState<number>(0);
@@ -176,7 +171,7 @@ export default function Layout() {
             }
 
             if (e.key === 'Tab') {
-                if (location.pathname === '/account' || location.pathname === '/privacy') return;
+                if (location.pathname === '/account' || location.pathname === '/privacy' || location.pathname === '/info') return;
                 e.preventDefault();
                 if (!e.shiftKey) toggleRightSidebar();
                 else toggleLeftSidebar();
@@ -187,26 +182,21 @@ export default function Layout() {
 
             // Keybinds Navigation Hotkeys
             if (e.key === 'b' || e.key === 'B' || e.key === '?') {
-                if (!isPrivateMode) navigate('/keybinds');
-                else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/keybinds'); }
+                navigate('/keybinds');
             }
             if (e.key === 'g' || e.key === 'G') {
                 if (!user) return;
-                if (!isPrivateMode) navigate('/goals');
-                else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/goals'); }
+                navigate('/goals');
             }
             if (e.key === 'l' || e.key === 'L') {
                 if (!user) return;
-                if (!isPrivateMode) navigate('/logs');
-                else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/logs'); }
+                navigate('/logs');
             }
             if (e.key === 's' || e.key === 'S') {
-                if (!isPrivateMode) navigate('/social');
-                else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/social'); }
+                navigate('/social');
             }
             if (e.key === 'a' || e.key === 'A') {
-                if (!isPrivateMode) navigate('/account');
-                else if (confirm('Leave Private Mode?')) { togglePrivateMode(); navigate('/account'); }
+                navigate('/account');
             }
         };
 
@@ -215,7 +205,7 @@ export default function Layout() {
             window.removeEventListener('pointerup', handleGlobalPointerUp);
             window.removeEventListener('keydown', handleGlobalKeyDown, { capture: true });
         };
-    }, [navigate, toggleLeftSidebar, toggleRightSidebar, location.pathname, isPrivateMode, togglePrivateMode, isSignInPage]);
+    }, [navigate, toggleLeftSidebar, toggleRightSidebar, location.pathname, isSignInPage, user]);
 
     const startResizingLeft = useCallback(() => setIsResizingLeft(true), []);
     const startResizingRight = useCallback(() => setIsResizingRight(true), []);
@@ -289,9 +279,8 @@ export default function Layout() {
 
     return (
         <div className="h-screen w-screen bg-bg-primary text-text-primary flex flex-col overflow-hidden font-sans">
-            <Topbar />
-            <div ref={layoutRef} className="flex-1 flex flex-col md:flex-row overflow-hidden relative pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-0">
-                {/* Left Sidebar */}
+            {!isMobileCubePage && <Topbar />}
+            <div ref={layoutRef} className={`flex-1 flex flex-col md:flex-row overflow-hidden relative ${isMobileCubePage ? 'pb-0' : 'pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-0'}`}>
                 {/* Left Sidebar */}
                 {!isSignInPage && (
                     <div style={{ width: leftWidth }} className="hidden md:flex flex-shrink-0 relative flex-col border-r border-border backdrop-blur-sm will-change-[width] z-30">
@@ -316,19 +305,14 @@ export default function Layout() {
 
                 {/* Main Content */}
                 <main className="flex-1 flex flex-col relative bg-bg-primary min-w-0 overflow-hidden">
-                    <div className={`flex-1 w-full ${(location.pathname.startsWith('/logs') || location.pathname === '/account' || location.pathname === '/') ? (location.pathname === '/' ? 'overflow-hidden pt-3 px-3 pb-2 flex flex-col' : 'overflow-hidden p-0 flex flex-col') : 'p-3 sm:p-6 overflow-y-auto custom-scrollbar'}`}>
+                    <div className={`flex-1 w-full ${(location.pathname.startsWith('/logs') || location.pathname === '/account' || location.pathname === '/') ? (location.pathname === '/' ? (isMobile ? 'overflow-hidden p-0 flex flex-col h-full' : 'overflow-hidden pt-1.5 px-2 pb-1.5 flex flex-col') : 'overflow-hidden p-0 flex flex-col') : 'p-2 sm:p-3 overflow-y-auto custom-scrollbar'}`}>
                         <Outlet />
                     </div>
-                    {(!location.pathname.startsWith('/logs') && location.pathname !== '/account') && (
+                    {(!location.pathname.startsWith('/logs') && location.pathname !== '/account' && !isMobileCubePage) && (
                         <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8 shrink-0">
                             <div className="flex gap-2 items-center">
-                                <span>{isOnline ? 'Online' : 'Offline'} • v0.3.3</span>
+                                <span>{isOnline ? 'Online' : 'Offline'} • v0.4.0</span>
                                 <SyncIndicator status={syncStatus} />
-                                {isPrivateMode && (
-                                    <button onClick={togglePrivateMode} className="ml-2 bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20 uppercase font-bold text-[9px]">
-                                        Exit Private Mode
-                                    </button>
-                                )}
                             </div>
                             <div className="flex items-center gap-3">
                                 {consoleInfo && <div className="text-[10px] text-yellow-500/70 truncate max-w-xs font-mono" title={consoleInfo}>{consoleInfo}</div>}
@@ -342,7 +326,7 @@ export default function Layout() {
                 </main>
 
                 {/* Right Sidebar */}
-                {!['/account', '/logs', '/keybinds', '/goals', '/social', '/dev', '/privacy'].some(p => location.pathname.startsWith(p)) && (
+                {!['/account', '/logs', '/keybinds', '/goals', '/social', '/dev', '/privacy', '/info'].some(p => location.pathname.startsWith(p)) && (
                     <div style={{ width: rightWidth }} className="hidden md:flex flex-shrink-0 relative flex-col backdrop-blur-sm will-change-[width] border-l border-border z-20">
                         <div className="absolute top-0 left-[-5px] w-2.5 h-full cursor-col-resize z-50 group flex justify-center" onMouseDown={startResizingRight}>
                             <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
@@ -351,7 +335,7 @@ export default function Layout() {
                     </div>
                 )}
             </div>
-            <BottomNav />
+            {!isMobileCubePage && <BottomNav />}
         </div>
     );
 }

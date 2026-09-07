@@ -87,10 +87,10 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     // Helper for live solves broadcast
     const formatRecentSolves = useCallback((): SimpleSolve[] => {
         return solves.slice(0, 4).map(s => ({
-            time: s.time,
-            penalty: s.penalty,
-            inspectionPenalty: s.inspectionPenalty,
-            timestamp: new Date(s.date).getTime()
+            time: typeof s.time === 'number' ? s.time : 0,
+            penalty: s.penalty || 'none',
+            inspectionPenalty: s.inspectionPenalty || 'none',
+            timestamp: new Date(s.date).getTime() || Date.now()
         }));
     }, [solves]);
 
@@ -116,6 +116,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         const updatePresence = () => {
             const data: LiveUser = {
                 uid: user.uid,
+                shortId: user.shortId,
                 username: user.username || 'CubingUser',
                 color: user.color || '#ef4444',
                 status: liveTimerState,
@@ -123,7 +124,11 @@ export function LiveProvider({ children }: { children: ReactNode }) {
                 recentSolves: currentRecent,
                 timestamp: Date.now()
             };
-            set(userPresenceRef, data);
+            // Sanitize to remove any undefined properties that cause Firebase Realtime Database set() to throw
+            const sanitizedData = JSON.parse(JSON.stringify(data));
+            set(userPresenceRef, sanitizedData).catch(err => {
+                console.warn("Failed to update presence:", err);
+            });
         };
 
         updatePresence();

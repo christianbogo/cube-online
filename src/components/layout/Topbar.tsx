@@ -1,32 +1,69 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Logo } from '../ui/Logo';
+import { SlidersHorizontal, Info } from 'lucide-react';
+import TimerSettingsModal from '../timer/TimerSettingsModal';
+import { NotificationBell } from '../notifications';
 
 export default function Topbar() {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
+    const [isTimerSettingsOpen, setIsTimerSettingsOpen] = useState(false);
 
     return (
-        <header className="h-topbar pt-safe bg-bg-secondary border-b border-border flex items-center justify-between px-4 shrink-0 select-none z-20 transition-colors duration-200">
-            {/* Left Side: Logo/Brand */}
-            <div className="flex items-center gap-3">
-                <Link
-                    to="/"
-                    onClick={(e) => (e.currentTarget as HTMLElement).blur()}
-                    className="flex items-center gap-3 hover:opacity-80 transition-opacity outline-none focus:outline-none"
-                >
-                    <Logo className="w-6 h-6" />
-                    <span className="font-semibold text-lg tracking-tight text-text-primary">Cube Online</span>
-                </Link>
-            </div>
+        <>
+            <header className="h-topbar pt-safe bg-bg-secondary border-b border-border flex items-center justify-between px-4 shrink-0 select-none z-[70] transition-colors duration-200 relative">
+                {/* Left Side: Logo/Brand */}
+                <div className="flex items-center gap-3">
+                    <Link
+                        to="/"
+                        onClick={(e) => (e.currentTarget as HTMLElement).blur()}
+                        className="flex items-center gap-3 hover:opacity-80 transition-opacity outline-none focus:outline-none"
+                    >
+                        <Logo className="w-6 h-6" />
+                        <span className="font-semibold text-lg tracking-tight text-text-primary">Cube Online</span>
+                    </Link>
+                </div>
+
+                {/* Center: Timer Settings Link */}
+                <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-auto">
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            (e.currentTarget as HTMLElement).blur();
+                            setIsTimerSettingsOpen(true);
+                        }}
+                        className="flex items-center gap-1.5 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors cursor-pointer outline-none focus:outline-none py-1"
+                        title="Timer Settings"
+                    >
+                        <SlidersHorizontal className="w-3.5 h-3.5" />
+                        <span>Timer Settings</span>
+                    </button>
+                </div>
 
             {/* Right Side: Auth / Profile */}
-            <div className="flex items-center gap-3 md:gap-4">
+            <div className="flex items-center gap-0.5 sm:gap-1">
+                <Link
+                    to="/info"
+                    onClick={(e) => (e.currentTarget as HTMLElement).blur()}
+                    className={`relative p-2 rounded-lg transition-colors outline-none focus:outline-none flex items-center justify-center ${
+                        location.pathname === '/info'
+                            ? 'bg-bg-tertiary text-text-primary'
+                            : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'
+                    }`}
+                    title="Documentation & Features"
+                    aria-label="Documentation & Features"
+                >
+                    <Info className="w-5 h-5" />
+                </Link>
+                <NotificationBell />
                 {user ? (
                     <Link
                         to="/account"
                         onClick={(e) => (e.currentTarget as HTMLElement).blur()}
-                        className="flex items-center gap-3 py-1 pl-3 pr-1 rounded-lg hover:bg-bg-hover transition-colors border border-transparent hover:border-border/50 outline-none focus:outline-none"
+                        className="flex items-center gap-2 py-1 pl-2 pr-1 rounded-lg hover:bg-bg-hover transition-colors border border-transparent hover:border-border/50 outline-none focus:outline-none"
                     >
                         <span className="font-medium text-sm text-text-primary hidden sm:block">
                             {user.username || 'CubingUser'}
@@ -37,7 +74,7 @@ export default function Topbar() {
                         />
                     </Link>
                 ) : (
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5">
                         <button
                             onClick={(e) => {
                                 (e.currentTarget as HTMLElement).blur();
@@ -52,7 +89,7 @@ export default function Topbar() {
                                 (e.currentTarget as HTMLElement).blur();
                                 navigate('/account', { state: { mode: 'signup' } });
                             }}
-                            className="text-sm font-medium bg-text-primary text-bg-primary hover:opacity-90 transition-opacity px-4 py-1.5 rounded-md cursor-pointer outline-none focus:outline-none"
+                            className="text-sm font-medium bg-text-primary text-bg-primary hover:opacity-90 transition-opacity px-3 py-1 rounded-md cursor-pointer outline-none focus:outline-none"
                         >
                             Sign Up
                         </button>
@@ -60,5 +97,11 @@ export default function Topbar() {
                 )}
             </div>
         </header>
+
+        <TimerSettingsModal
+            isOpen={isTimerSettingsOpen}
+            onClose={() => setIsTimerSettingsOpen(false)}
+        />
+    </>
     );
 }

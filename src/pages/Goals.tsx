@@ -1,5 +1,222 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import { format, subDays, eachDayOfInterval } from 'date-fns';
+
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../lib/firebase';
+import {
+    getCachedDailyVolumeSync,
+    getCachedDailyVolume,
+    setCachedDailyVolume,
+    DAILY_VOLUME_CACHE_EXPIRED_EVENT,
+    type DailyVolumeData
+} from '../utils/dailyVolumeCache';
+
+interface ActivityTooltipData {
+    date: Date;
+    count: number;
+    dist: Record<string, number>;
+    left: number;
+    top: number;
+    placement: 'top' | 'bottom';
+    arrowOffset: number;
+}
+
+function ActivitySquares({ userId }: { userId?: string }) {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [tooltipData, setTooltipData] = useState<ActivityTooltipData | null>(null);
+    const [dailyData, setDailyData] = useState<DailyVolumeData | null>(() => {
+        return getCachedDailyVolumeSync(userId);
+    });
+    const [isLoading, setIsLoading] = useState<boolean>(() => {
+        return !getCachedDailyVolumeSync(userId) && !!userId;
+    });
+
+    const today = new Date();
+    // E.g., past 150 days
+    const pastDays = useMemo(() => eachDayOfInterval({ start: subDays(today, 150), end: today }), []);
+
+    useEffect(() => {
+        if (!userId) {
+            setDailyData(null);
+            setIsLoading(false);
+            return;
+        }
+
+        let isMounted = true;
+        const fetchDaily = async (force = false) => {
+            if (!force) {
+                const cached = await getCachedDailyVolume(userId);
+                if (cached && isMounted) {
+                    setDailyData(cached);
+                    setIsLoading(false);
+                    return;
+                }
+            }
+            setIsLoading(true);
+            try {
+                const fn = httpsCallable(functions, 'getDailyVolumeStats');
+                const res = await fn();
+                const data = res.data as DailyVolumeData;
+                if (isMounted) {
+                    setDailyData(data);
+                    await setCachedDailyVolume(userId, data);
+                }
+            } catch (e) {
+                console.warn('Failed to load daily volume stats:', e);
+            } finally {
+                if (isMounted) setIsLoading(false);
+            }
+        };
+
+        fetchDaily();
+
+        const handleExpired = () => {
+            fetchDaily(true);
+        };
+
+        window.addEventListener(DAILY_VOLUME_CACHE_EXPIRED_EVENT, handleExpired);
+        return () => {
+            isMounted = false;
+            window.removeEventListener(DAILY_VOLUME_CACHE_EXPIRED_EVENT, handleExpired);
+        };
+    }, [userId]);
+
+    useEffect(() => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+        }
+    }, [dailyData, isLoading]);
+
+    useEffect(() => {
+        const handleScroll = () => setTooltipData(null);
+        window.addEventListener('scroll', handleScroll, true);
+        return () => window.removeEventListener('scroll', handleScroll, true);
+    }, []);
+
+    const handleMouseEnter = (
+        e: React.MouseEvent<HTMLDivElement>,
+        date: Date,
+        count: number,
+        dist: Record<string, number>
+    ) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const squareCenterX = rect.left + rect.width / 2;
+
+        const minCenter = 80;
+        const maxCenter = Math.max(minCenter, window.innerWidth - 80);
+        const clampedLeft = Math.max(minCenter, Math.min(maxCenter, squareCenterX));
+        const arrowOffset = Math.max(-60, Math.min(60, squareCenterX - clampedLeft));
+
+        const spaceAbove = rect.top;
+        const placement: 'top' | 'bottom' = spaceAbove >= 120 ? 'top' : 'bottom';
+        const top = placement === 'top' ? rect.top - 8 : rect.bottom + 8;
+
+        setTooltipData({
+            date,
+            count,
+            dist,
+            left: clampedLeft,
+            top,
+            placement,
+            arrowOffset
+        });
+    };
+
+    const handleMouseLeave = () => {
+        setTooltipData(null);
+    };
+
+    return (
+        <div className="w-full relative">
+            <div 
+                ref={scrollRef} 
+                onScroll={() => setTooltipData(null)}
+                className="w-full overflow-x-auto no-scrollbar py-2"
+            >
+                <div className="flex gap-1.5 min-w-max px-1">
+                    {isLoading && !dailyData ? (
+                        pastDays.map(date => {
+                            const dateStr = format(date, 'yyyy-MM-dd');
+                            return (
+                                <div
+                                    key={dateStr}
+                                    className="w-7 h-7 rounded-md bg-text-secondary/20 animate-pulse shrink-0"
+                                />
+                            );
+                        })
+                    ) : (
+                        pastDays.map(date => {
+                            const dateStr = format(date, 'yyyy-MM-dd');
+                            const count = dailyData?.dailySolvesCount?.[dateStr] || 0;
+                            const dist = dailyData?.dailySolvesByEvent?.[dateStr] || {};
+
+                            let bgColor = 'bg-bg-secondary border border-border/50';
+                            if (count > 0) bgColor = 'bg-accent/20 text-accent border border-accent/20';
+                            if (count > 10) bgColor = 'bg-accent/50 text-white border border-accent/30';
+                            if (count > 30) bgColor = 'bg-accent/80 text-white border border-accent/40';
+                            if (count > 70) bgColor = 'bg-accent text-white border border-accent';
+
+                            return (
+                                <div 
+                                    key={dateStr}
+                                    onMouseEnter={(e) => handleMouseEnter(e, date, count, dist)}
+                                    onMouseLeave={handleMouseLeave}
+                                    className={`w-7 h-7 rounded-md shrink-0 flex items-center justify-center text-[10px] font-bold transition-transform duration-150 cursor-default hover:scale-110 ${bgColor}`}
+                                >
+                                    {count > 0 ? count : ''}
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+            </div>
+
+            {/* Portal Hover Tooltip rendering outside scroll container / divs */}
+            {tooltipData && typeof document !== 'undefined' && createPortal(
+                <div
+                    style={{
+                        position: 'fixed',
+                        left: `${tooltipData.left}px`,
+                        top: `${tooltipData.top}px`,
+                        transform: tooltipData.placement === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+                        zIndex: 9999
+                    }}
+                    className="pointer-events-none flex flex-col items-center animate-in fade-in zoom-in-95 duration-75"
+                >
+                    {tooltipData.placement === 'bottom' && (
+                        <div 
+                            style={{ transform: `translateX(${tooltipData.arrowOffset}px) rotate(45deg)` }}
+                            className="w-2 h-2 bg-bg-hover border-t border-l border-border -mb-1 shadow-sm z-10" 
+                        />
+                    )}
+                    <div className="bg-bg-hover text-text-primary text-xs px-3 py-2 rounded-lg border border-border shadow-[0_4px_20px_rgba(0,0,0,0.5)] whitespace-nowrap flex flex-col gap-1 min-w-[120px]">
+                        <span className="font-semibold">{format(tooltipData.date, 'MMM d, yyyy')}</span>
+                        <span className="text-text-secondary">{tooltipData.count} total solves</span>
+                        {Object.keys(tooltipData.dist).length > 0 && (
+                            <div className="flex flex-col mt-1 pt-1 border-t border-border/50 text-[10px] text-text-secondary">
+                                {Object.entries(tooltipData.dist).map(([ev, evCount]) => (
+                                    <div key={ev} className="flex justify-between gap-3">
+                                        <span className="uppercase">{ev}</span>
+                                        <span>{evCount as number}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    {tooltipData.placement === 'top' && (
+                        <div 
+                            style={{ transform: `translateX(${tooltipData.arrowOffset}px) rotate(45deg)` }}
+                            className="w-2 h-2 bg-bg-hover border-b border-r border-border -mt-1 shadow-[4px_4px_4px_rgba(0,0,0,0.1)] z-10" 
+                        />
+                    )}
+                </div>,
+                document.body
+            )}
+        </div>
+    );
+}
 import {
     Target,
     Clock,
@@ -13,6 +230,7 @@ import {
     Users
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useSolves } from '../contexts/SolvesContext';
 import { useGoals } from '../contexts/GoalsContext';
 import type { GoalCategory } from '../types/goals';
 import { CATEGORY_METADATA } from '../utils/goalsCalculations';
@@ -22,6 +240,7 @@ type StatusFilter = 'all' | 'completed' | 'in-progress';
 
 export default function Goals() {
     const { user } = useAuth();
+    const { userStats, solves } = useSolves();
     const {
         goalsProgress,
         pinnedGoals,
@@ -136,12 +355,26 @@ export default function Goals() {
         }
     };
 
+    const activeEvents = useMemo(() => {
+        const fromStats = userStats?.validSolvesPerEvent
+            ? Object.entries(userStats.validSolvesPerEvent)
+                .filter(([_, count]) => (count as number) > 0)
+                .map(([e]) => e)
+            : [];
+        const fromSolves = (solves || []).map(s => s.scrambleType || '333');
+        const combined = Array.from(new Set([...fromStats, ...fromSolves]));
+        return combined.length > 0 ? combined : undefined;
+    }, [userStats?.validSolvesPerEvent, solves]);
+
     return (
         <div className="flex-1 flex flex-col min-h-0 bg-bg-primary overflow-y-auto custom-scrollbar select-none">
-            <div className="max-w-6xl w-full mx-auto px-2.5 py-4 sm:p-4 md:p-6 flex flex-col gap-6">
+            <div className="max-w-6xl w-full mx-auto px-1.5 py-2.5 sm:px-3 sm:py-3 md:px-4 md:py-4 flex flex-col gap-5">
+
+                {/* ACTIVITY SQUARES */}
+                <ActivitySquares userId={user?.uid} />
 
                 {/* PERSONAL RECORDS TABLE */}
-                <RecordTable />
+                <RecordTable activeEvents={activeEvents} />
 
                 {/* HEADER OVERVIEW STATS */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -336,9 +569,35 @@ export default function Goals() {
 
                 {/* GOALS GRID */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-8">
-                    {filteredGoals.map((goal) => {
-                        const isPinned = isGoalPinned(goal.goalId);
-                        const globalPct = getGoalGlobalPercentage(goal.goalId);
+                    {user && goalsProgress.length === 0 ? (
+                        Array.from({ length: 6 }).map((_, idx) => (
+                            <div
+                                key={idx}
+                                className="bg-surface-elevation-1 border border-border/60 rounded-xl p-4 flex flex-col justify-between gap-3 animate-pulse"
+                            >
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-start gap-2.5 min-w-0">
+                                        <div className="w-8 h-8 rounded-lg bg-text-secondary/20 shrink-0 mt-0.5" />
+                                        <div className="min-w-0 flex flex-col gap-2">
+                                            <div className="h-4 w-32 bg-text-secondary/20 rounded" />
+                                            <div className="h-3 w-56 bg-text-secondary/20 rounded" />
+                                        </div>
+                                    </div>
+                                    <div className="w-6 h-6 rounded bg-text-secondary/20 shrink-0" />
+                                </div>
+                                <div className="flex flex-col gap-1.5 mt-2">
+                                    <div className="flex items-center justify-between">
+                                        <div className="h-3 w-12 bg-text-secondary/20 rounded" />
+                                        <div className="h-3 w-16 bg-text-secondary/20 rounded" />
+                                    </div>
+                                    <div className="w-full h-2 bg-text-secondary/20 rounded-full" />
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        filteredGoals.map((goal) => {
+                            const isPinned = isGoalPinned(goal.goalId);
+                            const globalPct = getGoalGlobalPercentage(goal.goalId);
 
                         return (
                             <div
@@ -419,7 +678,7 @@ export default function Goals() {
                                 </div>
                             </div>
                         );
-                    })}
+                    }))}
 
                     {filteredGoals.length === 0 && (
                         <div className="col-span-full py-16 flex flex-col items-center justify-center text-center gap-2">

@@ -465,7 +465,7 @@ export const GOAL_DEFINITIONS: GoalDefinition[] = [
         category: 'diversity',
         title: 'Polymath',
         description: 'Establish a valid Ao12 in every supported event that supports average rankings.',
-        targetValue: 11,
+        targetValue: 12,
         unit: 'events'
     },
     {
@@ -581,109 +581,133 @@ function calculateMaxStreak(dateCounts: Map<string, number>, minSolvesPerDay: nu
     };
 }
 
-export function evaluateUserGoals(solves: Solve[], user?: any | null, usedKeybinds: string[] = []): GoalProgress[] {
-    // 1. Total Solve Time (ms) from non-DNF solves
-    const totalSolveTimeMs = solves.reduce((acc, curr) => {
-        if (curr.penalty === 'DNF' || curr.inspectionPenalty === 'DNF') return acc;
-        let t = curr.time;
-        if (curr.penalty === '+2') t += 2000;
-        if (curr.inspectionPenalty === '+2') t += 2000;
-        return acc + t;
-    }, 0);
+import type { UserStats } from '../types/goals';
 
-    // 2. Total Solves
-    const totalSolvesCount = solves.length;
-
-    // 3. Solves grouped by date (YYYY-MM-DD)
-    const dailySolvesCount = new Map<string, number>();
-    solves.forEach(s => {
-        const d = new Date(s.date);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        dailySolvesCount.set(key, (dailySolvesCount.get(key) || 0) + 1);
-    });
-
+export function evaluateUserGoals(solves: Solve[], user?: any | null, usedKeybinds: string[] = [], userStats?: UserStats | null, streakStats?: Record<string, any> | null): GoalProgress[] {
+    let totalSolveTimeMs = 0;
+    let totalSolvesCount = 0;
     let maxSolvesInSingleDay = 0;
     let maxDayDate: string | null = null;
-    dailySolvesCount.forEach((count, dateStr) => {
-        if (count > maxSolvesInSingleDay) {
-            maxSolvesInSingleDay = count;
-            maxDayDate = dateStr;
-        }
-    });
-
-    // 4. Solves grouped by event
-    const solvesByEvent: Record<string, Solve[]> = {};
-    SUPPORTED_EVENT_IDS.forEach(id => {
-        solvesByEvent[id] = [];
-    });
-
-    solves.forEach(s => {
-        const type = s.scrambleType || '333';
-        if (!solvesByEvent[type]) {
-            solvesByEvent[type] = [];
-        }
-        solvesByEvent[type].push(s);
-    });
-
-    // Valid solve count per event (non-DNF)
-    const validSolvesPerEvent: Record<string, number> = {};
-    const hasAo5PerEvent: Record<string, boolean> = {};
-    const hasAo12PerEvent: Record<string, boolean> = {};
-    const hasAo100PerEvent: Record<string, boolean> = {};
-
-    let totalEventsWithAo100 = 0;
+    let dailySolvesCountMap = new Map<string, number>();
+    
+    let validSolvesPerEvent: Record<string, number> = {};
+    let hasAo5PerEvent: Record<string, boolean> = {};
+    let hasAo12PerEvent: Record<string, boolean> = {};
+    let hasAo100PerEvent: Record<string, boolean> = {};
     let anyAo100Completed = false;
 
-    SUPPORTED_EVENT_IDS.forEach(eventId => {
-        const list = solvesByEvent[eventId] || [];
-        const validCount = list.filter(s => s.penalty !== 'DNF' && s.inspectionPenalty !== 'DNF').length;
-        validSolvesPerEvent[eventId] = validCount;
-
-        const bestAo5 = calculateBestAverage(list, 5);
-        const bestAo12 = calculateBestAverage(list, 12);
-        const bestAo100 = calculateBestAverage(list, 100);
-
-        hasAo5PerEvent[eventId] = bestAo5 !== null && bestAo5 !== 'DNF';
-        hasAo12PerEvent[eventId] = bestAo12 !== null && bestAo12 !== 'DNF';
-        hasAo100PerEvent[eventId] = bestAo100 !== null && bestAo100 !== 'DNF';
-
-        if (hasAo100PerEvent[eventId]) {
-            totalEventsWithAo100++;
-            anyAo100Completed = true;
+    if (userStats) {
+        totalSolveTimeMs = userStats.totalSolveTimeMs || 0;
+        totalSolvesCount = userStats.totalSolvesCount || 0;
+        maxSolvesInSingleDay = userStats.maxSolvesInSingleDay || 0;
+        if (userStats.dailySolvesCount) {
+            Object.entries(userStats.dailySolvesCount).forEach(([dateStr, count]) => {
+                dailySolvesCountMap.set(dateStr, count);
+                if (count === maxSolvesInSingleDay) maxDayDate = dateStr;
+            });
         }
-    });
+        validSolvesPerEvent = userStats.validSolvesPerEvent || {};
+        hasAo5PerEvent = userStats.hasAo5PerEvent || {};
+        hasAo12PerEvent = userStats.hasAo12PerEvent || {};
+        hasAo100PerEvent = userStats.hasAo100PerEvent || {};
+        anyAo100Completed = userStats.anyAo100Completed || false;
+    } else {
+        // Fallback: Compute from solves
+        totalSolveTimeMs = solves.reduce((acc, curr) => {
+            if (curr.penalty === 'DNF' || curr.inspectionPenalty === 'DNF') return acc;
+            let t = curr.time;
+            if (curr.penalty === '+2') t += 2000;
+            if (curr.inspectionPenalty === '+2') t += 2000;
+            return acc + t;
+        }, 0);
+
+        totalSolvesCount = solves.length;
+
+        solves.forEach(s => {
+            const d = new Date(s.date);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            dailySolvesCountMap.set(key, (dailySolvesCountMap.get(key) || 0) + 1);
+        });
+
+        dailySolvesCountMap.forEach((count, dateStr) => {
+            if (count > maxSolvesInSingleDay) {
+                maxSolvesInSingleDay = count;
+                maxDayDate = dateStr;
+            }
+        });
+
+        const solvesByEvent: Record<string, Solve[]> = {};
+        SUPPORTED_EVENT_IDS.forEach(id => solvesByEvent[id] = []);
+
+        solves.forEach(s => {
+            const type = s.scrambleType || '333';
+            if (!solvesByEvent[type]) solvesByEvent[type] = [];
+            solvesByEvent[type].push(s);
+        });
+
+        SUPPORTED_EVENT_IDS.forEach(eventId => {
+            const list = solvesByEvent[eventId] || [];
+            const validCount = list.filter(s => s.penalty !== 'DNF' && s.inspectionPenalty !== 'DNF').length;
+            validSolvesPerEvent[eventId] = validCount;
+
+            const bestAo5 = calculateBestAverage(list, 5);
+            const bestAo12 = calculateBestAverage(list, 12);
+            const bestAo100 = calculateBestAverage(list, 100);
+
+            hasAo5PerEvent[eventId] = bestAo5 !== null && bestAo5 !== 'DNF';
+            hasAo12PerEvent[eventId] = bestAo12 !== null && bestAo12 !== 'DNF';
+            hasAo100PerEvent[eventId] = bestAo100 !== null && bestAo100 !== 'DNF';
+
+            if (hasAo100PerEvent[eventId]) {
+                anyAo100Completed = true;
+            }
+        });
+    }
 
     const eventsWithValidSolve = SUPPORTED_EVENT_IDS.filter(id => (validSolvesPerEvent[id] || 0) >= 1).length;
     const eventsWithValidAo5 = SUPPORTED_EVENT_IDS.filter(id => hasAo5PerEvent[id]).length;
     const eventsWithValidAo12 = SUPPORTED_EVENT_IDS.filter(id => hasAo12PerEvent[id]).length;
+    const totalEventsWithAo100 = SUPPORTED_EVENT_IDS.filter(id => hasAo100PerEvent[id]).length;
 
-    // Big cubes: 444, 555, 666, 777
     const bigCubeIds = ['444', '555', '666', '777'];
     const bigCubesWithSolve = bigCubeIds.filter(id => (validSolvesPerEvent[id] || 0) >= 1).length;
     const bigCubesWithAo12 = bigCubeIds.filter(id => hasAo12PerEvent[id]).length;
 
-    // Side events: minx, pyram, skewb, sq1, clock
     const sideEventIds = ['minx', 'pyram', 'skewb', 'sq1', 'clock'];
     const sideEventsWithSolve = sideEventIds.filter(id => (validSolvesPerEvent[id] || 0) >= 1).length;
     const sideEventsWithAo12 = sideEventIds.filter(id => hasAo12PerEvent[id]).length;
 
-    // Blindfolded: 333bf, 444bf, 555bf, 333mbf
     const bldEventIds = ['333bf', '444bf', '555bf', '333mbf'];
     const hasBldSolve = bldEventIds.some(id => (validSolvesPerEvent[id] || 0) >= 1) ? 1 : 0;
 
-    // Averageable events Ao12 count
     const averageableAo12Count = AVERAGEABLE_EVENT_IDS.filter(id => hasAo12PerEvent[id]).length;
-
-    // Unique keybind count
     const uniqueKeybindsCount = new Set(usedKeybinds).size;
 
-    // Map each definition to progress
     return GOAL_DEFINITIONS.map(def => {
+
         let currentValue = 0;
         let displayCurrent = '';
         let displayTarget = '';
         let streakStartDate: string | null = null;
         let streakEndDate: string | null = null;
+
+        if (def.category === 'streak' && streakStats && streakStats[def.id]) {
+            const s = streakStats[def.id];
+            return {
+                goalId: def.id,
+                category: def.category,
+                title: def.title,
+                description: def.description,
+                currentValue: s.currentValue,
+                targetValue: def.targetValue,
+                completed: s.completed,
+                percentCompleted: s.percentCompleted,
+                displayCurrent: s.displayCurrent,
+                displayTarget: s.displayTarget,
+                streakStartDate: s.streakStartDate,
+                streakEndDate: s.streakEndDate
+            };
+        }
 
         switch (def.id) {
             // Category 1: Time Spent
@@ -735,7 +759,7 @@ export function evaluateUserGoals(solves: Solve[], user?: any | null, usedKeybin
 
             // Category 3: Streaks & Daily Volume
             case 'streak-habit-former': {
-                const res = calculateMaxStreak(dailySolvesCount, 1);
+                const res = calculateMaxStreak(dailySolvesCountMap, 1);
                 currentValue = res.maxStreak;
                 streakStartDate = res.startDate;
                 streakEndDate = res.endDate;
@@ -747,7 +771,7 @@ export function evaluateUserGoals(solves: Solve[], user?: any | null, usedKeybin
             case 'streak-monthly-ritual':
             case 'streak-quarterly-routine':
             case 'streak-half-year-habit': {
-                const res = calculateMaxStreak(dailySolvesCount, 5);
+                const res = calculateMaxStreak(dailySolvesCountMap, 5);
                 currentValue = res.maxStreak;
                 streakStartDate = res.startDate;
                 streakEndDate = res.endDate;
@@ -757,7 +781,7 @@ export function evaluateUserGoals(solves: Solve[], user?: any | null, usedKeybin
             }
             case 'streak-dedicated-daily':
             case 'streak-unbroken-year': {
-                const res = calculateMaxStreak(dailySolvesCount, 10);
+                const res = calculateMaxStreak(dailySolvesCountMap, 10);
                 currentValue = res.maxStreak;
                 streakStartDate = res.startDate;
                 streakEndDate = res.endDate;
@@ -766,7 +790,7 @@ export function evaluateUserGoals(solves: Solve[], user?: any | null, usedKeybin
                 break;
             }
             case 'streak-year-in-twists': {
-                const res = calculateMaxStreak(dailySolvesCount, 1);
+                const res = calculateMaxStreak(dailySolvesCountMap, 1);
                 currentValue = res.maxStreak;
                 streakStartDate = res.startDate;
                 streakEndDate = res.endDate;
@@ -776,7 +800,7 @@ export function evaluateUserGoals(solves: Solve[], user?: any | null, usedKeybin
             }
             case 'streak-weekend-blitz':
             case 'streak-grind-week': {
-                const res = calculateMaxStreak(dailySolvesCount, 50);
+                const res = calculateMaxStreak(dailySolvesCountMap, 50);
                 currentValue = res.maxStreak;
                 streakStartDate = res.startDate;
                 streakEndDate = res.endDate;
@@ -787,7 +811,7 @@ export function evaluateUserGoals(solves: Solve[], user?: any | null, usedKeybin
             case 'streak-century-run':
             case 'streak-fortnight-forge':
             case 'streak-iron-fingers': {
-                const res = calculateMaxStreak(dailySolvesCount, 100);
+                const res = calculateMaxStreak(dailySolvesCountMap, 100);
                 currentValue = res.maxStreak;
                 streakStartDate = res.startDate;
                 streakEndDate = res.endDate;
@@ -806,8 +830,9 @@ export function evaluateUserGoals(solves: Solve[], user?: any | null, usedKeybin
                 displayTarget = `${def.targetValue.toLocaleString()} solves`;
                 break;
             }
-            case 'streak-extreme-focus': {
-                const res = calculateMaxStreak(dailySolvesCount, 200);
+            case 'streak-extreme-focus':
+            case 'streak-double-century': {
+                const res = calculateMaxStreak(dailySolvesCountMap, 200);
                 currentValue = res.maxStreak;
                 streakStartDate = res.startDate;
                 streakEndDate = res.endDate;
@@ -869,8 +894,8 @@ export function evaluateUserGoals(solves: Solve[], user?: any | null, usedKeybin
                 break;
             case 'diversity-polymath':
                 currentValue = averageableAo12Count;
-                displayCurrent = `${currentValue} / 11`;
-                displayTarget = '11 events';
+                displayCurrent = `${currentValue} / 12`;
+                displayTarget = '12 events';
                 break;
             case 'diversity-all-keybinds':
                 currentValue = Math.min(21, uniqueKeybindsCount);

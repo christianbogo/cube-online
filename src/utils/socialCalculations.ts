@@ -319,9 +319,10 @@ export function getMostImprovedLeaderboard(
 
         let brokenRecordsCount = 0;
 
-        SCRAMBLE_TYPES.forEach(opt => {
-            const eventSolves = grouped[opt.value] || [];
-            if (eventSolves.length === 0 && !SUPPORTED_EVENT_IDS.includes(opt.value)) return;
+        const eventKeys = Array.from(new Set([...SCRAMBLE_TYPES.map(o => o.value), ...Object.keys(grouped)]));
+
+        eventKeys.forEach(eventKey => {
+            const eventSolves = grouped[eventKey] || [];
             if (eventSolves.length === 0) return;
 
             const chronological = [...eventSolves].sort(

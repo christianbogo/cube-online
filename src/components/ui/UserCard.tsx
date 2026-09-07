@@ -1,3 +1,5 @@
+import { useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { formatTime } from '../../utils/formatTime';
 import type { TimerState, LiveUser, SimpleSolve } from '../../types';
 import { Minimize2 } from 'lucide-react';
@@ -8,9 +10,31 @@ export interface UserCardProps {
     onStar?: (id: string, e: React.MouseEvent) => void;
     onBlock?: (id: string, e: React.MouseEvent) => void;
     onHide?: (id: string, e: React.MouseEvent) => void;
+    draggable?: boolean;
+    onDragStart?: (e: React.DragEvent) => void;
+    className?: string;
+    onClick?: (e: React.MouseEvent) => void;
 }
 
-export const UserCard = ({ user, onHide }: UserCardProps) => {
+export const UserCard = ({ user, onHide, draggable, onDragStart, className = '', onClick }: UserCardProps) => {
+    const navigate = useNavigate();
+    const isDraggingRef = useRef(false);
+
+    const handleCardClick = (e: React.MouseEvent) => {
+        if (isDraggingRef.current) {
+            isDraggingRef.current = false;
+            return;
+        }
+        (e.currentTarget as HTMLElement).blur();
+        if (onClick) {
+            onClick(e);
+        } else if (user?.uid) {
+            navigate(`/social/${user.shortId || user.uid}`);
+        } else {
+            navigate('/social');
+        }
+    };
+
     // Determine Border Color based on Status
     const getBorderColor = (status: TimerState) => {
         switch (status) {
@@ -37,14 +61,27 @@ export const UserCard = ({ user, onHide }: UserCardProps) => {
     };
 
     return (
-        <div className={`flex-shrink-0 w-44 h-32 bg-surface-elevation-1 rounded-xl border-2 flex flex-col relative group hover:shadow-lg transition-all outline-none focus:outline-none
+        <div
+            draggable={draggable}
+            onDragStart={(e) => {
+                isDraggingRef.current = true;
+                onDragStart?.(e);
+            }}
+            onDragEnd={() => {
+                setTimeout(() => {
+                    isDraggingRef.current = false;
+                }, 100);
+            }}
+            onClick={handleCardClick}
+            title={`View ${user.username}'s profile`}
+            className={`flex-shrink-0 w-28 h-20 bg-surface-elevation-1 rounded-xl border flex flex-col relative group hover:shadow-lg hover:z-10 transition-all outline-none focus:outline-none cursor-pointer ${className}
             ${getBorderColor(user.status)}`}
         >
             {/* Header: Rounded Square Avatar + Name + Subtle Hide Button */}
-            <div className="flex items-center justify-between p-2 pl-3 pb-1">
-                <div className="flex items-center gap-2 overflow-hidden min-w-0 flex-1">
+            <div className="flex items-center justify-between px-2 pt-1.5 pb-0">
+                <div className="flex items-center gap-1.5 overflow-hidden min-w-0 flex-1">
                     <div
-                        className="w-3 h-3 rounded-md flex-shrink-0 shadow-xs"
+                        className="w-2.5 h-2.5 rounded-sm flex-shrink-0 shadow-xs"
                         style={{ backgroundColor: user.color }}
                     />
                     <span className="font-semibold text-text-primary truncate text-xs">{user.username}</span>
@@ -61,31 +98,31 @@ export const UserCard = ({ user, onHide }: UserCardProps) => {
                         title={`Minimize ${user.username} to chip`}
                         aria-label={`Minimize ${user.username}`}
                     >
-                        <Minimize2 className="w-3.5 h-3.5" />
+                        <Minimize2 className="w-3 h-3" />
                     </button>
                 )}
             </div>
 
             {/* Solves Area */}
-            <div className="flex-1 flex flex-col items-center justify-center p-2 pt-0 gap-1">
+            <div className="flex-1 flex flex-col items-center justify-center px-1 pb-1.5 pt-0 gap-0.5">
                 {/* Main (Recent) Solve */}
                 {recent ? (
-                    <div className={`text-3xl font-mono font-medium tracking-tight
+                    <div className={`${formatTimeStr(recent).length > 5 ? 'text-xl' : 'text-2xl'} font-mono font-medium tracking-tight leading-tight
                         ${recent.penalty === 'DNF' ? 'text-red-500' : 'text-text-primary'}
                     `}>
                         {formatTimeStr(recent)}
                     </div>
                 ) : (
-                    <div className="text-2xl text-text-secondary/20 font-mono">--.--</div>
+                    <div className="text-xl text-text-secondary/20 font-mono">--.--</div>
                 )}
 
                 {/* History (2 solves after most recent, no background color) */}
-                <div className="flex gap-2 mt-1">
+                <div className="flex gap-1.5 leading-none">
                     {[0, 1].map(i => {
                         const s = history[i];
-                        if (!s) return <div key={i} className="text-[10px] font-mono text-text-secondary/25 px-1">--.--</div>;
+                        if (!s) return <div key={i} className="text-[10px] font-mono text-text-secondary/25 px-0.5">--.--</div>;
                         return (
-                            <div key={i} className={`text-[10px] font-mono px-1
+                            <div key={i} className={`text-[10px] font-mono px-0.5
                                 ${s.penalty === 'DNF' ? 'text-red-500' : 'text-text-secondary'}
                             `}>
                                 {formatTimeStr(s)}

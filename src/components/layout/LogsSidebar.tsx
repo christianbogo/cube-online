@@ -1,11 +1,23 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useSolves, type Solve } from '../../contexts/SolvesContext';
+import { useSolves } from '../../contexts/SolvesContext';
 import { useSettings } from '../../contexts/SettingsContext';
-import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage, standardDeviation } from '../../utils/calculations';
-import { ChevronDown, Calendar, Clock, Layers, Archive, CalendarDays, CalendarRange, Check } from 'lucide-react';
-import { startOfYear, startOfMonth, startOfWeek, startOfDay, format } from 'date-fns';
+import { formatTime } from '../../utils/calculations';
+import { ChevronDown, Calendar, Clock, Layers, Archive, CalendarDays, CalendarRange, Check, Loader2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../../lib/firebase';
+import {
+    getCachedSidebarDataSync,
+    getCachedSidebarData,
+    setCachedSidebarData,
+    isLogsCacheExpired,
+    LOGS_CACHE_EXPIRED_EVENT,
+    type SidebarCachedData,
+    type SidebarGroupItem,
+    type SidebarOverallStats
+} from '../../utils/logsCache';
+import { useEvents } from '../../hooks/useEvents';
 
 type GroupingType = 'all' | 'years' | 'months' | 'weeks' | 'days' | 'sessions';
 type StatColumn = 'count' | 'single' | 'ao5' | 'ao12' | 'ao100' | 'time';
@@ -28,11 +40,9 @@ const COLUMN_OPTIONS: { value: StatColumn; label: string }[] = [
     { value: 'time', label: 'Accumulative Time' },
 ];
 
-import { SCRAMBLE_TYPES } from '../../utils/constants';
-
 export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, collapsed: _collapsed }: { onToggleCollapse?: () => void, collapsed?: boolean }) {
     const { user } = useAuth();
-    const { solves } = useSolves();
+    const { allEvents } = useEvents();
     const { settings, updateSettings } = useSettings();
     const [searchParams, setSearchParams] = useSearchParams();
 
@@ -43,6 +53,43 @@ export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, colla
     const [statColumn, setStatColumn] = useState<StatColumn>(() => {
         return (localStorage.getItem('sidebar_stat_column') as StatColumn) || 'count';
     });
+
+    // -- Cached Text Content (Storage-efficient local cache) --
+    const [cachedData, setCachedData] = useState<SidebarCachedData | null>(() => {
+        return getCachedSidebarDataSync(user?.uid, settings.scrambleType, true);
+    });
+
+    const [serverGroups, setServerGroups] = useState<SidebarGroupItem[] | null>(null);
+    const [groupsLoading, setGroupsLoading] = useState<boolean>(false);
+
+    const [serverStats, setServerStats] = useState<SidebarOverallStats | null>(null);
+    const [statsLoading, setStatsLoading] = useState<boolean>(false);
+
+    useEffect(() => {
+        const sync = getCachedSidebarDataSync(user?.uid, settings.scrambleType, true);
+        setCachedData(sync);
+        if (!sync && user) {
+            getCachedSidebarData(user.uid, settings.scrambleType, true).then(data => {
+                if (data) setCachedData(data);
+            });
+        }
+    }, [user?.uid, settings.scrambleType]);
+
+    // Listen for cache expiration
+    useEffect(() => {
+        const handleExpired = (e: Event) => {
+            const customEvent = e as CustomEvent<{ userId?: string }>;
+            const expiredUid = customEvent.detail?.userId;
+            if (!expiredUid || !user || expiredUid === user.uid) {
+                setCachedData(null);
+                setServerGroups(null);
+                setServerStats(null);
+            }
+        };
+
+        window.addEventListener(LOGS_CACHE_EXPIRED_EVENT, handleExpired);
+        return () => window.removeEventListener(LOGS_CACHE_EXPIRED_EVENT, handleExpired);
+    }, [user]);
 
     // Derived Selection from URL
     const selectedKeys = useMemo(() => {
@@ -66,103 +113,136 @@ export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, colla
         localStorage.setItem('sidebar_stat_column', statColumn);
     }, [statColumn]);
 
-    // 1. Filter Solves by Event (and User)
-    const filteredSolves = useMemo(() => {
-        let base = solves;
-        if (user) {
-            base = solves.filter(s => s.userId === user.uid);
+    const { solves: recentSolves, userStats } = useSolves();
+    // Only show events that have at least one solve for the user, plus the currently selected event if any
+    const availableEventOptions = useMemo(() => {
+        const eventsWithSolves = new Set<string>();
+        
+        if (userStats && userStats.validSolvesPerEvent) {
+            Object.entries(userStats.validSolvesPerEvent).forEach(([e, count]) => {
+                if ((count as number) > 0) {
+                    eventsWithSolves.add(e);
+                }
+            });
         }
-        return base
-            .filter(s => (s.scrambleType || '333') === settings.scrambleType)
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [solves, user, settings.scrambleType]);
-
-    // 2. Group Solves
-    const groupedItems = useMemo(() => {
-        if (filteredSolves.length === 0) return [];
-
-        if (grouping === 'all') {
-            return [{
-                key: 'all',
-                label: 'All Time',
-                solves: filteredSolves,
-                date: new Date()
-            }];
-        }
-
-        const groups = new Map<string, { key: string, label: string, solves: Solve[], date: Date }>();
-
-        filteredSolves.forEach(solve => {
-            const date = new Date(solve.date);
-            let key = '';
-            let label = '';
-            let orderDate = date;
-
-            switch (grouping) {
-                case 'years':
-                    key = format(startOfYear(date), 'yyyy');
-                    label = key;
-                    orderDate = startOfYear(date);
-                    break;
-                case 'months':
-                    key = format(startOfMonth(date), 'yyyy-MM');
-                    label = format(date, 'MMM yyyy');
-                    orderDate = startOfMonth(date);
-                    break;
-                case 'weeks':
-                    const weekStart = startOfWeek(date, { weekStartsOn: 1 });
-                    key = format(weekStart, 'yyyy-Iw');
-                    label = `Week of ${format(weekStart, 'MMM d')}`;
-                    orderDate = weekStart;
-                    break;
-                case 'days':
-                    key = format(startOfDay(date), 'yyyy-MM-dd');
-                    label = format(date, 'MMM d, yyyy');
-                    orderDate = startOfDay(date);
-                    break;
-                case 'sessions':
-                    key = solve.sessionId || 'unknown';
-                    label = 'Session';
-                    orderDate = date;
-                    break;
-            }
-
-            if (!groups.has(key)) {
-                groups.set(key, { key, label, solves: [], date: orderDate });
-            }
-            groups.get(key)!.solves.push(solve);
+        
+        recentSolves.filter(s => !user || s.userId === user.uid).forEach(s => {
+            eventsWithSolves.add(s.scrambleType || '333');
         });
 
-        if (grouping === 'sessions') {
-            return Array.from(groups.values()).map(g => {
-                const lastSolve = g.solves[0];
-                const dateStr = format(new Date(lastSolve.date), 'MMM d, h:mm a');
-                return { ...g, label: dateStr, date: new Date(lastSolve.date) };
-            }).sort((a, b) => b.date.getTime() - a.date.getTime());
+        const filtered = allEvents.filter(opt =>
+            eventsWithSolves.has(opt.value) || opt.value === settings.scrambleType
+        );
+
+        return filtered.length > 0 ? filtered : allEvents;
+    }, [recentSolves, userStats, user, settings.scrambleType, allEvents]);
+
+    // Fetch sidebar groups from Cloud Function
+    useEffect(() => {
+        if (!user) {
+            setServerGroups([]);
+            setGroupsLoading(false);
+            return;
         }
 
-        return Array.from(groups.values()).sort((a, b) => b.date.getTime() - a.date.getTime());
+        let isMounted = true;
+        const fetchGroups = async () => {
+            const hasLocal = cachedData?.groupsByGrouping?.[grouping] && !isLogsCacheExpired(user.uid);
+            if (!hasLocal) {
+                setGroupsLoading(true);
+            }
+            try {
+                const fn = httpsCallable(functions, 'getLogsSidebarData');
+                const res = await fn({ scrambleType: settings.scrambleType, grouping });
+                const groups = (res.data as { groups: SidebarGroupItem[] }).groups || [];
+                if (isMounted) {
+                    setServerGroups(groups);
+                    setCachedData(prev => {
+                        const updated: SidebarCachedData = {
+                            groupsByGrouping: {
+                                ...(prev?.groupsByGrouping || {}),
+                                [grouping]: groups
+                            },
+                            overallStats: prev?.overallStats || null
+                        };
+                        setCachedSidebarData(user.uid, settings.scrambleType, updated);
+                        return updated;
+                    });
+                }
+            } catch (err) {
+                console.warn('Failed to load logs sidebar groups:', err);
+            } finally {
+                if (isMounted) setGroupsLoading(false);
+            }
+        };
 
-    }, [filteredSolves, grouping]);
+        fetchGroups();
+        return () => { isMounted = false; };
+    }, [user?.uid, settings.scrambleType, grouping]);
 
-    // 3. Enrich Items with Stats
-    const displayItems = useMemo(() => {
-        return groupedItems.map(item => {
-            const count = item.solves.length;
-            const bestSingle = calculateBestSingle(item.solves);
-            const bestAo5 = calculateBestAverage(item.solves, 5);
-            const bestAo12 = calculateBestAverage(item.solves, 12);
-            const bestAo100 = calculateBestAverage(item.solves, 100);
-            const totalTime = item.solves.reduce((acc: number, s: any) => acc + (typeof s.time === 'number' ? s.time : 0), 0);
+    // Fetch bottom footer stats from Cloud Function
+    const selectedKeyArray = useMemo(() => Array.from(selectedKeys), [selectedKeys]);
 
-            return {
-                ...item,
-                stats: { count, bestSingle, bestAo5, bestAo12, bestAo100, totalTime }
-            };
-        });
-    }, [groupedItems]);
+    useEffect(() => {
+        if (!user) {
+            setServerStats(null);
+            setStatsLoading(false);
+            return;
+        }
 
-    const formatDuration = (ms: number) => {
+        let isMounted = true;
+        const fetchStats = async () => {
+            setStatsLoading(true);
+            try {
+                const fn = httpsCallable(functions, 'getLogsBottomStats');
+                const res = await fn({
+                    scrambleType: settings.scrambleType,
+                    grouping,
+                    selectedKeys: selectedKeyArray
+                });
+                const stats = (res.data as { stats: SidebarOverallStats | null }).stats || null;
+                if (isMounted) {
+                    setServerStats(stats);
+                    if (selectedKeyArray.length === 0 && stats) {
+                        setCachedData(prev => {
+                            const updated: SidebarCachedData = {
+                                groupsByGrouping: prev?.groupsByGrouping || {},
+                                overallStats: stats
+                            };
+                            setCachedSidebarData(user.uid, settings.scrambleType, updated);
+                            return updated;
+                        });
+                    }
+                }
+            } catch (err) {
+                console.warn('Failed to load logs bottom stats:', err);
+            } finally {
+                if (isMounted) setStatsLoading(false);
+            }
+        };
+
+        fetchStats();
+        return () => { isMounted = false; };
+    }, [user?.uid, settings.scrambleType, grouping, selectedKeyArray]);
+
+    const displayItems: SidebarGroupItem[] = useMemo(() => {
+        if (serverGroups) return serverGroups;
+        if (cachedData?.groupsByGrouping?.[grouping]) {
+            return cachedData.groupsByGrouping[grouping];
+        }
+        return [];
+    }, [serverGroups, cachedData, grouping]);
+
+    const selectedStats: SidebarOverallStats | null = useMemo(() => {
+        if (serverStats !== null) return serverStats;
+        if (selectedKeys.size === 0 && cachedData?.overallStats) {
+            return cachedData.overallStats;
+        }
+        return null;
+    }, [serverStats, selectedKeys.size, cachedData?.overallStats]);
+
+    const formatDuration = (ms?: number | null) => {
+        if (typeof ms !== 'number' || isNaN(ms)) return '0s';
         const secs = Math.floor(ms / 1000);
         const mins = Math.floor(secs / 60);
         const hrs = Math.floor(mins / 60);
@@ -185,52 +265,8 @@ export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, colla
         setSearchParams(newParams);
     };
 
-    // -- Footer Stats Calculation --
-    const selectedStats = useMemo(() => {
-        let targetSolves: Solve[] = [];
-
-        if (selectedKeys.size === 0) {
-            targetSolves = filteredSolves;
-        } else {
-            groupedItems.forEach(g => {
-                if (selectedKeys.has(g.key)) {
-                    targetSolves.push(...g.solves);
-                }
-            });
-        }
-
-        if (targetSolves.length === 0) return null;
-
-        const count = targetSolves.length;
-        const mean = calculateAverage(targetSolves, targetSolves.length);
-        const stdDev = standardDeviation(targetSolves);
-        const bestSingle = calculateBestSingle(targetSolves);
-        const bestAo5 = calculateBestAverage(targetSolves, 5);
-        const bestAo12 = calculateBestAverage(targetSolves, 12);
-        const bestAo100 = calculateBestAverage(targetSolves, 100);
-        const bestAo1000 = targetSolves.length >= 1000 ? calculateBestAverage(targetSolves, 1000) : null;
-        const bestAo10000 = targetSolves.length >= 10000 ? calculateBestAverage(targetSolves, 10000) : null;
-
-        const totalTime = targetSolves.reduce((acc, s) => {
-            if (s.penalty === 'DNF') return acc;
-            let t = s.time;
-            if (s.penalty === '+2') t += 2000;
-            return acc + t;
-        }, 0);
-
-        return {
-            count,
-            mean,
-            stdDev,
-            bestSingle,
-            bestAo5,
-            bestAo12,
-            bestAo100,
-            bestAo1000,
-            bestAo10000,
-            totalTime
-        };
-    }, [selectedKeys, groupedItems, filteredSolves]);
+    const isGroupsSkeleton = groupsLoading && displayItems.length === 0;
+    const isStatsSkeleton = statsLoading && !selectedStats;
 
     return (
         <aside className="h-full bg-bg-secondary w-full select-none flex flex-col text-sm overflow-hidden min-w-0 font-sans">
@@ -247,7 +283,7 @@ export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, colla
                             }}
                             className="appearance-none bg-transparent font-bold hover:text-accent outline-none focus:outline-none focus:ring-0 cursor-pointer text-center text-xs w-full pr-5 z-10"
                         >
-                            {SCRAMBLE_TYPES.map(opt => (
+                            {availableEventOptions.map(opt => (
                                 <option key={opt.value} value={opt.value} className="bg-bg-secondary text-text-primary">{opt.label}</option>
                             ))}
                         </select>
@@ -296,7 +332,29 @@ export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, colla
 
             {/* List Content */}
             <div className="hidden md:block flex-1 overflow-y-auto custom-scrollbar relative">
-                {displayItems.length === 0 ? (
+                {/* Visible Loading Indicator Block while data is being pulled */}
+                {groupsLoading && displayItems.length === 0 && (
+                    <div className="p-3 m-2.5 rounded-xl bg-accent/10 border border-accent/25 flex items-start gap-2.5 shadow-xs animate-in fade-in duration-200">
+                        <Loader2 className="w-4 h-4 text-accent animate-spin shrink-0 mt-0.5" />
+                        <div className="flex flex-col min-w-0">
+                            <span className="text-xs font-semibold text-text-primary">Pulling logs data...</span>
+                            <span className="text-[11px] text-text-secondary mt-0.5 leading-snug">
+                                Retrieving your sessions and statistics from the cloud.
+                            </span>
+                        </div>
+                    </div>
+                )}
+
+                {isGroupsSkeleton ? (
+                    <div className="flex flex-col divide-y divide-border/10">
+                        {[...Array(8)].map((_, i) => (
+                            <div key={i} className="flex items-center justify-between px-3 py-3">
+                                <span className="inline-block h-3.5 w-24 bg-text-secondary/20 rounded animate-pulse" />
+                                <span className="inline-block h-3.5 w-10 bg-text-secondary/20 rounded animate-pulse" />
+                            </div>
+                        ))}
+                    </div>
+                ) : displayItems.length === 0 ? (
                     <div className="p-8 text-center text-text-secondary italic text-xs">No data found.</div>
                 ) : (
                     displayItems.map(item => {
@@ -377,7 +435,16 @@ export default function LogsSidebar({ onToggleCollapse: _onToggleCollapse, colla
                     )}
                 </div>
 
-                {selectedStats ? (
+                {isStatsSkeleton ? (
+                    <div className="flex flex-col gap-1.5 text-xs px-1">
+                        {['Solves', 'Time', 'Mean', 'Std Dev', 'Best', 'Ao5', 'Ao12', 'Ao100'].map(label => (
+                            <div key={label} className="flex justify-between items-center py-0.5">
+                                <span className="text-text-secondary/60 text-xs">{label}</span>
+                                <span className="inline-block h-3 w-12 bg-text-secondary/20 rounded animate-pulse" />
+                            </div>
+                        ))}
+                    </div>
+                ) : selectedStats ? (
                     <div className="flex flex-col gap-1 text-xs px-1">
                         <div className="flex justify-between items-center">
                             <span className="text-text-secondary">Solves</span>

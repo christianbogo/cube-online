@@ -9,6 +9,7 @@ export interface SimpleSolve {
 
 export interface LiveUser {
     uid: string;
+    shortId?: string;
     username: string;
     color: string;
     status: TimerState;

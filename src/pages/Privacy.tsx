@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 
 export default function Privacy() {
     return (
-        <div className="max-w-3xl w-full mx-auto p-6 md:p-10 select-text font-sans text-text-primary">
+        <div className="max-w-3xl w-full mx-auto px-3 py-4 sm:px-4 sm:py-5 md:px-6 md:py-6 select-text font-sans text-text-primary">
             {/* Header */}
             <div className="mb-8">
                 <h1 className="text-2xl sm:text-3xl font-bold mb-2">

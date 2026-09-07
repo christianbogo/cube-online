@@ -2,11 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     collection,
     query,
-    where,
     getDocs,
-    getCountFromServer,
-    getAggregateFromServer,
-    sum,
     addDoc,
     updateDoc,
     deleteDoc,
@@ -14,13 +10,12 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { isAdmin, formatTimeMs, compressImage } from '../utils/admin';
+import { isAdmin, compressImage } from '../utils/admin';
 import { Paperclip, FileText, X, ChevronDown } from 'lucide-react';
 import type {
     FeedbackType,
     ChangelogEntry,
-    ChangelogCategory,
-    FirebaseMetrics
+    ChangelogCategory
 } from '../types';
 
 // Default seed changelogs if collection is empty
@@ -83,107 +78,6 @@ export default function Dev() {
     const { user } = useAuth();
     const userIsAdmin = isAdmin(user);
 
-    // ==========================================
-    // 1. Firebase Metrics State
-    // ==========================================
-    const [metrics, setMetrics] = useState<FirebaseMetrics>({
-        totalSolves: 0,
-        totalSolvingTimeMs: 0,
-        activeUsersPastMonth: 0,
-        solvesToday: 0,
-        lastUpdated: '',
-        loading: true,
-        error: null
-    });
-
-    const fetchMetrics = useCallback(async () => {
-        try {
-            const now = new Date();
-            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-            const todayStartISO = todayStart.toISOString();
-            const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-            let totalSolves = 0;
-            let totalSolvingTimeMs = 0;
-            let solvesToday = 0;
-            let activeUsersPastMonth = 0;
-
-            const solvesColl = collection(db, 'solves');
-
-            // Total Solves & Total Time
-            try {
-                const totalSolvesCountSnap = await getCountFromServer(solvesColl);
-                totalSolves = totalSolvesCountSnap.data().count;
-
-                const timeAggSnap = await getAggregateFromServer(solvesColl, {
-                    totalTime: sum('time')
-                });
-                totalSolvingTimeMs = timeAggSnap.data().totalTime || 0;
-            } catch (err) {
-                console.warn("Aggregate query fallback:", err);
-                const allSolvesSnap = await getDocs(solvesColl);
-                totalSolves = allSolvesSnap.size;
-                let sumTime = 0;
-                allSolvesSnap.forEach((docSnap) => {
-                    const data = docSnap.data();
-                    if (typeof data.time === 'number') {
-                        sumTime += data.time;
-                    }
-                });
-                totalSolvingTimeMs = sumTime;
-            }
-
-            // Solves Today
-            try {
-                const todayQuery = query(solvesColl, where('date', '>=', todayStartISO));
-                const todayCountSnap = await getCountFromServer(todayQuery);
-                solvesToday = todayCountSnap.data().count;
-            } catch {
-                try {
-                    const todayQuery = query(solvesColl, where('date', '>=', todayStartISO));
-                    const todaySnap = await getDocs(todayQuery);
-                    solvesToday = todaySnap.size;
-                } catch {
-                    solvesToday = 0;
-                }
-            }
-
-            // Active Users Past Month
-            try {
-                const usersColl = collection(db, 'users');
-                const usersSnap = await getDocs(usersColl);
-                let activeCount = 0;
-                usersSnap.forEach((docSnap) => {
-                    const data = docSnap.data();
-                    if (data.lastSeenAt && new Date(data.lastSeenAt).getTime() >= thirtyDaysAgo.getTime()) {
-                        activeCount++;
-                    } else if (!data.lastSeenAt) {
-                        activeCount++;
-                    }
-                });
-                activeUsersPastMonth = Math.max(activeCount, 1);
-            } catch {
-                activeUsersPastMonth = 1;
-            }
-
-            setMetrics({
-                totalSolves,
-                totalSolvingTimeMs,
-                activeUsersPastMonth,
-                solvesToday,
-                lastUpdated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                loading: false,
-                error: null
-            });
-        } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : 'Failed to query database';
-            setMetrics(prev => ({ ...prev, loading: false, error: message }));
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchMetrics();
-    }, [fetchMetrics]);
 
     // ==========================================
     // 2. Feedback Form State
@@ -525,68 +419,31 @@ export default function Dev() {
     };
 
     return (
-        <div className="max-w-6xl w-full mx-auto p-4 md:p-6 flex flex-col gap-8">
+        <div className="max-w-6xl w-full mx-auto px-2 py-2.5 sm:px-3 sm:py-3 md:px-4 md:py-4 flex flex-col gap-8">
             {/* Header */}
             <div>
                 <h1 className="text-3xl font-bold text-text-primary mb-1">Developer</h1>
                 <p className="text-text-secondary text-sm">
-                    System telemetry, feedback reporting, and release changelog.
+                    Feedback reporting and release changelog.
                 </p>
             </div>
 
-            {/* 1. Stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-                <div>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary block">
-                        Total Solves
-                    </span>
-                    <div className="text-2xl sm:text-3xl font-bold text-text-primary mt-1">
-                        {metrics.loading ? '...' : metrics.totalSolves.toLocaleString()}
-                    </div>
+            {/* Bug Report & Requests Form */}
+            <div className="space-y-4">
+                <div className="pb-2 border-b border-border/50">
+                    <h2 className="text-base font-bold text-text-primary">
+                        Bug Report & Requests
+                    </h2>
                 </div>
-
-                <div>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary block">
-                        Time Spent Solving
-                    </span>
-                    <div className="text-2xl sm:text-3xl font-bold text-text-primary mt-1">
-                        {metrics.loading ? '...' : formatTimeMs(metrics.totalSolvingTimeMs)}
-                    </div>
-                </div>
-
-                <div>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary block">
-                        Solves Today
-                    </span>
-                    <div className="text-2xl sm:text-3xl font-bold text-text-primary mt-1">
-                        {metrics.loading ? '...' : metrics.solvesToday.toLocaleString()}
-                    </div>
-                </div>
-
-                <div>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary block">
-                        Active Users (30d)
-                    </span>
-                    <div className="text-2xl sm:text-3xl font-bold text-text-primary mt-1">
-                        {metrics.loading ? '...' : metrics.activeUsersPastMonth.toLocaleString()}
-                    </div>
-                </div>
-            </div>
-
-            {/* 2. Bug Report & Requests Form */}
-            <div className="bg-bg-secondary/40 border border-border rounded-xl p-5 shadow-xs">
-                <h2 className="text-base font-bold text-text-primary mb-4">
-                    Bug Report & Requests
-                </h2>
 
                 {feedbackSuccess && (
-                    <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-500 text-xs font-medium">
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-500 text-xs font-medium">
                         Submission received. Thank you for your feedback!
                     </div>
                 )}
 
                 {feedbackError && (
-                    <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-xs font-medium">
+                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-xs font-medium">
                         {feedbackError}
                     </div>
                 )}
@@ -603,7 +460,7 @@ export default function Dev() {
                                 value={feedbackTitle}
                                 onChange={(e) => setFeedbackTitle(e.target.value)}
                                 placeholder="Brief summary of the issue or feature"
-                                className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+                                className="w-full bg-bg-secondary/60 border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                                 required
                             />
                         </div>
@@ -617,7 +474,7 @@ export default function Dev() {
                                     onChange={(e) => {
                                         setFeedbackType(e.target.value as FeedbackType);
                                     }}
-                                    className="w-full bg-bg-primary border border-border rounded-lg pl-3 pr-9 py-2 text-sm text-text-primary outline-none focus:outline-none focus:ring-0 focus:border-accent appearance-none cursor-pointer"
+                                    className="w-full bg-bg-secondary/60 border border-border rounded-lg pl-3 pr-9 py-2 text-sm text-text-primary outline-none focus:outline-none focus:ring-0 focus:border-accent appearance-none cursor-pointer"
                                 >
                                     <option value="bug">Bug Report</option>
                                     <option value="feature">Feature Request</option>
@@ -639,7 +496,7 @@ export default function Dev() {
                             onChange={(e) => setFeedbackDescription(e.target.value)}
                             placeholder="Describe what happened, steps to reproduce, or feature details..."
                             rows={3}
-                            className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent resize-y custom-scrollbar"
+                            className="w-full bg-bg-secondary/60 border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent resize-y custom-scrollbar"
                             required
                         />
                     </div>
@@ -673,7 +530,7 @@ export default function Dev() {
                                 {feedbackAttachments.map((att, idx) => (
                                     <div
                                         key={idx}
-                                        className="flex items-center gap-2 p-1.5 pr-2 bg-bg-primary border border-border rounded-lg text-xs group"
+                                        className="flex items-center gap-2 p-1.5 pr-2 bg-bg-secondary/60 border border-border rounded-lg text-xs group"
                                     >
                                         {att.isImage ? (
                                             <div className="w-7 h-7 rounded overflow-hidden bg-bg-secondary shrink-0 border border-border/50">
@@ -712,13 +569,13 @@ export default function Dev() {
                                 value={feedbackEmail}
                                 onChange={(e) => setFeedbackEmail(e.target.value)}
                                 placeholder="your-email@example.com"
-                                className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+                                className="w-full bg-bg-secondary/60 border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
                             />
                         </div>
                         <button
                             type="submit"
                             disabled={isSubmittingFeedback}
-                            className="w-full sm:w-auto px-5 py-2 bg-bg-primary border border-border text-text-primary hover:bg-accent hover:text-white hover:border-accent rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-50 shrink-0 h-[38px]"
+                            className="w-full sm:w-auto px-5 py-2 bg-accent hover:opacity-90 text-white rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-50 shrink-0 h-[38px]"
                         >
                             {isSubmittingFeedback ? 'Sending...' : 'Send Feedback'}
                         </button>

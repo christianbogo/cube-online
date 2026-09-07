@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Box, BarChart2, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Keyboard, Target, Users, Lock, CodeXml, ShieldCheck } from 'lucide-react';
+import { Box, BarChart2, Sun, Moon, Monitor, ChevronLeft, ChevronRight, Keyboard, Target, Users, Lock, CodeXml, ShieldCheck, Swords, Construction } from 'lucide-react';
 import { useTheme } from '../ui/ThemeProvider';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { useSolves } from '../../contexts/SolvesContext';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { useConfirm } from '../../contexts/ConfirmationContext';
 import { useGoals } from '../../contexts/GoalsContext';
+import { isAdmin } from '../../utils/admin';
 
 export interface LeftSidebarProps {
     collapsed: boolean;
@@ -17,12 +16,14 @@ interface NavItem {
     icon: React.ElementType;
     path: string;
     locked?: boolean;
+    underConstruction?: boolean;
 }
 
 const defaultNavItems: NavItem[] = [
     { name: 'Cube', icon: Box, path: '/' },
     { name: 'Logs', icon: BarChart2, path: '/logs' },
     { name: 'Goals', icon: Target, path: '/goals' },
+    { name: 'Arena', icon: Swords, path: '/arena', underConstruction: true },
     { name: 'Social', icon: Users, path: '/social' },
     { name: 'Dev', icon: CodeXml, path: '/dev' },
     { name: 'Binds', icon: Keyboard, path: '/keybinds' },
@@ -34,6 +35,7 @@ const guestNavItems: NavItem[] = [
     { name: 'Binds', icon: Keyboard, path: '/keybinds' },
     { name: 'Logs', icon: BarChart2, path: '/logs' },
     { name: 'Goals', icon: Target, path: '/goals' },
+    { name: 'Arena', icon: Swords, path: '/arena', underConstruction: true },
     { name: 'Dev', icon: CodeXml, path: '/dev' },
 ];
 
@@ -41,11 +43,13 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
     const { theme, setTheme } = useTheme();
     const { user } = useAuth();
     const { hasUnseenGoals } = useGoals();
+    const isDev = import.meta.env.DEV;
+    const userIsAdmin = isAdmin(user);
+    const canAccessArena = isDev || userIsAdmin;
 
     const navItems = user ? defaultNavItems : guestNavItems;
 
-    const { isPrivateMode, togglePrivateMode } = useSolves();
-    const { confirm: confirmAction } = useConfirm();
+    const location = useLocation();
     const navigate = useNavigate();
 
     // Floating temporary popup for locked items
@@ -70,15 +74,8 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
         return () => clearTimeout(timer);
     }, [popupState]);
 
-    const handleNavClick = async (e: React.MouseEvent, path: string) => {
+    const handleNavClick = (e: React.MouseEvent) => {
         (e.currentTarget as HTMLElement).blur();
-        if (isPrivateMode) {
-            e.preventDefault();
-            if (await confirmAction('Leave Private Mode?')) {
-                togglePrivateMode();
-                navigate(path);
-            }
-        }
     };
 
     return (
@@ -100,27 +97,39 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
             {/* Navigation Items */}
             <ul className="flex flex-col gap-1 px-2 pt-2 flex-1">
                 {navItems.map((item) => {
-                    const isItemLocked = !!item.locked || (!user && ['Logs', 'Goals', 'Dev'].includes(item.name));
+                    const isUnderConstruction = (!!item.underConstruction || item.name === 'Arena') && !(item.name === 'Arena' && canAccessArena);
+                    const isItemLocked = !isUnderConstruction && (!!item.locked || (!user && ['Logs', 'Goals', 'Dev', ...(canAccessArena && !isDev ? ['Arena'] : [])].includes(item.name)));
 
                     return (
-                        <li key={item.name}>
+                        <li key={item.name} className="relative group">
                             <NavLink
-                                to={isItemLocked ? '#' : item.path}
+                                to={isUnderConstruction || isItemLocked ? '#' : item.path}
                                 onClick={(e) => {
+                                    if (isUnderConstruction) {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        return;
+                                    }
                                     if (isItemLocked) {
                                         handleLockedClick(e);
                                         return;
                                     }
-                                    handleNavClick(e, item.path);
+                                    if (item.path === '/social' && location.pathname.startsWith('/social') && location.pathname !== '/social') {
+                                        e.preventDefault();
+                                        navigate('/social');
+                                    }
+                                    handleNavClick(e);
                                 }}
-                                title={isItemLocked ? `${item.name} (Requires Account)` : item.name}
+                                title={isUnderConstruction ? 'Under Construction' : isItemLocked ? `${item.name} (Requires Account)` : item.name}
                                 className={({ isActive }) => `
-                                w-full flex items-center gap-3 p-2 rounded-md transition-colors text-left outline-none focus:outline-none
-                                ${(isActive && !isItemLocked)
-                                        ? 'bg-accent/10 text-accent'
-                                        : isItemLocked
-                                            ? 'opacity-40 hover:opacity-60 cursor-pointer text-text-secondary select-none'
-                                            : 'hover:bg-bg-hover text-text-secondary hover:text-text-primary'
+                                w-full flex items-center gap-3 p-2 rounded-md transition-colors text-left outline-none focus:outline-none select-none
+                                ${isUnderConstruction
+                                        ? 'opacity-40 cursor-not-allowed text-text-secondary'
+                                        : (isActive && !isItemLocked)
+                                            ? 'bg-accent/10 text-accent'
+                                            : isItemLocked
+                                                ? 'opacity-40 hover:opacity-60 cursor-pointer text-text-secondary'
+                                                : 'hover:bg-bg-hover text-text-secondary hover:text-text-primary'
                                     }
                                 ${collapsed ? 'justify-center' : ''}
                             `}
@@ -128,7 +137,7 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
                                 {({ isActive }) => (
                                     <>
                                         <div className="relative shrink-0 flex items-center justify-center">
-                                            <item.icon className={`w-5 h-5 ${(isActive && !isItemLocked) ? 'text-accent' : 'text-text-secondary'}`} />
+                                            <item.icon className={`w-5 h-5 ${(!isUnderConstruction && isActive && !isItemLocked) ? 'text-accent' : 'text-text-secondary'}`} />
                                             {item.name === 'Goals' && hasUnseenGoals && collapsed && (
                                                 <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-text-primary ring-2 ring-bg-secondary" />
                                             )}
@@ -136,7 +145,7 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
                                         {!collapsed && (
                                             <div className="flex-1 flex items-center justify-between min-w-0">
                                                 <div className="flex items-center gap-1.5 min-w-0">
-                                                    <span className={`text-sm font-medium ${(isActive && !isItemLocked) ? 'text-accent' : 'text-text-primary'} truncate`}>
+                                                    <span className={`text-sm font-medium ${(!isUnderConstruction && isActive && !isItemLocked) ? 'text-accent' : 'text-text-primary'} truncate`}>
                                                         {item.name}
                                                     </span>
                                                     {item.name === 'Goals' && hasUnseenGoals && (
@@ -146,11 +155,28 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
                                                 {isItemLocked && (
                                                     <Lock className="w-3.5 h-3.5 text-text-secondary/70 shrink-0 ml-1.5" />
                                                 )}
+                                                {isUnderConstruction && (
+                                                    <Construction className="w-3.5 h-3.5 text-text-secondary/70 shrink-0 ml-1.5" />
+                                                )}
                                             </div>
                                         )}
                                     </>
                                 )}
                             </NavLink>
+                            {isUnderConstruction && (
+                                <div className={`
+                                    absolute z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150
+                                    ${collapsed
+                                        ? 'left-full ml-2.5 top-1/2 -translate-y-1/2'
+                                        : 'left-1/2 -translate-x-1/2 bottom-full mb-1.5'
+                                    }
+                                    flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg
+                                    bg-zinc-900 border border-zinc-700 text-white text-xs font-semibold shadow-2xl whitespace-nowrap
+                                `}>
+                                    <Construction className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                    <span>Under Construction</span>
+                                </div>
+                            )}
                         </li>
                     )
                 })}
@@ -160,7 +186,7 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
             <div className="px-3 pb-1.5 flex items-center justify-center">
                 <NavLink
                     to="/privacy"
-                    onClick={(e) => handleNavClick(e, '/privacy')}
+                    onClick={(e) => handleNavClick(e)}
                     title="Privacy Policy"
                     className={({ isActive }) => `
                         text-[11px] text-text-secondary/70 hover:text-text-primary transition-colors outline-none focus:outline-none truncate

@@ -1,13 +1,23 @@
 import { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef, type ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import { useSolves } from './SolvesContext';
+import { useNotifications } from './NotificationsContext';
 import { useIsMobile } from '../utils/useIsMobile';
 import { doc, setDoc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import type { GoalProgress, GoalCategory, GlobalGoalsStats, UserGoalsDoc } from '../types/goals';
+import type { GoalProgress, GoalCategory, GlobalGoalsStats, UserGoalsDoc, UserStats } from '../types/goals';
 import { GOAL_DEFINITIONS, evaluateUserGoals, ALL_TRACKED_KEYBINDS } from '../utils/goalsCalculations';
-import { Award, Clock, Layers, Flame } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { Award, Clock, Layers, Flame, X } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../lib/firebase';
+import {
+    getCachedStreaksSync,
+    getCachedStreaks,
+    setCachedStreaks,
+    STREAKS_CACHE_EXPIRED_EVENT,
+    type StreaksMap
+} from '../utils/streaksCache';
 
 interface GoalsContextType {
     goalsProgress: GoalProgress[];
@@ -18,7 +28,6 @@ interface GoalsContextType {
     totalCompletedCount: number;
     overallCompletionPercent: number;
     globalStats: GlobalGoalsStats | null;
-    recentlyEarnedGoal: GoalProgress | null;
     hasUnseenGoals: boolean;
     clearUnseenGoals: () => void;
     selectedCategory: GoalCategory | 'all';
@@ -26,7 +35,6 @@ interface GoalsContextType {
     statusFilter: 'all' | 'completed' | 'in-progress';
     setStatusFilter: (status: 'all' | 'completed' | 'in-progress') => void;
     recordKeybind: (key: string) => void;
-    dismissRecentlyEarnedGoal: () => void;
     getGoalGlobalPercentage: (goalId: string) => number;
     getGoalProgress: (goalId: string) => GoalProgress | undefined;
     pinGoal: (goalId: string) => Promise<boolean>;
@@ -49,13 +57,33 @@ function getGoalCategoryIcon(category?: GoalCategory) {
     }
 }
 
+const getDismissedGoalsKey = (uid?: string | null) => `cutter-cubing-dismissed-goals_${uid || 'guest'}`;
+
+const getDismissedGoals = (uid?: string | null): Set<string> => {
+    try {
+        const raw = localStorage.getItem(getDismissedGoalsKey(uid));
+        return raw ? new Set(JSON.parse(raw)) : new Set<string>();
+    } catch {
+        return new Set<string>();
+    }
+};
+
+const saveDismissedGoals = (uid: string | null | undefined, ids: Set<string>) => {
+    try {
+        localStorage.setItem(getDismissedGoalsKey(uid), JSON.stringify(Array.from(ids)));
+    } catch (e) {
+        console.warn("Failed to persist dismissed goals:", e);
+    }
+};
+
 const GoalsContext = createContext<GoalsContextType | undefined>(undefined);
 
 export function GoalsProvider({ children }: { children: ReactNode }) {
     const location = useLocation();
+    const navigate = useNavigate();
     const isMobile = useIsMobile();
     const { user } = useAuth();
-    const { solves, isPrivateMode } = useSolves();
+    const { solves } = useSolves();
 
     const [hasUnseenGoals, setHasUnseenGoals] = useState<boolean>(() => {
         return localStorage.getItem('cutter-cubing-has-unseen-goals') === 'true';
@@ -164,21 +192,89 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
     }, [recordKeybind]);
 
     const [globalStats, setGlobalStats] = useState<GlobalGoalsStats | null>(null);
+    const [userStats, setUserStats] = useState<UserStats | null>(null);
     const lastSyncedGoalsRef = useRef<{ completedIds: string[]; completedCount: number } | null>(null);
+    const userStatsLoadedRef = useRef(false);
+
+    // Subscribe to userStats
+    useEffect(() => {
+        if (!user) {
+            setUserStats(null);
+            userStatsLoadedRef.current = false;
+            return;
+        }
+        const statsRef = doc(db, 'users', user.uid, 'stats', 'overview');
+        const unsubscribe = onSnapshot(statsRef, (snap) => {
+            userStatsLoadedRef.current = true;
+            if (snap.exists()) {
+                setUserStats(snap.data() as UserStats);
+            } else {
+                setUserStats(null);
+            }
+        });
+        return () => unsubscribe();
+    }, [user]);
+
+    const [streakStats, setStreakStats] = useState<StreaksMap | null>(() => {
+        return getCachedStreaksSync(user?.uid);
+    });
+
+    useEffect(() => {
+        if (!user) {
+            setStreakStats(null);
+            return;
+        }
+
+        let isMounted = true;
+        const fetchStreaks = async (force = false) => {
+            if (!force) {
+                const cached = await getCachedStreaks(user.uid);
+                if (cached && isMounted) {
+                    setStreakStats(cached);
+                    return;
+                }
+            }
+            try {
+                const fn = httpsCallable(functions, 'getGoalStreaks');
+                const res = await fn();
+                const data = (res.data as { streaks: StreaksMap }).streaks;
+                if (isMounted) {
+                    setStreakStats(data);
+                    await setCachedStreaks(user.uid, data);
+                }
+            } catch (e) {
+                console.warn('Failed to evaluate streaks from server:', e);
+            }
+        };
+
+        fetchStreaks();
+
+        const handleExpired = () => {
+            fetchStreaks(true);
+        };
+
+        window.addEventListener(STREAKS_CACHE_EXPIRED_EVENT, handleExpired);
+        return () => {
+            isMounted = false;
+            window.removeEventListener(STREAKS_CACHE_EXPIRED_EVENT, handleExpired);
+        };
+    }, [user?.uid]);
 
     // Compute user goals progress from solves, user, and keybinds
     const userSolves = useMemo(() => {
-        if (!user || isPrivateMode) return [];
+        if (!user) return [];
         return solves.filter(s => s.userId === user.uid);
-    }, [solves, user, isPrivateMode]);
+    }, [solves, user]);
 
     const goalsProgress = useMemo(() => {
         if (!user) {
             // When not signed in, evaluate with empty solves so definitions are available
-            return evaluateUserGoals([], null, usedKeybinds);
+            return evaluateUserGoals([], null, usedKeybinds, null, null);
         }
-        return evaluateUserGoals(userSolves, user, usedKeybinds);
-    }, [user, userSolves, usedKeybinds]);
+        // Don't run the expensive local fallback while Firestore stats haven't arrived yet
+        if (!userStatsLoadedRef.current) return [];
+        return evaluateUserGoals(userSolves, user, usedKeybinds, userStats, streakStats);
+    }, [user, userSolves, usedKeybinds, userStats, streakStats]);
 
     const completedGoalIds = useMemo(() => {
         const set = new Set<string>();
@@ -188,54 +284,76 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
         return set;
     }, [goalsProgress]);
 
-    // Visual cue for earned goals
-    const [recentlyEarnedGoal, setRecentlyEarnedGoal] = useState<GoalProgress | null>(null);
-    const prevCompletedIdsRef = useRef<Set<string> | null>(null);
-    const isInitialLoadRef = useRef(true);
+    const { upsertNotification, removeNotification } = useNotifications();
+    const baselineInitializedRef = useRef<boolean>(false);
+    const baselineUserIdRef = useRef<string | null>(null);
+    const prevCompletedIdsRef = useRef<Set<string>>(new Set());
+    const dismissedGoalsRef = useRef<Set<string>>(getDismissedGoals(user?.uid));
 
+    // Reset baseline tracking when user changes (login, logout, switch account)
     useEffect(() => {
-        if (isInitialLoadRef.current) {
-            isInitialLoadRef.current = false;
+        const currentUid = user?.uid ?? null;
+        if (baselineUserIdRef.current !== currentUid) {
+            baselineUserIdRef.current = currentUid;
+            baselineInitializedRef.current = false;
+            prevCompletedIdsRef.current = new Set();
+            dismissedGoalsRef.current = getDismissedGoals(currentUid);
+        }
+    }, [user?.uid]);
+
+    // Track completed goals and detect newly earned ones (and regressions)
+    useEffect(() => {
+        if (!baselineInitializedRef.current) {
+            if (user && !userStatsLoadedRef.current) {
+                // Wait until user stats from Firestore have loaded before establishing baseline
+                return;
+            }
+            baselineInitializedRef.current = true;
             prevCompletedIdsRef.current = new Set(completedGoalIds);
+            // Pre-existing completed goals are registered as known so they don't pop up on refresh
+            completedGoalIds.forEach(id => dismissedGoalsRef.current.add(id));
+            saveDismissedGoals(user?.uid, dismissedGoalsRef.current);
             return;
         }
 
-        const prev = prevCompletedIdsRef.current || new Set<string>();
+        const prev = prevCompletedIdsRef.current;
+        const dismissed = dismissedGoalsRef.current;
+        let hasNewGoals = false;
+
         for (const goalId of completedGoalIds) {
             if (!prev.has(goalId)) {
                 const goal = goalsProgress.find(g => g.goalId === goalId);
                 if (goal) {
-                    setRecentlyEarnedGoal(goal);
-                    setHasUnseenGoals(true);
-                    localStorage.setItem('cutter-cubing-has-unseen-goals', 'true');
-                    prevCompletedIdsRef.current = new Set(completedGoalIds);
-                    break;
+                    upsertNotification({
+                        id: `goal-${goal.goalId}`,
+                        type: 'goal',
+                        title: `Goal Unlocked: ${goal.title}`,
+                        description: goal.description,
+                        metadata: { goalId: goal.goalId }
+                    });
+                    dismissed.add(goalId);
+                    hasNewGoals = true;
                 }
             }
         }
-        prevCompletedIdsRef.current = new Set(completedGoalIds);
-    }, [completedGoalIds, goalsProgress]);
 
-    const dismissRecentlyEarnedGoal = useCallback(() => {
-        setRecentlyEarnedGoal(null);
-    }, []);
-
-    // Dismiss goal popup on any route change
-    useEffect(() => {
-        setRecentlyEarnedGoal(null);
-    }, [location.pathname]);
-
-    // Close goal popup with Escape key
-    useEffect(() => {
-        if (!recentlyEarnedGoal) return;
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                setRecentlyEarnedGoal(null);
+        for (const goalId of prev) {
+            if (!completedGoalIds.has(goalId)) {
+                removeNotification(`goal-${goalId}`);
+                dismissed.delete(goalId);
             }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [recentlyEarnedGoal]);
+        }
+
+        prevCompletedIdsRef.current = new Set(completedGoalIds);
+
+        if (hasNewGoals) {
+            saveDismissedGoals(user?.uid, dismissed);
+            setHasUnseenGoals(true);
+            localStorage.setItem('cutter-cubing-has-unseen-goals', 'true');
+        }
+    }, [completedGoalIds, goalsProgress, user, upsertNotification, removeNotification]);
+
+    const dismissRecentlyEarnedGoal = useCallback(() => {}, []);
 
     const totalGoalsCount = GOAL_DEFINITIONS.length;
     const totalCompletedCount = completedGoalIds.size;
@@ -322,7 +440,7 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
 
     // Sync user progress & update global stats transactionally
     useEffect(() => {
-        if (!user || isPrivateMode) return;
+        if (!user) return;
 
         const currentCompletedIds = Array.from(completedGoalIds).sort();
         const currentCompletedCount = currentCompletedIds.length;
@@ -462,7 +580,7 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
 
         const timeout = setTimeout(syncGoals, 1000);
         return () => clearTimeout(timeout);
-    }, [user, isPrivateMode, completedGoalIds, overallCompletionPercent, selectedCategory, statusFilter]);
+    }, [user, completedGoalIds, overallCompletionPercent, selectedCategory, statusFilter]);
 
     const pinGoal = useCallback(async (goalId: string): Promise<boolean> => {
         if (pinnedGoalIds.includes(goalId)) return true;
@@ -559,7 +677,6 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
                 totalCompletedCount,
                 overallCompletionPercent,
                 globalStats,
-                recentlyEarnedGoal,
                 hasUnseenGoals,
                 clearUnseenGoals,
                 selectedCategory,
@@ -567,7 +684,6 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
                 statusFilter,
                 setStatusFilter,
                 recordKeybind,
-                dismissRecentlyEarnedGoal,
                 getGoalGlobalPercentage,
                 getGoalProgress,
                 pinGoal,
@@ -577,32 +693,6 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
             }}
         >
             {children}
-
-            {/* Visual Cue when user earns a goal */}
-            {recentlyEarnedGoal && !isMobile && (
-                <div className="fixed top-16 right-6 z-50 animate-in slide-in-from-top-4 fade-in duration-300 pointer-events-auto">
-                    <div className="bg-bg-secondary/95 backdrop-blur-md border border-border/80 shadow-2xl rounded-xl p-3 flex items-center gap-3 min-w-[260px] max-w-sm">
-                        <div className="w-8 h-8 rounded-lg bg-bg-tertiary border border-border/70 flex items-center justify-center text-text-primary shrink-0">
-                            {getGoalCategoryIcon(recentlyEarnedGoal.category)}
-                        </div>
-                        <div className="flex-1 min-w-0 pr-1">
-                            <h4 className="text-xs font-bold text-text-primary truncate">
-                                {recentlyEarnedGoal.title}
-                            </h4>
-                            <p className="text-[11px] text-text-secondary line-clamp-2 mt-0.5 leading-snug">
-                                {recentlyEarnedGoal.description}
-                            </p>
-                        </div>
-                        <button
-                            onClick={dismissRecentlyEarnedGoal}
-                            className="px-1.5 py-0.5 text-[10px] font-mono font-bold bg-bg-tertiary hover:bg-bg-hover text-text-secondary hover:text-text-primary border border-border/80 rounded transition-colors cursor-pointer shrink-0 self-center"
-                            title="Close (ESC)"
-                        >
-                            ESC
-                        </button>
-                    </div>
-                </div>
-            )}
         </GoalsContext.Provider>
     );
 }

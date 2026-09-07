@@ -1,19 +1,16 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useIsMobile } from '../../utils/useIsMobile';
 import { createPortal } from 'react-dom';
-import { useSolves, type Solve } from '../../contexts/SolvesContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { SCRAMBLE_TYPES, SUPPORTED_EVENT_IDS } from '../../utils/constants';
+import { useSolves, type Solve } from '../../contexts/SolvesContext';
 import { formatTime } from '../../utils/calculations';
 import {
     type EventRecordRow,
     type RecordDetail,
-    calculateBestSingleRecord,
-    calculateBestAverageRecord,
     getRecencyTier,
     getRecencyClasses,
     getDropsCount,
-    getEffectiveTime
+    calculateEventRecordRow
 } from '../../utils/recordCalculations';
 import {
     Trophy,
@@ -24,21 +21,34 @@ import {
     Flame,
     Sparkles,
     Layers,
-    ChevronDown,
-    ChevronUp
+    ChevronUp,
+    ChevronDown
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../../lib/firebase';
+import { useEvents } from '../../hooks/useEvents';
+import {
+    getCachedRecordsSync,
+    getCachedRecords,
+    setCachedRecords,
+    isRecordsCacheExpired,
+    RECORDS_CACHE_EXPIRED_EVENT
+} from '../../utils/recordsCache';
 
 export interface RecordTableProps {
-    solves?: Solve[];
     userId?: string;
     hideFootnote?: boolean;
+    activeEvents?: string[];
 }
 
-export default function RecordTable({ solves: customSolves, userId, hideFootnote = false }: RecordTableProps = {}) {
-    const { solves: contextSolves } = useSolves();
+export default function RecordTable({ userId, hideFootnote = false, activeEvents }: RecordTableProps = {}) {
     const { user } = useAuth();
     const isMobile = useIsMobile();
+    const { allEvents } = useEvents();
+    const { solves } = useSolves();
+
+    const targetUid = userId || user?.uid;
 
     const [selectedRecord, setSelectedRecord] = useState<{
         eventName: string;
@@ -46,92 +56,94 @@ export default function RecordTable({ solves: customSolves, userId, hideFootnote
         detail: RecordDetail;
     } | null>(null);
 
-    // Filter solves based on auth or custom user
-    const relevantSolves = useMemo(() => {
-        if (customSolves) {
-            return customSolves;
+    const [rows, setRows] = useState<EventRecordRow[]>(() => {
+        return getCachedRecordsSync(targetUid) || [];
+    });
+    const [loading, setLoading] = useState<boolean>(() => {
+        if (!targetUid) return false;
+        const cached = getCachedRecordsSync(targetUid);
+        return !cached || isRecordsCacheExpired(targetUid);
+    });
+
+    const prevTargetUidRef = useRef(targetUid);
+    useEffect(() => {
+        if (prevTargetUidRef.current !== targetUid) {
+            prevTargetUidRef.current = targetUid;
+            const synchronous = getCachedRecordsSync(targetUid);
+            setRows(synchronous || []);
+            setLoading(!synchronous || isRecordsCacheExpired(targetUid));
         }
-        const targetUid = userId || user?.uid;
-        if (targetUid) {
-            return contextSolves.filter(s => s.userId === targetUid);
+    }, [targetUid]);
+
+    useEffect(() => {
+        if (!targetUid) {
+            setRows([]);
+            setLoading(false);
+            return;
         }
-        return contextSolves;
-    }, [customSolves, contextSolves, userId, user?.uid]);
 
-    // Group solves and compute all event records
-    const rows = useMemo(() => {
-        // Group by event
-        const grouped: Record<string, Solve[]> = {};
+        let isMounted = true;
 
-        relevantSolves.forEach(s => {
-            const type = s.scrambleType || '333';
-            if (!grouped[type]) grouped[type] = [];
-            grouped[type].push(s);
-        });
+        const loadData = async (forceCloud = false) => {
+            const expired = isRecordsCacheExpired(targetUid);
 
-        // Compute rows for each supported event
-        const eventRows: EventRecordRow[] = [];
-
-        // Iterate through SCRAMBLE_TYPES order
-        SCRAMBLE_TYPES.forEach(opt => {
-            const type = opt.value;
-            const eventSolves = grouped[type] || [];
-            if (eventSolves.length === 0 && !SUPPORTED_EVENT_IDS.includes(type)) return;
-            if (eventSolves.length === 0) return; // Only show events with >0 solves
-
-            // Sort chronological (oldest to newest) for sliding window calculation
-            const chronologicalSolves = [...eventSolves].sort(
-                (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-            );
-
-            // Valid non-DNF solves for event mean and std
-            const validSolves = eventSolves.filter(
-                s => s.penalty !== 'DNF' && s.inspectionPenalty !== 'DNF'
-            );
-
-            const eventTotalTime = validSolves.reduce((acc, s) => acc + getEffectiveTime(s), 0);
-
-            const mean = validSolves.length > 0
-                ? Math.round(eventTotalTime / validSolves.length)
-                : null;
-
-            let std: number | null = null;
-            if (validSolves.length > 1 && mean !== null) {
-                const variance = validSolves.reduce((acc, s) => {
-                    const t = getEffectiveTime(s);
-                    return acc + Math.pow(t - mean, 2);
-                }, 0) / validSolves.length;
-                std = Math.sqrt(variance);
+            // If not forced and not expired, try getting cached records
+            if (!forceCloud && !expired) {
+                const cached = await getCachedRecords(targetUid);
+                if (cached && cached.length > 0) {
+                    if (isMounted) {
+                        setRows(cached);
+                        setLoading(false);
+                    }
+                    return;
+                }
             }
 
-            // Calculate all bests
-            const single = calculateBestSingleRecord(eventSolves);
-            const ao5 = calculateBestAverageRecord(chronologicalSolves, 5, 'ao5', 'Ao5', false);
-            const ao12 = calculateBestAverageRecord(chronologicalSolves, 12, 'ao12', 'Ao12', false);
-            const ao50 = calculateBestAverageRecord(chronologicalSolves, 50, 'ao50', 'Ao50', false);
-            const ao100 = calculateBestAverageRecord(chronologicalSolves, 100, 'ao100', 'Ao100', false);
-            const ao250 = calculateBestAverageRecord(chronologicalSolves, 250, 'ao250', 'Ao250', true);
-            const ao1000 = calculateBestAverageRecord(chronologicalSolves, 1000, 'ao1000', 'Ao1000', true);
+            // Cache is expired or not available; load from cloud function
+            if (isMounted) {
+                setLoading(true);
+            }
 
-            eventRows.push({
-                type,
-                label: opt.label,
-                count: eventSolves.length,
-                totalTime: eventTotalTime,
-                mean,
-                std,
-                single,
-                ao5,
-                ao12,
-                ao50,
-                ao100,
-                ao250,
-                ao1000
-            });
-        });
+            try {
+                const getRecordsData = httpsCallable(functions, 'getRecordsData');
+                const result: any = await getRecordsData({ userId: targetUid });
+                if (isMounted) {
+                    const freshRows: EventRecordRow[] = result.data || [];
+                    setRows(freshRows);
+                    await setCachedRecords(targetUid, freshRows);
+                    setLoading(false);
+                }
+            } catch (err) {
+                console.error('Failed to fetch records:', err);
+                if (isMounted) {
+                    // Fallback to whatever cached records we have if available
+                    const fallback = await getCachedRecords(targetUid);
+                    if (fallback && fallback.length > 0) {
+                        setRows(fallback);
+                    }
+                    setLoading(false);
+                }
+            }
+        };
 
-        return eventRows;
-    }, [relevantSolves]);
+        loadData();
+
+        // Listen for cache expiration events while mounted (e.g. solve completed)
+        const handleCacheExpired = (e: Event) => {
+            const customEvent = e as CustomEvent<{ userId?: string }>;
+            const expiredUid = customEvent.detail?.userId;
+            if (!expiredUid || expiredUid === targetUid) {
+                loadData(true);
+            }
+        };
+
+        window.addEventListener(RECORDS_CACHE_EXPIRED_EVENT, handleCacheExpired);
+
+        return () => {
+            isMounted = false;
+            window.removeEventListener(RECORDS_CACHE_EXPIRED_EVENT, handleCacheExpired);
+        };
+    }, [targetUid]);
 
     const formatDuration = (ms: number) => {
         const seconds = Math.floor(ms / 1000);
@@ -163,17 +175,73 @@ export default function RecordTable({ solves: customSolves, userId, hideFootnote
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [selectedRecord]);
 
+    const combinedRows = useMemo(() => {
+        const existingEventIds = new Set(rows.map(r => r.type));
+        const customRows: EventRecordRow[] = [];
+
+        if (!userId || userId === user?.uid) {
+            allEvents.forEach(evt => {
+                if (!existingEventIds.has(evt.value)) {
+                    const eventSolves = (solves || []).filter(s => (s.scrambleType || '333') === evt.value);
+                    if (eventSolves.length > 0) {
+                        customRows.push(calculateEventRecordRow(evt.value, evt.label, eventSolves));
+                    }
+                }
+            });
+        }
+
+        return [...rows, ...customRows];
+    }, [rows, allEvents, solves, userId, user?.uid]);
+
+    const displayRows = useMemo(() => {
+        if (activeEvents && activeEvents.length === 0) return [];
+        return combinedRows.filter(row => {
+            const hasSolves = (row.count ?? 0) > 0 || row.single !== null;
+            if (!hasSolves) return false;
+            if (activeEvents && !activeEvents.includes(row.type)) {
+                return false;
+            }
+            return true;
+        });
+    }, [combinedRows, activeEvents]);
+
+    const isSkeleton = loading && rows.length === 0;
+
+    const skeletonEvents = useMemo(() => {
+        let events = [allEvents[0]];
+        if (activeEvents && activeEvents.length > 0) {
+            events = allEvents.filter(e => activeEvents.includes(e.value));
+        } else if (activeEvents && activeEvents.length === 0) {
+            return [];
+        }
+        return events.map(e => ({
+            type: e.value,
+            label: e.label
+        }));
+    }, [activeEvents, allEvents]);
+
+    const showEmptyState = !isSkeleton ? displayRows.length === 0 : skeletonEvents.length === 0;
+
     return (
-        <div className="flex flex-col gap-2 font-sans select-none">
+        <div className="flex flex-col gap-2 font-sans select-none relative">
             {/* Table Container */}
             <div className="bg-surface-elevation-1 border border-border rounded-xl overflow-hidden shadow-xs">
-                <div className="overflow-x-auto custom-scrollbar">
+                {showEmptyState ? (
+                    <div className="py-12 flex flex-col items-center justify-center text-center p-4 gap-2">
+                        <Trophy className="w-7 h-7 text-text-secondary/40" />
+                        <span className="text-sm font-semibold text-text-primary">No personal records yet</span>
+                        <p className="text-xs text-text-secondary max-w-sm">
+                            Complete solves in any event to establish your personal records.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto custom-scrollbar">
                     {isMobile ? (
                         <table className="w-full text-sm text-left border-collapse select-none">
                             <thead>
                                 <tr className="text-xs uppercase bg-bg-secondary text-text-secondary border-b border-border">
                                     <th className="px-4 py-3 font-semibold text-left whitespace-nowrap sticky left-0 bg-bg-secondary z-10">Metric</th>
-                                    {rows.map(row => (
+                                    {(isSkeleton ? skeletonEvents : displayRows).map(row => (
                                         <th key={row.type} className="px-3 py-3 font-semibold text-right whitespace-nowrap">{row.label}</th>
                                     ))}
                                 </tr>
@@ -181,25 +249,41 @@ export default function RecordTable({ solves: customSolves, userId, hideFootnote
                             <tbody className="divide-y divide-border/40">
                                 <tr className="hover:bg-bg-hover/40 transition-colors">
                                     <td className="px-4 py-2.5 font-semibold text-text-secondary text-xs uppercase sticky left-0 bg-bg-primary z-10 shadow-[1px_0_0_0_var(--color-border)]">Solves</td>
-                                    {rows.map(row => (
+                                    {isSkeleton ? skeletonEvents.map(row => (
+                                        <td key={row.type} className="px-3 py-2.5 text-right font-mono text-xs">
+                                            <span className="inline-block h-3.5 w-7 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                                        </td>
+                                    )) : displayRows.map(row => (
                                         <td key={row.type} className="px-3 py-2.5 text-right text-text-primary font-mono text-xs">{row.count}</td>
                                     ))}
                                 </tr>
                                 <tr className="hover:bg-bg-hover/40 transition-colors">
                                     <td className="px-4 py-2.5 font-semibold text-text-secondary text-xs uppercase sticky left-0 bg-bg-primary z-10 shadow-[1px_0_0_0_var(--color-border)]">Mean</td>
-                                    {rows.map(row => (
+                                    {isSkeleton ? skeletonEvents.map(row => (
+                                        <td key={row.type} className="px-3 py-2.5 text-right font-mono text-xs">
+                                            <span className="inline-block h-3.5 w-11 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                                        </td>
+                                    )) : displayRows.map(row => (
                                         <td key={row.type} className="px-3 py-2.5 text-right text-text-secondary font-mono text-xs">{row.mean !== null ? formatTime(row.mean) : '-'}</td>
                                     ))}
                                 </tr>
                                 <tr className="hover:bg-bg-hover/40 transition-colors">
                                     <td className="px-4 py-2.5 font-semibold text-text-secondary text-xs uppercase sticky left-0 bg-bg-primary z-10 shadow-[1px_0_0_0_var(--color-border)]">Std</td>
-                                    {rows.map(row => (
+                                    {isSkeleton ? skeletonEvents.map(row => (
+                                        <td key={row.type} className="px-3 py-2.5 text-right font-mono text-xs">
+                                            <span className="inline-block h-3.5 w-9 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                                        </td>
+                                    )) : displayRows.map(row => (
                                         <td key={row.type} className="px-3 py-2.5 text-right text-text-secondary font-mono text-xs">{row.std !== null ? (row.std / 1000).toFixed(2) : '-'}</td>
                                     ))}
                                 </tr>
                                 <tr className="hover:bg-bg-hover/40 transition-colors">
                                     <td className="px-4 py-2.5 font-semibold text-text-secondary text-xs uppercase sticky left-0 bg-bg-primary z-10 shadow-[1px_0_0_0_var(--color-border)]">Time</td>
-                                    {rows.map(row => (
+                                    {isSkeleton ? skeletonEvents.map(row => (
+                                        <td key={row.type} className="px-3 py-2.5 text-right font-mono text-xs">
+                                            <span className="inline-block h-3.5 w-14 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                                        </td>
+                                    )) : displayRows.map(row => (
                                         <td key={row.type} className="px-3 py-2.5 text-right text-text-secondary font-mono text-xs whitespace-nowrap">{formatDuration(row.totalTime)}</td>
                                     ))}
                                 </tr>
@@ -214,7 +298,11 @@ export default function RecordTable({ solves: customSolves, userId, hideFootnote
                                 ].map(metric => (
                                     <tr key={metric.key} className="hover:bg-bg-hover/40 transition-colors">
                                         <td className="px-4 py-2.5 font-semibold text-text-secondary text-xs uppercase sticky left-0 bg-bg-primary z-10 shadow-[1px_0_0_0_var(--color-border)]">{metric.label}</td>
-                                        {rows.map(row => (
+                                        {isSkeleton ? skeletonEvents.map(row => (
+                                            <td key={row.type} className="px-3 py-2.5 text-right font-mono text-xs">
+                                                <span className="inline-block h-3.5 w-11 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                                            </td>
+                                        )) : displayRows.map(row => (
                                             <RecordCell
                                                 key={row.type}
                                                 eventName={row.label}
@@ -247,84 +335,112 @@ export default function RecordTable({ solves: customSolves, userId, hideFootnote
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border/40">
-                                {rows.map(row => (
-                                    <tr key={row.type} className="hover:bg-bg-hover/40 transition-colors">
-                                        <td className="px-4 py-2.5 font-semibold text-text-primary whitespace-nowrap">
-                                            {row.label}
-                                        </td>
-                                        <td className="px-3 py-2.5 text-right text-text-secondary font-mono text-xs">
-                                            {row.count}
-                                        </td>
-                                        <td className="px-3 py-2.5 text-right text-text-secondary font-mono text-xs">
-                                            {row.mean !== null ? formatTime(row.mean) : '-'}
-                                        </td>
-                                        <td className="px-3 py-2.5 text-right text-text-secondary font-mono text-xs">
-                                            {row.std !== null ? (row.std / 1000).toFixed(2) : '-'}
-                                        </td>
-                                        <td className="px-3 py-2.5 text-right text-text-secondary font-mono text-xs whitespace-nowrap">
-                                            {formatDuration(row.totalTime)}
-                                        </td>
+                                {isSkeleton ? (
+                                    skeletonEvents.map(row => (
+                                        <tr key={row.type} className="hover:bg-bg-hover/40 transition-colors">
+                                            <td className="px-4 py-2.5 font-semibold text-text-primary whitespace-nowrap">
+                                                {row.label}
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right font-mono text-xs">
+                                                <span className="inline-block h-3.5 w-7 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right font-mono text-xs">
+                                                <span className="inline-block h-3.5 w-11 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right font-mono text-xs">
+                                                <span className="inline-block h-3.5 w-9 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right font-mono text-xs whitespace-nowrap">
+                                                <span className="inline-block h-3.5 w-14 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                                            </td>
+                                            {[...Array(7)].map((_, i) => (
+                                                <td key={i} className="px-3 py-2.5 text-right font-mono text-xs">
+                                                    <span className="inline-block h-3.5 w-11 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))
+                                ) : (
+                                    displayRows.map(row => (
+                                        <tr key={row.type} className="hover:bg-bg-hover/40 transition-colors">
+                                            <td className="px-4 py-2.5 font-semibold text-text-primary whitespace-nowrap">
+                                                {row.label}
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right text-text-secondary font-mono text-xs">
+                                                {row.count}
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right text-text-secondary font-mono text-xs">
+                                                {row.mean !== null ? formatTime(row.mean) : '-'}
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right text-text-secondary font-mono text-xs">
+                                                {row.std !== null ? (row.std / 1000).toFixed(2) : '-'}
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right text-text-secondary font-mono text-xs whitespace-nowrap">
+                                                {formatDuration(row.totalTime)}
+                                            </td>
 
-                                        {/* Record Cells */}
-                                        <RecordCell
-                                            eventName={row.label}
-                                            eventType={row.type}
-                                            detail={row.single}
-                                            isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'single'}
-                                            onClick={handleRecordClick}
-                                        />
-                                        <RecordCell
-                                            eventName={row.label}
-                                            eventType={row.type}
-                                            detail={row.ao5}
-                                            isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao5'}
-                                            onClick={handleRecordClick}
-                                        />
-                                        <RecordCell
-                                            eventName={row.label}
-                                            eventType={row.type}
-                                            detail={row.ao12}
-                                            isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao12'}
-                                            onClick={handleRecordClick}
-                                        />
-                                        <RecordCell
-                                            eventName={row.label}
-                                            eventType={row.type}
-                                            detail={row.ao50}
-                                            isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao50'}
-                                            onClick={handleRecordClick}
-                                        />
-                                        <RecordCell
-                                            eventName={row.label}
-                                            eventType={row.type}
-                                            detail={row.ao100}
-                                            isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao100'}
-                                            onClick={handleRecordClick}
-                                        />
-                                        <RecordCell
-                                            eventName={row.label}
-                                            eventType={row.type}
-                                            detail={row.ao250}
-                                            isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao250'}
-                                            onClick={handleRecordClick}
-                                        />
-                                        <RecordCell
-                                            eventName={row.label}
-                                            eventType={row.type}
-                                            detail={row.ao1000}
-                                            isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao1000'}
-                                            onClick={handleRecordClick}
-                                        />
-                                    </tr>
-                                ))}
+                                            {/* Record Cells */}
+                                            <RecordCell
+                                                eventName={row.label}
+                                                eventType={row.type}
+                                                detail={row.single}
+                                                isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'single'}
+                                                onClick={handleRecordClick}
+                                            />
+                                            <RecordCell
+                                                eventName={row.label}
+                                                eventType={row.type}
+                                                detail={row.ao5}
+                                                isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao5'}
+                                                onClick={handleRecordClick}
+                                            />
+                                            <RecordCell
+                                                eventName={row.label}
+                                                eventType={row.type}
+                                                detail={row.ao12}
+                                                isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao12'}
+                                                onClick={handleRecordClick}
+                                            />
+                                            <RecordCell
+                                                eventName={row.label}
+                                                eventType={row.type}
+                                                detail={row.ao50}
+                                                isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao50'}
+                                                onClick={handleRecordClick}
+                                            />
+                                            <RecordCell
+                                                eventName={row.label}
+                                                eventType={row.type}
+                                                detail={row.ao100}
+                                                isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao100'}
+                                                onClick={handleRecordClick}
+                                            />
+                                            <RecordCell
+                                                eventName={row.label}
+                                                eventType={row.type}
+                                                detail={row.ao250}
+                                                isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao250'}
+                                                onClick={handleRecordClick}
+                                            />
+                                            <RecordCell
+                                                eventName={row.label}
+                                                eventType={row.type}
+                                                detail={row.ao1000}
+                                                isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao1000'}
+                                                onClick={handleRecordClick}
+                                            />
+                                        </tr>
+                                    ))
+                                )}
                             </tbody>
                         </table>
                     )}
                 </div>
+                )}
             </div>
 
             {/* Footnote & Table Key */}
-            {!hideFootnote && (
+            {!hideFootnote && !showEmptyState && (
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-text-secondary px-1">
                     <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-text-primary">*</span>
@@ -551,7 +667,7 @@ function RecordInspectorSidebar({
 
     const handleCopyAll = () => {
         const text = record.solves.map((s, idx) => {
-            const isDropped = record.droppedIndices.has(idx);
+            const isDropped = record.droppedIndices.includes(idx);
             let timeStr = formatTime(s.time + (s.penalty === '+2' ? 2000 : 0));
             if (s.penalty === 'DNF' || s.inspectionPenalty === 'DNF') timeStr = 'DNF';
             else if (s.penalty === '+2') timeStr += '+';
@@ -742,7 +858,7 @@ function RecordInspectorSidebar({
             <div className="flex-1 overflow-y-auto custom-scrollbar">
                 <div className="flex flex-col divide-y divide-border/20">
                     {record.solves.map((solve, index) => {
-                        const isNonCounting = record.droppedIndices.has(index);
+                        const isNonCounting = record.droppedIndices.includes(index);
                         const isExpanded = expandedSolveId === solve.id;
 
                         return (

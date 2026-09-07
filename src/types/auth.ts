@@ -1,3 +1,5 @@
+import type { CustomEvent } from './settings';
+
 export type SocialNetwork =
     | 'email'
     | 'discord'
@@ -17,6 +19,14 @@ export interface SocialProfile {
     privacy: SocialPrivacy;
 }
 
+export interface LogsTableSettings {
+    rowsPerPage: number;
+    sortConfig: {
+        key: string;
+        direction: 'asc' | 'desc';
+    };
+}
+
 export interface UserData {
     uid: string;
     shortId?: string;
@@ -28,10 +38,13 @@ export interface UserData {
     starredUsers?: string[];
     blockedUsers?: string[];
     socials?: SocialProfile[];
+    wcaId?: string;
     lastSeenAt?: string;
     status?: string;
     isGhostMode?: boolean;
     pinnedGoalIds?: string[];
+    customEvents?: CustomEvent[];
+    logsTableSettings?: LogsTableSettings;
 }
 
 export interface AuthContextType {

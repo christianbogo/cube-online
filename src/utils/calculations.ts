@@ -48,21 +48,65 @@ export const calculateAverage = (solves: Solve[], size: number): number | 'DNF' 
 };
 
 export const calculateBestAverage = (solves: Solve[], size: number): number | 'DNF' | null => {
-    let best: number | null = null;
-    for (let i = 0; i <= solves.length - size; i++) {
-        const window = solves.slice(i, i + size);
+    if (solves.length < size) return null;
 
-        // Strict Session Check: All solves must be from the same session
-        const firstSessionId = window[0].sessionId;
-        const allSameSession = window.every(s => s.sessionId === firstSessionId);
+    // Pre-calculate effective times and session IDs to avoid redundant work in the inner loop
+    const precomputed = solves.map(s => {
+        let isDnf = s.penalty === 'DNF' || s.inspectionPenalty === 'DNF';
+        let eff = Infinity;
+        if (!isDnf) {
+            eff = s.time;
+            if (s.penalty === '+2') eff += 2000;
+            if (s.inspectionPenalty === '+2') eff += 2000;
+        }
+        return { isDnf, eff, sessionId: s.sessionId };
+    });
+
+    let best: number | null = null;
+    let drops = 0;
+    if (size === 5 || size === 12) drops = 1;
+    if (size === 100) drops = 5;
+
+    for (let i = 0; i <= precomputed.length - size; i++) {
+        let allSameSession = true;
+        const firstSessionId = precomputed[i].sessionId;
+        
+        // Fast session check
+        for (let j = 0; j < size; j++) {
+            if (precomputed[i + j].sessionId !== firstSessionId) {
+                allSameSession = false;
+                break;
+            }
+        }
 
         if (!allSameSession) continue;
 
-        const avg = calculateAverage(window, size);
-        if (typeof avg === 'number') {
-            if (best === null || avg < best) {
-                best = avg;
-            }
+        let dnfCount = 0;
+        for (let j = 0; j < size; j++) {
+            if (precomputed[i + j].isDnf) dnfCount++;
+        }
+
+        if (dnfCount > drops) {
+            // It's a DNF average, which won't be a 'best' average
+            continue;
+        }
+
+        const times = [];
+        for (let j = 0; j < size; j++) {
+            times.push(precomputed[i + j].eff);
+        }
+        
+        times.sort((a, b) => a - b);
+
+        let sum = 0;
+        const count = times.length - 2 * drops;
+        for (let j = drops; j < times.length - drops; j++) {
+            sum += times[j];
+        }
+        
+        const avg = Math.round(sum / count);
+        if (best === null || avg < best) {
+            best = avg;
         }
     }
     return best;

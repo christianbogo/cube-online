@@ -117,6 +117,17 @@ textarea:focus {
   animation-play-state: paused;
 }
 
+.animate-marquee-slow-mobile {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 50s linear infinite;
+}
+
+.animate-marquee-slow-mobile:hover,
+.animate-marquee-slow-mobile:active {
+  animation-play-state: paused;
+}
+
 /* Fade edges mask for smooth scrolling chip rows and lists */
 .mask-fade-edges {
   mask-image: linear-gradient(to right, transparent 0%, black 40px, black calc(100% - 40px), transparent 100%);

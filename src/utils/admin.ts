@@ -83,26 +83,6 @@ export async function eraseUserProfileAndData(targetUserId: string): Promise<voi
     await deleteDoc(doc(db, 'users', targetUserId));
 }
 
-/**
- * Format milliseconds into a human-readable duration (e.g. "4d 12h 30m 15s" or "2h 45m")
- */
-export function formatTimeMs(ms: number): string {
-    if (!ms || ms <= 0) return '0s';
-
-    const seconds = Math.floor(ms / 1000);
-    const days = Math.floor(seconds / (3600 * 24));
-    const hours = Math.floor((seconds % (3600 * 24)) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const remainingSeconds = seconds % 60;
-
-    const parts: string[] = [];
-    if (days > 0) parts.push(`${days}d`);
-    if (hours > 0) parts.push(`${hours}h`);
-    if (minutes > 0) parts.push(`${minutes}m`);
-    if (remainingSeconds > 0 && days === 0) parts.push(`${remainingSeconds}s`);
-
-    return parts.length > 0 ? parts.join(' ') : '0s';
-}
 
 /**
  * Compresses an uploaded image file on the client using an offscreen canvas.
