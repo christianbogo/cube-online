@@ -15,7 +15,8 @@ import {
     CubingFriendsTab,
     Logo,
     ImportCsTimerModal,
-    UserAvatar
+    UserAvatar,
+    WcaBadge
 } from '../components';
 import { hasLinkedWca } from '../utils/wca';
 
@@ -277,8 +278,8 @@ export default function Account() {
                     </div>
                 )}
 
-                <main className={`flex-1 overflow-y-auto no-scrollbar w-full ${user ? 'max-w-3xl mx-auto px-2.5 py-3 sm:px-4 sm:py-4 md:px-5 md:py-5' : 'px-3 py-3 sm:px-4 sm:py-4'}`}>
-                    {!user ? (
+                <main className={`flex-1 overflow-y-auto no-scrollbar w-full ${user && !user.isAnonymous ? 'max-w-3xl mx-auto px-2.5 py-3 sm:px-4 sm:py-4 md:px-5 md:py-5' : 'px-3 py-3 sm:px-4 sm:py-4'}`}>
+                    {!user || user.isAnonymous ? (
                         // Not Signed In
                         <div className="min-h-full flex flex-col items-center justify-center py-2 sm:py-4">
                             <div className="w-full max-w-md my-auto animate-in fade-in duration-300 bg-bg-secondary/40 border border-border/60 rounded-2xl p-4 sm:p-6 shadow-sm">
@@ -393,13 +394,10 @@ export default function Account() {
                                     <UserAvatar
                                         user={user}
                                         color={selectedColor}
-                                        hasWca={isWcaVerified}
-                                        className={`w-24 h-24 cursor-pointer transition-transform hover:scale-105 active:scale-95 flex items-center justify-center ${
-                                            isWcaVerified ? 'drop-shadow-lg' : 'rounded-2xl shadow-lg'
-                                        }`}
+                                        className="w-24 h-24 cursor-pointer transition-transform hover:scale-105 active:scale-95 flex items-center justify-center rounded-2xl shadow-lg"
                                         roundedClassName="rounded-2xl"
                                         onClick={() => setIsColorPickerOpen(!isColorPickerOpen)}
-                                        title={isWcaVerified ? "WCA Verified profile - Click to change color" : "Click to change profile color"}
+                                        title="Click to change profile color"
                                     />
 
                                     {/* Color Picker Popover */}
@@ -468,7 +466,7 @@ export default function Account() {
                                                         title={`Verified WCA Competitor (${user.wcaId || 'Linked'})`}
                                                         className="inline-flex items-center align-middle"
                                                     >
-                                                        <UserAvatar user={user} color={selectedColor} hasWca={true} className="w-5 h-5 drop-shadow-xs" />
+                                                        <WcaBadge user={user} color={selectedColor} className="w-5 h-5 drop-shadow-xs" />
                                                     </span>
                                                 )}
                                             </h2>

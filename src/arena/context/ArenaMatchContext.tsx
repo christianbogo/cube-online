@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 export type ScoringMode = 'RANK_BASED' | 'DIFFERENTIAL';
+export type MatchState = 'IDLE' | 'WAITING_FOR_ALL' | 'LOCKED_IN' | 'DRAG_COUNTDOWN' | 'RACING' | 'FINISHED';
 
 export interface ArenaSettings {
   scoringMode: ScoringMode;
@@ -20,12 +21,55 @@ interface ArenaMatchContextType {
   settings: ArenaSettings;
   updateSettings: (newSettings: Partial<ArenaSettings>) => void;
   calculateRoundScores: (solves: any[], activePlayersCount: number) => { team1Delta: number, team2Delta: number };
+  matchState: MatchState;
+  setMatchState: (state: MatchState) => void;
+  countdownStep: number;
+  startCountdown: () => void;
+  resetMatch: () => void;
 }
 
 const ArenaMatchContext = createContext<ArenaMatchContextType | null>(null);
 
 export const ArenaMatchProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
+  
   const [settings, setSettings] = useState<ArenaSettings>(defaultSettings);
+  const [matchState, setMatchState] = useState<MatchState>('IDLE');
+  const [countdownStep, setCountdownStep] = useState(0);
+  const countdownTimer = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearTimer = () => {
+    if (countdownTimer.current) {
+      clearInterval(countdownTimer.current);
+      countdownTimer.current = null;
+    }
+  };
+
+  const startCountdown = () => {
+    setMatchState('DRAG_COUNTDOWN');
+    setCountdownStep(0);
+    clearTimer();
+    
+    let step = 0;
+    countdownTimer.current = setInterval(() => {
+      step += 1;
+      setCountdownStep(step);
+      if (step >= 4) {
+        clearTimer();
+        setMatchState('RACING');
+      }
+    }, 500); // 500ms per light
+  };
+
+  const resetMatch = () => {
+    clearTimer();
+    setMatchState('IDLE');
+    setCountdownStep(0);
+  };
+
+  useEffect(() => {
+    return () => clearTimer();
+  }, []);
+
 
   const updateSettings = (newSettings: Partial<ArenaSettings>) => {
     setSettings(prev => ({ ...prev, ...newSettings }));
@@ -72,7 +116,7 @@ export const ArenaMatchProvider: React.FC<{children: React.ReactNode}> = ({ chil
   };
 
   return (
-    <ArenaMatchContext.Provider value={{ settings, updateSettings, calculateRoundScores }}>
+    <ArenaMatchContext.Provider value={{ settings, updateSettings, calculateRoundScores, matchState, setMatchState, countdownStep, startCountdown, resetMatch }}>
       {children}
     </ArenaMatchContext.Provider>
   );

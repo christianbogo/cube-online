@@ -16,7 +16,8 @@ import {
 } from 'lucide-react';
 import { formatTime } from '../utils/formatTime';
 import type { LiveUser, TimerState } from '../types';
-import { UserCard, KeybindTooltip, UserAvatar } from '../components';
+import { UserCard, KeybindTooltip, UserAvatar, WcaBadge } from '../components';
+import { hasLinkedWca } from '../utils/wca';
 import { MOCK_FRIENDS, MOCK_COMMUNITY_USERS, USE_MOCK_USERS } from '../utils/mockLiveUsers';
 import { useIsMobile } from '../utils/useIsMobile';
 import MobileCube from '../components/mobile/MobileCube';
@@ -738,6 +739,14 @@ function DesktopCube() {
                                             <Maximize2 className="w-3 h-3 text-accent absolute inset-0 m-auto scale-0 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-150" />
                                         </div>
                                         <span className="font-medium truncate max-w-[110px]">{u.username}</span>
+                                        {hasLinkedWca(u) && (
+                                            <span
+                                                title={`Verified WCA Competitor (${u.wcaId || 'Linked'})`}
+                                                className="inline-flex items-center align-middle shrink-0"
+                                            >
+                                                <WcaBadge user={u} className="w-3 h-3 drop-shadow-2xs" />
+                                            </span>
+                                        )}
                                     </button>
                                 ))}
                             </div>
@@ -1002,6 +1011,14 @@ function DesktopCube() {
                                             <Maximize2 className="w-3 h-3 text-accent absolute inset-0 m-auto scale-0 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-150" />
                                         </div>
                                         <span className="font-medium truncate max-w-[110px]">{u.username}</span>
+                                        {hasLinkedWca(u) && (
+                                            <span
+                                                title={`Verified WCA Competitor (${u.wcaId || 'Linked'})`}
+                                                className="inline-flex items-center align-middle shrink-0"
+                                            >
+                                                <WcaBadge user={u} className="w-3 h-3 drop-shadow-2xs" />
+                                            </span>
+                                        )}
                                     </button>
                                 ))}
                             </div>
@@ -1034,6 +1051,14 @@ function DesktopCube() {
                                                 roundedClassName="rounded-sm"
                                             />
                                             <span className="font-medium truncate max-w-[120px]">{u.username}</span>
+                                            {hasLinkedWca(u) && (
+                                                <span
+                                                    title={`Verified WCA Competitor (${u.wcaId || 'Linked'})`}
+                                                    className="inline-flex items-center align-middle shrink-0"
+                                                >
+                                                    <WcaBadge user={u} className="w-2.5 h-2.5 drop-shadow-2xs" />
+                                                </span>
+                                            )}
                                         </button>
                                     ))}
                                 </div>
@@ -1057,6 +1082,14 @@ function DesktopCube() {
                                                 roundedClassName="rounded-sm"
                                             />
                                             <span className="font-medium truncate max-w-[120px]">{u.username}</span>
+                                            {hasLinkedWca(u) && (
+                                                <span
+                                                    title={`Verified WCA Competitor (${u.wcaId || 'Linked'})`}
+                                                    className="inline-flex items-center align-middle shrink-0"
+                                                >
+                                                    <WcaBadge user={u} className="w-2.5 h-2.5 drop-shadow-2xs" />
+                                                </span>
+                                            )}
                                         </button>
                                     ))}
                                 </div>

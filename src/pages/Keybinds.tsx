@@ -1,3 +1,6 @@
+import { useAuth } from '../contexts/AuthContext';
+import { Link } from 'react-router-dom';
+import { Lock } from 'lucide-react';
 interface KeybindCategory {
     title: string;
     description: string;
@@ -5,6 +8,29 @@ interface KeybindCategory {
 }
 
 export default function Keybinds() {
+    const { user } = useAuth();
+
+    if (!user || user.isAnonymous) {
+        return (
+            <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
+                <div className="w-16 h-16 bg-bg-secondary rounded-2xl flex items-center justify-center mb-4 border border-border/80 shadow-sm">
+                    <Lock className="w-8 h-8 text-text-secondary" />
+                </div>
+                <h2 className="text-xl font-bold text-text-primary mb-2 tracking-tight">Keybinds Locked</h2>
+                <p className="text-sm text-text-secondary max-w-sm mb-6 leading-relaxed">
+                    Sign in to your account to view the full list of keyboard shortcuts and power-user actions.
+                </p>
+                <Link
+                    to="/account"
+                    state={{ mode: 'signin' }}
+                    className="px-6 py-2.5 bg-accent hover:bg-accent/90 text-white rounded-xl font-semibold shadow-sm transition-all"
+                >
+                    Sign In
+                </Link>
+            </div>
+        );
+    }
+
     const categories: KeybindCategory[] = [
         {
             title: 'Navigation',

@@ -1,9 +1,11 @@
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { BarChart2, Target, Users, User, Lock, Box, Swords, Construction } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useConfirm } from '../../contexts/ConfirmationContext';
 
 export default function BottomNav() {
     const { user } = useAuth();
+    const { confirm } = useConfirm();
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -17,19 +19,29 @@ export default function BottomNav() {
         { name: 'Account', icon: User, path: '/account' },
     ];
 
+    const knownPrefixes = ['/', '/arena', '/logs', '/social', '/account', '/keybinds', '/goals', '/dev', '/privacy', '/info', '/records', '/data', '/stats', '/callback'];
+    const isRoomPage = !knownPrefixes.some(p => location.pathname === p || (p !== '/' && location.pathname.startsWith(p + '/')));
+
     return (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 h-bottomnav bg-bg-secondary border-t border-border flex items-center justify-around px-2 z-[60] pb-safe">
             {navItems.map((item) => {
                 const isUnderConstruction = !!item.underConstruction || item.name === 'Arena';
-                const isItemLocked = !isUnderConstruction && (!user && ['Logs', 'Goals'].includes(item.name));
+                const isItemLocked = !isUnderConstruction && ((!user || user.isAnonymous) && ['Logs', 'Dev', 'Binds'].includes(item.name));
                 
                 return (
                     <NavLink
                         key={item.name}
                         to={isUnderConstruction || isItemLocked ? '#' : item.path}
-                        onClick={(e) => {
+                        onClick={async (e) => {
                             if (isUnderConstruction || isItemLocked) {
                                 e.preventDefault();
+                                return;
+                            }
+                            if (isRoomPage) {
+                                e.preventDefault();
+                                const ok = await confirm('Are you sure you want to leave the Arena?', { confirmText: 'Leave', isDanger: true });
+                                if (!ok) return;
+                                navigate(item.path);
                                 return;
                             }
                             if (item.path === '/social' && location.pathname.startsWith('/social') && location.pathname !== '/social') {

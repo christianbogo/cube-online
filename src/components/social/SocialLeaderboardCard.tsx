@@ -1,6 +1,6 @@
 import type { LeaderboardSlot } from '../../utils/socialCalculations';
 import type { UserData } from '../../types';
-import { UserAvatar } from '../ui/UserAvatar';
+import { UserAvatar, WcaBadge } from '../ui/UserAvatar';
 import { hasLinkedWca } from '../../utils/wca';
 import { ChevronRight } from 'lucide-react';
 
@@ -78,9 +78,7 @@ export function SocialLeaderboardCard({
                                     {/* Simple User Card: Avatar */}
                                     <UserAvatar
                                         user={user}
-                                        className={`w-6 h-6 shrink-0 transition-transform group-hover:scale-105 ${
-                                            hasLinkedWca(user) ? 'drop-shadow-2xs' : 'rounded-md shadow-2xs'
-                                        }`}
+                                        className="w-6 h-6 rounded-md shadow-2xs shrink-0 transition-transform group-hover:scale-105"
                                         roundedClassName="rounded-md"
                                     />
 
@@ -95,7 +93,7 @@ export function SocialLeaderboardCard({
                                                     title={`Verified WCA Competitor (${user.wcaId || 'Linked'})`}
                                                     className="inline-flex items-center align-middle shrink-0"
                                                 >
-                                                    <UserAvatar user={user} hasWca={true} className="w-3.5 h-3.5 drop-shadow-2xs" />
+                                                    <WcaBadge user={user} className="w-3.5 h-3.5 drop-shadow-2xs" />
                                                 </span>
                                             )}
                                         </div>

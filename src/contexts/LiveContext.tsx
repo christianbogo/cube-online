@@ -22,7 +22,7 @@ const LiveContext = createContext<LiveContextType | undefined>(undefined);
 const TEN_MINUTES_MS = 10 * 60 * 1000;
 
 export function LiveProvider({ children }: { children: ReactNode }) {
-    const { user, updateGhostMode } = useAuth();
+    const { user, loading: authLoading, updateGhostMode } = useAuth();
     const { solves } = useSolves();
 
     const [isGhostMode, setIsGhostModeState] = useState<boolean>(() => {
@@ -100,8 +100,8 @@ export function LiveProvider({ children }: { children: ReactNode }) {
 
     // Firebase Presence Sync
     useEffect(() => {
-        if (!user || isGhostMode) {
-            if (lastUidRef.current) {
+        if (!user || isGhostMode || authLoading) {
+            if (!authLoading && lastUidRef.current) {
                 const userPresenceRef = ref(rtdb, `presence/${lastUidRef.current}`);
                 remove(userPresenceRef).catch(() => {});
                 lastUidRef.current = null;
@@ -151,7 +151,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         return () => {
             clearInterval(heartbeatInterval);
         };
-    }, [user, isGhostMode, liveTimerState, solves, formatRecentSolves]);
+    }, [user, isGhostMode, liveTimerState, solves, formatRecentSolves, authLoading]);
 
     // Listen for other live users
     useEffect(() => {

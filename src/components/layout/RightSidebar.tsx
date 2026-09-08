@@ -248,7 +248,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
             {/* Solve List */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {/* Permanent Guest Solves Save Prompt */}
-                {!user && (
+                {(!user || user.isAnonymous) && (
                     <div className="py-2 px-3 bg-accent/5 border-b border-border/40 text-center">
                         <Link
                             to="/account"
@@ -309,7 +309,7 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                             <ChevronRight className="w-6 h-6 opacity-20" />
                         </div>
                         <span className="text-sm">No solves yet</span>
-                        {!user && <span className="text-xs opacity-50">Sign in to save solves.</span>}
+                        {(!user || user.isAnonymous) && <span className="text-xs opacity-50">Sign in to save solves.</span>}
                     </div>
                 )}
             </div>

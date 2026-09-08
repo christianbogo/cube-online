@@ -40,9 +40,10 @@ export interface RecordTableProps {
     userId?: string;
     hideFootnote?: boolean;
     activeEvents?: string[];
+    isGuestPreview?: boolean;
 }
 
-export default function RecordTable({ userId, hideFootnote = false, activeEvents }: RecordTableProps = {}) {
+export default function RecordTable({ userId, hideFootnote = false, activeEvents, isGuestPreview }: RecordTableProps = {}) {
     const { user } = useAuth();
     const isMobile = useIsMobile();
     const { allEvents } = useEvents();
@@ -57,9 +58,11 @@ export default function RecordTable({ userId, hideFootnote = false, activeEvents
     } | null>(null);
 
     const [rows, setRows] = useState<EventRecordRow[]>(() => {
+        if (isGuestPreview) return [];
         return getCachedRecordsSync(targetUid) || [];
     });
     const [loading, setLoading] = useState<boolean>(() => {
+        if (isGuestPreview) return false;
         if (!targetUid) return false;
         const cached = getCachedRecordsSync(targetUid);
         return !cached || isRecordsCacheExpired(targetUid);
@@ -76,6 +79,43 @@ export default function RecordTable({ userId, hideFootnote = false, activeEvents
     }, [targetUid]);
 
     useEffect(() => {
+        if (isGuestPreview) {
+            setRows([
+                {
+                    type: '333',
+                    label: '3x3x3',
+                    count: 42,
+                    totalTime: 504000,
+                    mean: 12000,
+                    std: 1500,
+                    single: { type: 'single', label: 'Single', size: 1, value: 8340, firstSolveDate: null, completedDate: new Date().toISOString(), solves: [], droppedIndices: [], bestSolveTime: null, worstSolveTime: null, rawMean: null, std: null, isCrossSession: false },
+                    ao5: { type: 'ao5', label: 'Ao5', size: 5, value: 10230, firstSolveDate: null, completedDate: new Date().toISOString(), solves: [], droppedIndices: [], bestSolveTime: null, worstSolveTime: null, rawMean: null, std: null, isCrossSession: false },
+                    ao12: { type: 'ao12', label: 'Ao12', size: 12, value: 11450, firstSolveDate: null, completedDate: new Date().toISOString(), solves: [], droppedIndices: [], bestSolveTime: null, worstSolveTime: null, rawMean: null, std: null, isCrossSession: false },
+                    ao50: null,
+                    ao100: { type: 'ao100', label: 'Ao100', size: 100, value: 12890, firstSolveDate: null, completedDate: new Date().toISOString(), solves: [], droppedIndices: [], bestSolveTime: null, worstSolveTime: null, rawMean: null, std: null, isCrossSession: true },
+                    ao250: null,
+                    ao1000: null
+                },
+                {
+                    type: '444',
+                    label: '4x4x4',
+                    count: 15,
+                    totalTime: 750000,
+                    mean: 50000,
+                    std: 3000,
+                    single: { type: 'single', label: 'Single', size: 1, value: 42120, firstSolveDate: null, completedDate: new Date().toISOString(), solves: [], droppedIndices: [], bestSolveTime: null, worstSolveTime: null, rawMean: null, std: null, isCrossSession: false },
+                    ao5: { type: 'ao5', label: 'Ao5', size: 5, value: 45670, firstSolveDate: null, completedDate: new Date().toISOString(), solves: [], droppedIndices: [], bestSolveTime: null, worstSolveTime: null, rawMean: null, std: null, isCrossSession: false },
+                    ao12: { type: 'ao12', label: 'Ao12', size: 12, value: 48900, firstSolveDate: null, completedDate: new Date().toISOString(), solves: [], droppedIndices: [], bestSolveTime: null, worstSolveTime: null, rawMean: null, std: null, isCrossSession: false },
+                    ao50: null,
+                    ao100: null,
+                    ao250: null,
+                    ao1000: null
+                }
+            ]);
+            setLoading(false);
+            return;
+        }
+
         if (!targetUid) {
             setRows([]);
             setLoading(false);

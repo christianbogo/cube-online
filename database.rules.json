@@ -1,7 +1,7 @@
 {
   "rules": {
     "presence": {
-      ".read": true,
+      ".read": "auth != null",
       ".indexOn": ["timestamp"],
       "$uid": {
         ".write": "auth != null && auth.uid === $uid",
@@ -33,6 +33,12 @@
         "$other": {
           ".validate": false
         }
+      }
+    },
+    "rooms": {
+      ".read": "auth != null",
+      "$roomId": {
+        ".write": "auth != null"
       }
     }
   }

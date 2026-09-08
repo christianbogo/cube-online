@@ -3,6 +3,7 @@ export { default as Layout } from './layout/Layout';
 export { default as Topbar } from './layout/Topbar';
 export { default as LeftSidebar } from './layout/LeftSidebar';
 export { default as RightSidebar } from './layout/RightSidebar';
+export { default as ArenaSidebar } from './layout/ArenaSidebar';
 export { default as LogsSidebar } from './layout/LogsSidebar';
 export { default as MobileCube } from './mobile/MobileCube';
 
@@ -17,6 +18,8 @@ export { UserCard } from './ui/UserCard';
 export type { UserCardProps } from './ui/UserCard';
 export { UserAvatar, default as UserAvatarDefault } from './ui/UserAvatar';
 export type { UserAvatarProps } from './ui/UserAvatar';
+export { WcaBadge, default as WcaBadgeDefault } from './ui/WcaBadge';
+export type { WcaBadgeProps } from './ui/WcaBadge';
 export { Logo } from './ui/Logo';
 export type { LogoProps } from './ui/Logo';
 export { default as KeybindTooltip, resetKeybindTooltips, setTooltipsDisabled, isTooltipsDisabled, KEYBIND_TOOLTIPS, type TooltipItem } from './ui/KeybindTooltip';

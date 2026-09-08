@@ -28,7 +28,8 @@ import { useSession } from '../../contexts/SessionContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLive } from '../../contexts/LiveContext';
 import { useTheme } from '../ui/ThemeProvider';
-import { UserAvatar } from '../ui/UserAvatar';
+import { UserAvatar, WcaBadge } from '../ui/UserAvatar';
+import { hasLinkedWca } from '../../utils/wca';
 import { useEvents } from '../../hooks/useEvents';
 import { formatTime } from '../../utils/formatTime';
 import { MOCK_FRIENDS, USE_MOCK_USERS } from '../../utils/mockLiveUsers';
@@ -697,11 +698,21 @@ export default function MobileCube() {
                                     className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-xs shadow-sm"
                                     roundedClassName="rounded-lg"
                                 >
-                                    {user ? user.username.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
+                                    {(user && !user.isAnonymous) ? user.username.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
                                 </UserAvatar>
                                 <div className="text-left">
-                                    <div className="text-sm font-semibold text-text-primary">{user ? user.username : 'Guest User'}</div>
-                                    <div className="text-[11px] text-text-secondary">{user ? 'View Account & Profile' : 'Sign in to save solves'}</div>
+                                    <div className="text-sm font-semibold text-text-primary flex items-center gap-1.5">
+                                        <span>{(user && !user.isAnonymous) ? user.username : 'Guest User'}</span>
+                                        {user && !user.isAnonymous && hasLinkedWca(user) && (
+                                            <span
+                                                title={`Verified WCA Competitor (${user.wcaId || 'Linked'})`}
+                                                className="inline-flex items-center align-middle shrink-0"
+                                            >
+                                                <WcaBadge user={user} className="w-3.5 h-3.5 drop-shadow-2xs" />
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="text-[11px] text-text-secondary">{(user && !user.isAnonymous) ? 'View Account & Profile' : 'Sign in to save solves'}</div>
                                 </div>
                             </div>
                             <ChevronRight className="w-4 h-4 text-text-secondary" />

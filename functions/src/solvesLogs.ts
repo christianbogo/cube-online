@@ -64,8 +64,13 @@ export const getPaginatedSolves = functions.runWith({ timeoutSeconds: 60, memory
             .where('userId', '==', userId)
             .where('scrambleType', '==', scrambleType);
 
-        const countSnap = await baseQuery.count().get();
-        const totalCount = countSnap.data().count;
+        let totalCount: number;
+        if (typeof data?.knownTotalCount === 'number' && data.knownTotalCount >= 0) {
+            totalCount = data.knownTotalCount;
+        } else {
+            const countSnap = await baseQuery.count().get();
+            totalCount = countSnap.data().count;
+        }
 
         const pageSnap = await baseQuery
             .orderBy('date', sortDirection)

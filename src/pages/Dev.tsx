@@ -11,7 +11,8 @@ import {
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdmin, compressImage } from '../utils/admin';
-import { Paperclip, FileText, X, ChevronDown } from 'lucide-react';
+import { Paperclip, FileText, X, ChevronDown, Lock } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import type {
     FeedbackType,
     ChangelogEntry,
@@ -417,6 +418,27 @@ export default function Dev() {
             alert("Failed to delete post.");
         }
     };
+
+    if (!user || user.isAnonymous) {
+        return (
+            <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
+                <div className="w-16 h-16 bg-bg-secondary rounded-2xl flex items-center justify-center mb-4 border border-border/80 shadow-sm">
+                    <Lock className="w-8 h-8 text-text-secondary" />
+                </div>
+                <h2 className="text-xl font-bold text-text-primary mb-2 tracking-tight">Developer Portal Locked</h2>
+                <p className="text-sm text-text-secondary max-w-sm mb-6 leading-relaxed">
+                    Sign in to your account to submit feedback, report bugs, and view the release changelog.
+                </p>
+                <Link
+                    to="/account"
+                    state={{ mode: 'signin' }}
+                    className="px-6 py-2.5 bg-accent hover:bg-accent/90 text-white rounded-xl font-semibold shadow-sm transition-all"
+                >
+                    Sign In
+                </Link>
+            </div>
+        );
+    }
 
     return (
         <div className="max-w-6xl w-full mx-auto px-2 py-2.5 sm:px-3 sm:py-3 md:px-4 md:py-4 flex flex-col gap-8">

@@ -6,7 +6,7 @@ import { db } from '../../lib/firebase';
 import { evaluateUserGoals } from '../../utils/goalsCalculations';
 import { isAdmin, eraseUserProfileAndData } from '../../utils/admin';
 import RecordTable from '../records/RecordTable';
-import { UserAvatar } from '../ui/UserAvatar';
+import { UserAvatar, WcaBadge } from '../ui/UserAvatar';
 import { hasLinkedWca } from '../../utils/wca';
 import {
     ArrowLeft,
@@ -21,8 +21,7 @@ import {
     Award,
     Trash2,
     AlertTriangle,
-    Loader2,
-    Share2
+    Loader2
 } from 'lucide-react';
 
 const NETWORK_LABELS: Record<string, string> = {
@@ -74,7 +73,6 @@ export function UserProfileView({
     const [pinnedGoalIds, setPinnedGoalIds] = useState<string[]>(() => initialUser.pinnedGoalIds || []);
     const [copiedId, setCopiedId] = useState(false);
     const [copiedSocialId, setCopiedSocialId] = useState<string | null>(null);
-    const [copiedShareLink, setCopiedShareLink] = useState(false);
     const [followLoading, setFollowLoading] = useState(false);
     const [blockLoading, setBlockLoading] = useState(false);
 
@@ -120,40 +118,6 @@ export function UserProfileView({
             updateMeta('meta[name="twitter:image"]', 'content', `${window.location.origin}/og-image.png`);
         };
     }, [liveUser.username, liveUser.shortId]);
-
-    const handleShareProfile = async () => {
-        const shareCode = liveUser.shortId || liveUser.uid;
-        const username = liveUser.username || 'CubingUser';
-        const cleanCode = liveUser.shortId ? liveUser.shortId.replace('#', '').trim() : '';
-        const title = cleanCode ? `${username}#${cleanCode}` : username;
-        const shareUrl = `${window.location.origin}/social/${shareCode}`;
-        const shareData = {
-            title,
-            text: `Check out ${username}'s speedcubing records and profile on Cube Online!`,
-            url: shareUrl
-        };
-
-        if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare && navigator.canShare(shareData)) {
-            try {
-                await navigator.share(shareData);
-                return;
-            } catch (err: any) {
-                if (err.name !== 'AbortError') {
-                    console.warn("Navigator share warning:", err);
-                }
-            }
-        }
-
-        // Fallback to clipboard
-        try {
-            await navigator.clipboard.writeText(shareUrl);
-            setCopiedShareLink(true);
-            setTimeout(() => setCopiedShareLink(false), 2000);
-        } catch {
-            prompt('Copy profile link:', shareUrl);
-        }
-    };
-
     // Admin Erase Profile Dual Confirmation States
     const [isEraseModalOpen, setIsEraseModalOpen] = useState(false);
     const [eraseStep, setEraseStep] = useState<1 | 2>(1);
@@ -427,9 +391,7 @@ export function UserProfileView({
                     <div className="relative shrink-0">
                         <UserAvatar
                             user={liveUser}
-                            className={`w-20 h-20 sm:w-24 sm:h-24 transition-transform hover:scale-105 flex items-center justify-center ${
-                                hasLinkedWca(liveUser) ? 'drop-shadow-md' : 'rounded-2xl shadow-md'
-                            }`}
+                            className="w-20 h-20 sm:w-24 sm:h-24 transition-transform hover:scale-105 flex items-center justify-center rounded-2xl shadow-md"
                             roundedClassName="rounded-2xl"
                         />
                         {isOnline && (
@@ -447,7 +409,7 @@ export function UserProfileView({
                                         title={`Verified WCA Competitor (${liveUser.wcaId || 'Linked'})`}
                                         className="inline-flex items-center align-middle"
                                     >
-                                        <UserAvatar user={liveUser} hasWca={true} className="w-6 h-6 drop-shadow-xs" />
+                                        <WcaBadge user={liveUser} className="w-6 h-6 drop-shadow-xs" />
                                     </span>
                                 )}
                             </h2>
@@ -484,20 +446,8 @@ export function UserProfileView({
                                 </div>
                             )}
 
-                            {/* Share Profile Chip */}
-                            <button
-                                type="button"
-                                onClick={handleShareProfile}
-                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-bg-secondary/60 border border-border/40 text-xs text-text-secondary font-mono cursor-pointer hover:text-accent hover:border-accent/40 transition-colors group"
-                                title="Share Profile Link"
-                            >
-                                <Share2 className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
-                                <span>{copiedShareLink ? 'Link Copied!' : 'Share'}</span>
-                                {copiedShareLink && <Check className="w-3 h-3 text-green-500" />}
-                            </button>
-
                             {/* Follow / Following Button Chip */}
-                            {!isSelf && currentUser && (
+                            {!isSelf && currentUser && !currentUser.isAnonymous && (
                                 isFollowing ? (
                                     <button
                                         onClick={handleFollowToggle}
@@ -523,7 +473,7 @@ export function UserProfileView({
                             )}
 
                             {/* Follows You Chip (Hover turns red and says Block) */}
-                            {isFollower && !isSelf && (
+                            {isFollower && !isSelf && currentUser && !currentUser.isAnonymous && (
                                 <button
                                     onClick={handleBlockToggle}
                                     disabled={blockLoading}
@@ -655,15 +605,23 @@ export function UserProfileView({
                             >
                                 <UserAvatar
                                     user={u}
-                                    className={`w-7 h-7 shrink-0 transition-transform group-hover:scale-105 ${
-                                        hasLinkedWca(u) ? 'drop-shadow-2xs' : 'rounded-lg shadow-2xs'
-                                    }`}
+                                    className="w-7 h-7 rounded-lg shadow-2xs shrink-0 transition-transform group-hover:scale-105"
                                     roundedClassName="rounded-lg"
                                 />
                                 <div className="flex flex-col min-w-0">
-                                    <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors leading-tight">
-                                        {u.username || 'CubingUser'}
-                                    </span>
+                                    <div className="flex items-center gap-1 min-w-0">
+                                        <span className="text-xs font-bold text-text-primary truncate group-hover:text-accent transition-colors leading-tight">
+                                            {u.username || 'CubingUser'}
+                                        </span>
+                                        {hasLinkedWca(u) && (
+                                            <span
+                                                title={`Verified WCA Competitor (${u.wcaId || 'Linked'})`}
+                                                className="inline-flex items-center align-middle shrink-0"
+                                            >
+                                                <WcaBadge user={u} className="w-3 h-3 drop-shadow-2xs" />
+                                            </span>
+                                        )}
+                                    </div>
                                     <span className="text-[10px] text-text-secondary font-mono truncate leading-none">
                                         #{u.shortId || '????'}
                                     </span>

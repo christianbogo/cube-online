@@ -4,9 +4,10 @@ import {
     signOut as firebaseSignOut,
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
-    sendEmailVerification
+    sendEmailVerification,
+    signInAnonymously
 } from 'firebase/auth';
-import { doc, onSnapshot, query, collection, where, getDocs, writeBatch, deleteDoc, updateDoc, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, query, collection, where, getDocs, getDoc, writeBatch, deleteDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import type { UserData, SocialProfile, AuthContextType } from '../types';
 
@@ -32,10 +33,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(!user);
 
     useEffect(() => {
+        let isSigningInAnonymously = false;
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
                 // Listen directly to the user's document at users/{AuthUID}
                 const userDocRef = doc(db, 'users', firebaseUser.uid);
+
+                if (firebaseUser.isAnonymous) {
+                    try {
+                        const docSnap = await getDoc(userDocRef);
+                        if (!docSnap.exists()) {
+                            let shortId = generateShortId();
+                            await setDoc(userDocRef, {
+                                uid: firebaseUser.uid,
+                                shortId: shortId,
+                                email: null,
+                                username: 'GuestCubing',
+                                color: ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'][Math.floor(Math.random() * 10)],
+                                following: [],
+                                starredUsers: [],
+                                blockedUsers: [],
+                                isGhostMode: false,
+                                isAnonymous: true,
+                                customEvents: []
+                            });
+                        }
+                    } catch (e) {
+                        console.error("Failed to init anonymous user doc", e);
+                    }
+                }
 
                 const unsubscribeDoc = onSnapshot(userDocRef, (docSnap) => {
                     if (docSnap.exists()) {
@@ -59,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             pinnedGoalIds: Array.isArray(data.pinnedGoalIds) ? data.pinnedGoalIds : [],
                             customEvents: Array.isArray(data.customEvents) ? data.customEvents : [],
                             logsTableSettings: data.logsTableSettings,
+                            isAnonymous: firebaseUser.isAnonymous,
                         };
                         setUser(userData);
                         localStorage.setItem('cached_user_profile', JSON.stringify(userData));
@@ -72,7 +99,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             } else {
                 setUser(null);
                 localStorage.removeItem('cached_user_profile');
-                setLoading(false);
+                if (!isSigningInAnonymously) {
+                    isSigningInAnonymously = true;
+                    signInAnonymously(auth).catch(err => {
+                        console.error("Failed to sign in anonymously", err);
+                    }).finally(() => {
+                        isSigningInAnonymously = false;
+                    });
+                }
             }
         });
 
@@ -83,7 +117,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (!user?.uid) return;
 
+        let lastPresenceUpdate = 0;
         const updatePresence = async () => {
+            const now = Date.now();
+            if (now - lastPresenceUpdate < 10000) return;
+            lastPresenceUpdate = now;
+
             try {
                 await updateDoc(doc(db, 'users', user.uid), {
                     lastSeenAt: new Date().toISOString(),

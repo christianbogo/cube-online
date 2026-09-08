@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatTime } from '../../utils/formatTime';
 import type { TimerState, LiveUser, SimpleSolve } from '../../types';
-import { UserAvatar } from './UserAvatar';
+import { UserAvatar, WcaBadge } from './UserAvatar';
 import { hasLinkedWca } from '../../utils/wca';
 import { Minimize2 } from 'lucide-react';
 
@@ -80,14 +80,22 @@ export const UserCard = ({ user, onHide, draggable, onDragStart, className = '',
             ${getBorderColor(user.status)}`}
         >
             {/* Header: Avatar + Name + Subtle Hide Button */}
-            <div className="flex items-center justify-between px-2 pt-1.5 pb-0">
-                <div className="flex items-center gap-1.5 overflow-hidden min-w-0 flex-1">
+            <div className="relative flex items-center px-2 pt-1.5 pb-0 min-w-0">
+                <div className={`flex items-center gap-1.5 overflow-hidden min-w-0 flex-1 ${onHide ? 'group-hover:pr-4 transition-all' : ''}`}>
                     <UserAvatar
                         user={user}
-                        className={`w-3.5 h-3.5 flex-shrink-0 ${hasLinkedWca(user) ? 'drop-shadow-2xs' : 'rounded-xs shadow-xs'}`}
+                        className="w-3.5 h-3.5 flex-shrink-0 rounded-xs shadow-xs"
                         roundedClassName="rounded-xs"
                     />
                     <span className="font-semibold text-text-primary truncate text-xs">{user.username}</span>
+                    {hasLinkedWca(user) && (
+                        <span
+                            title={`Verified WCA Competitor (${user.wcaId || 'Linked'})`}
+                            className="inline-flex items-center align-middle shrink-0"
+                        >
+                            <WcaBadge user={user} className="w-3 h-3 drop-shadow-2xs" />
+                        </span>
+                    )}
                 </div>
                 {onHide && (
                     <button
@@ -97,7 +105,7 @@ export const UserCard = ({ user, onHide, draggable, onDragStart, className = '',
                             e.stopPropagation();
                             onHide(user.uid, e);
                         }}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 -mr-1 rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover cursor-pointer"
+                        className="absolute right-1 top-1 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover cursor-pointer"
                         title={`Minimize ${user.username} to chip`}
                         aria-label={`Minimize ${user.username}`}
                     >

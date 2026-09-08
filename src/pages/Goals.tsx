@@ -23,13 +23,15 @@ interface ActivityTooltipData {
     arrowOffset: number;
 }
 
-function ActivitySquares({ userId }: { userId?: string }) {
+function ActivitySquares({ userId, isGuestPreview }: { userId?: string, isGuestPreview?: boolean }) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [tooltipData, setTooltipData] = useState<ActivityTooltipData | null>(null);
     const [dailyData, setDailyData] = useState<DailyVolumeData | null>(() => {
+        if (isGuestPreview) return null;
         return getCachedDailyVolumeSync(userId);
     });
     const [isLoading, setIsLoading] = useState<boolean>(() => {
+        if (isGuestPreview) return false;
         return !getCachedDailyVolumeSync(userId) && !!userId;
     });
 
@@ -38,6 +40,21 @@ function ActivitySquares({ userId }: { userId?: string }) {
     const pastDays = useMemo(() => eachDayOfInterval({ start: subDays(today, 150), end: today }), []);
 
     useEffect(() => {
+        if (isGuestPreview) {
+            const fakeData: DailyVolumeData = { dailySolvesCount: {}, dailySolvesByEvent: {} };
+            pastDays.forEach((d, i) => {
+                const dateStr = format(d, 'yyyy-MM-dd');
+                if (i % 3 === 0 || i % 7 === 0) {
+                    const count = (i % 5) * 15 + (i % 3) * 5 + 10;
+                    fakeData.dailySolvesCount[dateStr] = count;
+                    fakeData.dailySolvesByEvent[dateStr] = { '333': count };
+                }
+            });
+            setDailyData(fakeData);
+            setIsLoading(false);
+            return;
+        }
+
         if (!userId) {
             setDailyData(null);
             setIsLoading(false);
@@ -262,7 +279,34 @@ export default function Goals() {
 
     const [pinNotice, setPinNotice] = useState<string | null>(null);
 
+    const isGuestPreview = user?.isAnonymous;
+
+    const displayGoalsProgress = useMemo(() => {
+        if (!isGuestPreview) return goalsProgress;
+        
+        // Generate filler data for preview
+        return goalsProgress.map((g, i) => {
+            const mockPercent = i % 4 === 0 ? 100 : (i % 3 === 0 ? 60 : (i % 2 === 0 ? 25 : 0));
+            let mockCurrent = (g.targetValue * mockPercent) / 100;
+            return {
+                ...g,
+                currentValue: mockCurrent,
+                percentCompleted: mockPercent,
+                completed: mockPercent === 100,
+                displayCurrent: g.category === 'time' ? `${mockCurrent}s` : String(Math.floor(mockCurrent))
+            };
+        });
+    }, [goalsProgress, isGuestPreview]);
+
+    const displayTotalCompleted = isGuestPreview ? displayGoalsProgress.filter(g => g.completed).length : totalCompletedCount;
+    const displayOverallPercent = isGuestPreview && totalGoalsCount > 0 ? Math.round((displayTotalCompleted / totalGoalsCount) * 100) : overallCompletionPercent;
+
     const handlePinToggle = async (goalId: string) => {
+        if (isGuestPreview) {
+            setPinNotice("Create an account to pin goals.");
+            setTimeout(() => setPinNotice(null), 4000);
+            return;
+        }
         if (!user) {
             navigate('/account', { state: { mode: 'signin' } });
             return;
@@ -281,7 +325,7 @@ export default function Goals() {
 
     // Filter and sort goals
     const filteredGoals = useMemo(() => {
-        const filtered = goalsProgress.filter(goal => {
+        const filtered = displayGoalsProgress.filter(goal => {
             // Category filter
             if (selectedCategory !== 'all' && goal.category !== selectedCategory) {
                 return false;
@@ -299,13 +343,13 @@ export default function Goals() {
         }
 
         return filtered;
-    }, [goalsProgress, selectedCategory, statusFilter]);
+    }, [displayGoalsProgress, selectedCategory, statusFilter]);
 
     // Category progress breakdown
     const categoryStats = useMemo(() => {
         const categories: GoalCategory[] = ['time', 'count', 'streak', 'diversity'];
         return categories.map(cat => {
-            const list = goalsProgress.filter(g => g.category === cat);
+            const list = displayGoalsProgress.filter(g => g.category === cat);
             const comp = list.filter(g => g.completed).length;
             const pct = list.length > 0 ? Math.round((comp / list.length) * 100) : 0;
             return {
@@ -316,7 +360,7 @@ export default function Goals() {
                 percentage: pct
             };
         });
-    }, [goalsProgress]);
+    }, [displayGoalsProgress]);
 
     // Global percentile calculation
     const globalPercentileText = useMemo(() => {
@@ -333,14 +377,14 @@ export default function Goals() {
         let usersWithFewerGoals = 0;
         Object.entries(distribution).forEach(([countStr, userCount]) => {
             const count = parseInt(countStr, 10);
-            if (count < totalCompletedCount) {
+            if (count < displayTotalCompleted) {
                 usersWithFewerGoals += userCount;
             }
         });
 
         const percentile = Math.min(100, Math.max(0, Math.round((usersWithFewerGoals / totalUsers) * 100)));
         return percentile;
-    }, [globalStats, totalCompletedCount]);
+    }, [globalStats, displayTotalCompleted]);
 
     const getCategoryIcon = (cat: GoalCategory) => {
         switch (cat) {
@@ -370,8 +414,27 @@ export default function Goals() {
         <div className="flex-1 flex flex-col min-h-0 bg-bg-primary overflow-y-auto custom-scrollbar select-none">
             <div className="max-w-6xl w-full mx-auto px-1.5 py-2.5 sm:px-3 sm:py-3 md:px-4 md:py-4 flex flex-col gap-5">
 
+                {isGuestPreview && (
+                    <div className="bg-accent/10 border border-accent/20 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in slide-in-from-top-4 duration-500">
+                        <div className="flex items-center gap-3">
+                            <div>
+                                <h2 className="text-sm font-bold text-text-primary">Goals Page Preview</h2>
+                                <p className="text-xs text-text-secondary mt-0.5">
+                                    Sign in to track your real progress and unlock milestones as you solve.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => navigate('/account', { state: { mode: 'signin' } })}
+                            className="w-full sm:w-auto px-4 py-2 bg-accent hover:bg-accent/90 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
+                        >
+                            Sign In
+                        </button>
+                    </div>
+                )}
+
                 {/* ACTIVITY SQUARES */}
-                <ActivitySquares userId={user?.uid} />
+                <ActivitySquares userId={user?.uid} isGuestPreview={isGuestPreview} />
 
                 {/* PERSONAL RECORDS TABLE */}
                 <RecordTable activeEvents={activeEvents} />
@@ -389,10 +452,10 @@ export default function Goals() {
                             </div>
                             <div className="text-right">
                                 <span className="font-mono text-xl font-bold text-text-primary">
-                                    {totalCompletedCount} <span className="text-xs text-text-secondary font-normal">/ {totalGoalsCount}</span>
+                                    {displayTotalCompleted} <span className="text-xs text-text-secondary font-normal">/ {totalGoalsCount}</span>
                                 </span>
                                 <div className="text-[11px] text-accent font-semibold">
-                                    {overallCompletionPercent}% Completed
+                                    {displayOverallPercent}% Completed
                                 </div>
                             </div>
                         </div>
@@ -402,12 +465,12 @@ export default function Goals() {
                             <div className="w-full h-2.5 bg-bg-secondary rounded-full overflow-hidden border border-border/50">
                                 <div
                                     className="h-full bg-accent transition-all duration-500 rounded-full"
-                                    style={{ width: `${Math.max(1, overallCompletionPercent)}%` }}
+                                    style={{ width: `${Math.max(1, displayOverallPercent)}%` }}
                                 />
                             </div>
                             <div className="flex items-center justify-between text-[11px] text-text-secondary">
-                                <span>{totalCompletedCount} completed</span>
-                                <span>{totalGoalsCount - totalCompletedCount} remaining</span>
+                                <span>{displayTotalCompleted} completed</span>
+                                <span>{totalGoalsCount - displayTotalCompleted} remaining</span>
                             </div>
                         </div>
 
@@ -569,7 +632,7 @@ export default function Goals() {
 
                 {/* GOALS GRID */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-8">
-                    {user && goalsProgress.length === 0 ? (
+                    {user && displayGoalsProgress.length === 0 ? (
                         Array.from({ length: 6 }).map((_, idx) => (
                             <div
                                 key={idx}

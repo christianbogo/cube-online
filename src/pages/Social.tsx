@@ -6,7 +6,7 @@ import { db } from '../lib/firebase';
 import type { UserData } from '../types';
 import { SocialLeaderboardCard } from '../components/social/SocialLeaderboardCard';
 import { UserProfileView } from '../components/social/UserProfileView';
-import { UserAvatar } from '../components/ui/UserAvatar';
+import { UserAvatar, WcaBadge } from '../components/ui/UserAvatar';
 import { hasLinkedWca } from '../utils/wca';
 import { Search, Loader2 } from 'lucide-react';
 
@@ -54,6 +54,7 @@ export default function Social() {
             const usersList: UserData[] = [];
             snapshot.docs.forEach(docSnap => {
                 const data = docSnap.data();
+                if (data.isAnonymous) return;
                 usersList.push({
                     uid: docSnap.id,
                     shortId: data.shortId,
@@ -521,9 +522,7 @@ export default function Social() {
                                                     {/* Avatar */}
                                                     <UserAvatar
                                                         user={userItem}
-                                                        className={`w-8 h-8 shrink-0 transition-transform group-hover:scale-105 flex items-center justify-center ${
-                                                            hasLinkedWca(userItem) ? 'drop-shadow-2xs' : 'rounded-lg shadow-2xs'
-                                                        }`}
+                                                        className="w-8 h-8 rounded-lg shadow-2xs shrink-0 transition-transform group-hover:scale-105 flex items-center justify-center"
                                                         roundedClassName="rounded-lg"
                                                     />
 
@@ -538,7 +537,7 @@ export default function Social() {
                                                                     title={`Verified WCA Competitor (${userItem.wcaId || 'Linked'})`}
                                                                     className="inline-flex items-center align-middle shrink-0"
                                                                 >
-                                                                    <UserAvatar user={userItem} hasWca={true} className="w-3.5 h-3.5 drop-shadow-2xs" />
+                                                                    <WcaBadge user={userItem} className="w-3.5 h-3.5 drop-shadow-2xs" />
                                                                 </span>
                                                             )}
                                                         </div>

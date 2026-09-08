@@ -4,7 +4,7 @@ import { TriangleAlert, Search, Loader2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { UserAvatar } from '../ui/UserAvatar';
+import { UserAvatar, WcaBadge } from '../ui/UserAvatar';
 import { hasLinkedWca } from '../../utils/wca';
 
 const getRelativeLastSeen = (isoString?: string) => {
@@ -205,9 +205,7 @@ export default function CubingFriendsTab() {
                     <div className="relative shrink-0">
                         <UserAvatar
                             user={targetUser}
-                            className={`w-10 h-10 sm:w-11 sm:h-11 transition-transform group-hover:scale-105 flex items-center justify-center ${
-                                hasLinkedWca(targetUser) ? 'drop-shadow-sm' : 'rounded-xl shadow-sm'
-                            }`}
+                            className="w-10 h-10 sm:w-11 sm:h-11 transition-transform group-hover:scale-105 flex items-center justify-center rounded-xl shadow-sm"
                             roundedClassName="rounded-xl"
                         />
                         {isOnline && (
@@ -225,7 +223,7 @@ export default function CubingFriendsTab() {
                                     title={`Verified WCA Competitor (${targetUser.wcaId || 'Linked'})`}
                                     className="inline-flex items-center align-middle"
                                 >
-                                    <UserAvatar user={targetUser} hasWca={true} className="w-4 h-4 drop-shadow-2xs" />
+                                    <WcaBadge user={targetUser} className="w-4 h-4 drop-shadow-2xs" />
                                 </span>
                             )}
                         </div>

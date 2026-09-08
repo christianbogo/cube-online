@@ -27,6 +27,13 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   return children;
 };
 
+const GuestLockedRoute = ({ children }: { children: ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user || user.isAnonymous) return <Navigate to="/" replace />;
+  return children;
+};
+
 const ArenaRoute = () => {
   return <Navigate to="/" replace />;
 };
@@ -46,8 +53,10 @@ function App() {
                         <Route path="/" element={<Layout />}>
                           <Route index element={<Cube />} />
                           <Route path="arena" element={<ArenaRoute />} />
-                          <Route path="logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
-                          <Route path="logs/:type/:id" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
+                          <Route path="arena/*" element={<ArenaRoute />} />
+                          <Route path=":roomId" element={<ArenaRoute />} />
+                          <Route path="logs" element={<GuestLockedRoute><Logs /></GuestLockedRoute>} />
+                          <Route path="logs/:type/:id" element={<GuestLockedRoute><Logs /></GuestLockedRoute>} />
                           <Route path="data" element={<Navigate to="/logs" replace />} />
                           <Route path="data/*" element={<Navigate to="/logs" replace />} />
                           <Route path="stats" element={<Navigate to="/logs" replace />} />
@@ -57,8 +66,8 @@ function App() {
                           <Route path="social" element={<Social />} />
                           <Route path="social/:userId" element={<Social />} />
                           <Route path="account" element={<Account />} />
-                          <Route path="keybinds" element={<Keybinds />} />
-                          <Route path="dev" element={<ProtectedRoute><Dev /></ProtectedRoute>} />
+                          <Route path="keybinds" element={<GuestLockedRoute><Keybinds /></GuestLockedRoute>} />
+                          <Route path="dev" element={<GuestLockedRoute><Dev /></GuestLockedRoute>} />
                           <Route path="privacy" element={<Privacy />} />
                           <Route path="info" element={<Info />} />
                           <Route path="callback" element={<WCACallback />} />

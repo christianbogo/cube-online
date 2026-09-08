@@ -82,7 +82,7 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
     const location = useLocation();
     const navigate = useNavigate();
     const isMobile = useIsMobile();
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const { solves } = useSolves();
 
     const [hasUnseenGoals, setHasUnseenGoals] = useState<boolean>(() => {
@@ -198,9 +198,11 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
 
     // Subscribe to userStats
     useEffect(() => {
-        if (!user) {
-            setUserStats(null);
-            userStatsLoadedRef.current = false;
+        if (!user || authLoading) {
+            if (!authLoading) {
+                setUserStats(null);
+                userStatsLoadedRef.current = false;
+            }
             return;
         }
         const statsRef = doc(db, 'users', user.uid, 'stats', 'overview');
@@ -213,15 +215,15 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
             }
         });
         return () => unsubscribe();
-    }, [user]);
+    }, [user, authLoading]);
 
     const [streakStats, setStreakStats] = useState<StreaksMap | null>(() => {
         return getCachedStreaksSync(user?.uid);
     });
 
     useEffect(() => {
-        if (!user) {
-            setStreakStats(null);
+        if (!user || authLoading) {
+            if (!authLoading) setStreakStats(null);
             return;
         }
 
@@ -258,7 +260,7 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
             isMounted = false;
             window.removeEventListener(STREAKS_CACHE_EXPIRED_EVENT, handleExpired);
         };
-    }, [user?.uid]);
+    }, [user?.uid, authLoading]);
 
     // Compute user goals progress from solves, user, and keybinds
     const userSolves = useMemo(() => {

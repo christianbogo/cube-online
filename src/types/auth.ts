@@ -45,6 +45,7 @@ export interface UserData {
     pinnedGoalIds?: string[];
     customEvents?: CustomEvent[];
     logsTableSettings?: LogsTableSettings;
+    isAnonymous?: boolean;
 }
 
 export interface AuthContextType {

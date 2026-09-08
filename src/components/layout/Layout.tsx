@@ -5,6 +5,7 @@ import { rtdb } from '../../lib/firebase';
 import Topbar from './Topbar';
 import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
+import ArenaSidebar from './ArenaSidebar';
 import LogsSidebar from './LogsSidebar';
 import { useSolves } from '../../contexts/SolvesContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -73,6 +74,9 @@ export default function Layout() {
 
     // Toggle States
     const [dataCollapsed, setDataCollapsed] = useState(false);
+
+    const knownPrefixes = ['/', '/arena', '/logs', '/social', '/account', '/keybinds', '/goals', '/dev', '/privacy', '/info', '/records', '/data', '/stats', '/callback'];
+    const isRoomPage = !knownPrefixes.some(p => location.pathname === p || (p !== '/' && location.pathname.startsWith(p + '/')));
 
     // Persistence Effects
     useEffect(() => localStorage.setItem('sidebar_left_width', leftWidth.toString()), [leftWidth]);
@@ -311,7 +315,7 @@ export default function Layout() {
 
                 {/* Main Content */}
                 <main className="flex-1 flex flex-col relative bg-bg-primary min-w-0 overflow-hidden">
-                    <div className={`flex-1 w-full ${(location.pathname.startsWith('/logs') || location.pathname === '/account' || location.pathname === '/') ? (location.pathname === '/' ? (isMobile ? 'overflow-hidden p-0 flex flex-col h-full' : 'overflow-hidden pt-1.5 px-2 pb-1.5 flex flex-col') : 'overflow-hidden p-0 flex flex-col') : 'p-2 sm:p-3 overflow-y-auto custom-scrollbar'}`}>
+                    <div className={`flex-1 w-full ${(location.pathname.startsWith('/logs') || location.pathname === '/account' || location.pathname === '/' || location.pathname.startsWith('/arena') || isRoomPage) ? (location.pathname === '/' ? (isMobile ? 'overflow-hidden p-0 flex flex-col h-full' : 'overflow-hidden pt-1.5 px-2 pb-1.5 flex flex-col') : 'overflow-hidden p-0 flex flex-col') : 'p-2 sm:p-3 overflow-y-auto custom-scrollbar'}`}>
                         <Outlet />
                     </div>
                     {(!location.pathname.startsWith('/logs') && location.pathname !== '/account' && !isMobileCubePage) && (
@@ -332,12 +336,16 @@ export default function Layout() {
                 </main>
 
                 {/* Right Sidebar */}
-                {!['/account', '/logs', '/keybinds', '/goals', '/social', '/dev', '/privacy', '/info'].some(p => location.pathname.startsWith(p)) && (
+                {!['/account', '/logs', '/keybinds', '/dev', '/privacy', '/info'].some(p => location.pathname.startsWith(p)) && (
                     <div style={{ width: rightWidth }} className="hidden md:flex flex-shrink-0 relative flex-col backdrop-blur-sm will-change-[width] border-l border-border z-20">
                         <div className="absolute top-0 left-[-5px] w-2.5 h-full cursor-col-resize z-50 group flex justify-center" onMouseDown={startResizingRight}>
                             <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
                         </div>
-                        <RightSidebar collapsed={isRightCollapsed} onToggleCollapse={toggleRightSidebar} />
+                        {isRoomPage ? (
+                            <ArenaSidebar collapsed={isRightCollapsed} onToggleCollapse={toggleRightSidebar} />
+                        ) : (
+                            <RightSidebar collapsed={isRightCollapsed} onToggleCollapse={toggleRightSidebar} />
+                        )}
                     </div>
                 )}
             </div>

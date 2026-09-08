@@ -1,17 +1,33 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useConfirm } from '../../contexts/ConfirmationContext';
 import { Logo } from '../ui/Logo';
-import { UserAvatar } from '../ui/UserAvatar';
+import { UserAvatar, WcaBadge } from '../ui/UserAvatar';
+import { hasLinkedWca } from '../../utils/wca';
 import { SlidersHorizontal, Info } from 'lucide-react';
 import TimerSettingsModal from '../timer/TimerSettingsModal';
 import { NotificationBell } from '../notifications';
 
 export default function Topbar() {
     const { user } = useAuth();
+    const { confirm } = useConfirm();
     const navigate = useNavigate();
     const location = useLocation();
     const [isTimerSettingsOpen, setIsTimerSettingsOpen] = useState(false);
+
+    const knownPrefixes = ['/', '/arena', '/logs', '/social', '/account', '/keybinds', '/goals', '/dev', '/privacy', '/info', '/records', '/data', '/stats', '/callback'];
+    const isRoomPage = !knownPrefixes.some(p => location.pathname === p || (p !== '/' && location.pathname.startsWith(p + '/')));
+    const isArenaOrRoom = location.pathname === '/arena' || isRoomPage;
+
+    const handleArenaLeavingNavigation = async (targetPath: string, state?: any) => {
+        if (isRoomPage) {
+            const ok = await confirm('Are you sure you want to leave the Arena?', { confirmText: 'Leave', isDanger: true });
+            if (!ok) return false;
+        }
+        navigate(targetPath, state ? { state } : undefined);
+        return true;
+    };
 
     return (
         <>
@@ -20,7 +36,15 @@ export default function Topbar() {
                 <div className="flex items-center gap-3">
                     <Link
                         to="/"
-                        onClick={(e) => (e.currentTarget as HTMLElement).blur()}
+                        onClick={async (e) => {
+                            (e.currentTarget as HTMLElement).blur();
+                            if (isRoomPage) {
+                                e.preventDefault();
+                                const ok = await confirm('Are you sure you want to leave the Arena?', { confirmText: 'Leave', isDanger: true });
+                                if (!ok) return;
+                                navigate('/');
+                            }
+                        }}
                         className="flex items-center gap-3 hover:opacity-80 transition-opacity outline-none focus:outline-none"
                     >
                         <Logo className="w-6 h-6" />
@@ -48,7 +72,15 @@ export default function Topbar() {
             <div className="flex items-center gap-0.5 sm:gap-1">
                 <Link
                     to="/info"
-                    onClick={(e) => (e.currentTarget as HTMLElement).blur()}
+                    onClick={async (e) => {
+                        (e.currentTarget as HTMLElement).blur();
+                        if (isRoomPage) {
+                            e.preventDefault();
+                            const ok = await confirm('Are you sure you want to leave the Arena?', { confirmText: 'Leave', isDanger: true });
+                            if (!ok) return;
+                            navigate('/info');
+                        }
+                    }}
                     className={`relative p-2 rounded-lg transition-colors outline-none focus:outline-none flex items-center justify-center ${
                         location.pathname === '/info'
                             ? 'bg-bg-tertiary text-text-primary'
@@ -60,15 +92,33 @@ export default function Topbar() {
                     <Info className="w-5 h-5" />
                 </Link>
                 <NotificationBell />
-                {user ? (
+                {user && !user.isAnonymous ? (
                     <Link
                         to="/account"
-                        onClick={(e) => (e.currentTarget as HTMLElement).blur()}
+                        onClick={async (e) => {
+                            (e.currentTarget as HTMLElement).blur();
+                            if (isRoomPage) {
+                                e.preventDefault();
+                                const ok = await confirm('Are you sure you want to leave the Arena?', { confirmText: 'Leave', isDanger: true });
+                                if (!ok) return;
+                                navigate('/account');
+                            }
+                        }}
                         className="flex items-center gap-2 py-1 pl-2 pr-1 rounded-lg hover:bg-bg-hover transition-colors border border-transparent hover:border-border/50 outline-none focus:outline-none"
                     >
-                        <span className="font-medium text-sm text-text-primary hidden sm:block">
-                            {user.username || 'CubingUser'}
-                        </span>
+                        <div className="items-center gap-1.5 hidden sm:flex">
+                            <span className="font-medium text-sm text-text-primary">
+                                {user.username || 'CubingUser'}
+                            </span>
+                            {hasLinkedWca(user) && (
+                                <span
+                                    title={`Verified WCA Competitor (${user.wcaId || 'Linked'})`}
+                                    className="inline-flex items-center align-middle shrink-0"
+                                >
+                                    <WcaBadge user={user} className="w-3.5 h-3.5 drop-shadow-2xs" />
+                                </span>
+                            )}
+                        </div>
                         <UserAvatar
                             user={user}
                             className="w-8 h-8 rounded-lg shadow-sm flex items-center justify-center font-bold text-white text-xs"
@@ -78,18 +128,18 @@ export default function Topbar() {
                 ) : (
                     <div className="flex items-center gap-1.5">
                         <button
-                            onClick={(e) => {
+                            onClick={async (e) => {
                                 (e.currentTarget as HTMLElement).blur();
-                                navigate('/account', { state: { mode: 'signin' } });
+                                await handleArenaLeavingNavigation('/account', { mode: 'signin' });
                             }}
                             className="text-sm font-medium text-text-secondary hover:text-text-primary transition-colors px-2 py-1 cursor-pointer outline-none focus:outline-none"
                         >
                             Sign In
                         </button>
                         <button
-                            onClick={(e) => {
+                            onClick={async (e) => {
                                 (e.currentTarget as HTMLElement).blur();
-                                navigate('/account', { state: { mode: 'signup' } });
+                                await handleArenaLeavingNavigation('/account', { mode: 'signup' });
                             }}
                             className="text-sm font-medium bg-text-primary text-bg-primary hover:opacity-90 transition-opacity px-3 py-1 rounded-md cursor-pointer outline-none focus:outline-none"
                         >

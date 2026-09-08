@@ -1,10 +1,10 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useIsMobile } from '../utils/useIsMobile';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { Table } from '../components';
 import {
     AlertTriangle, X, Trash, Check,
-    ChevronLeft, ChevronRight, Copy
+    ChevronLeft, ChevronRight, Copy, Database
 } from 'lucide-react';
 import { type Solve, useSolves } from '../contexts/SolvesContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -127,21 +127,62 @@ export default function Logs() {
     }, [updateSettings]);
 
     const [paginatedSolves, setPaginatedSolves] = useState<Solve[]>([]);
-    const [totalCount, setTotalCount] = useState<number>(0);
+    const [totalCount, setTotalCount] = useState<number | null>(null);
     const [anomalies, setAnomalies] = useState<Solve[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [approvedAnomalyIds, setApprovedAnomalyIds] = useState<Set<string>>(new Set());
 
+    const pageCacheRef = useRef<Map<number, { solves: Solve[]; anomalies: Solve[] }>>(new Map());
+    const totalCountRef = useRef<number | null>(totalCount);
+    totalCountRef.current = totalCount;
+
     const grouping = searchParams.get('grouping') || 'sessions';
     const selectedStr = searchParams.get('selected');
     const selectedKeys = useMemo(() => selectedStr ? selectedStr.split(',').filter(Boolean) : [], [selectedStr]);
+
+    // Reset page and clear cache when filters or sorting change
+    const prevFilterRef = useRef({ scrambleType: settings.scrambleType, grouping, selectedStr });
+    if (
+        prevFilterRef.current.scrambleType !== settings.scrambleType ||
+        prevFilterRef.current.grouping !== grouping ||
+        prevFilterRef.current.selectedStr !== selectedStr
+    ) {
+        prevFilterRef.current = { scrambleType: settings.scrambleType, grouping, selectedStr };
+        pageCacheRef.current.clear();
+        setTotalCount(null);
+        if (currentPage !== 1) {
+            setCurrentPage(1);
+        }
+    }
+
+    const prevSortPageRef = useRef({ rowsPerPage, sortKey: sortConfig.key, sortDirection: sortConfig.direction });
+    if (
+        prevSortPageRef.current.rowsPerPage !== rowsPerPage ||
+        prevSortPageRef.current.sortKey !== sortConfig.key ||
+        prevSortPageRef.current.sortDirection !== sortConfig.direction
+    ) {
+        prevSortPageRef.current = { rowsPerPage, sortKey: sortConfig.key, sortDirection: sortConfig.direction };
+        pageCacheRef.current.clear();
+        if (currentPage !== 1) {
+            setCurrentPage(1);
+        }
+    }
 
     useEffect(() => {
         if (!user) {
             setPaginatedSolves([]);
             setTotalCount(0);
             setAnomalies([]);
+            setLoading(false);
+            return;
+        }
+
+        // If this page is already cached in memory, use it immediately
+        if (pageCacheRef.current.has(currentPage)) {
+            const cached = pageCacheRef.current.get(currentPage)!;
+            setPaginatedSolves(cached.solves);
+            setAnomalies(cached.anomalies);
             setLoading(false);
             return;
         }
@@ -159,13 +200,19 @@ export default function Logs() {
                     page: currentPage,
                     pageSize: rowsPerPage,
                     sortKey: sortConfig.key,
-                    sortDirection: sortConfig.direction
+                    sortDirection: sortConfig.direction,
+                    knownTotalCount: totalCountRef.current !== null ? totalCountRef.current : undefined
                 });
                 const data = res.data as { solves: Solve[]; totalCount: number; anomalies: Solve[] };
                 if (isMounted) {
-                    setPaginatedSolves(data.solves || []);
-                    setTotalCount(data.totalCount || 0);
-                    setAnomalies(data.anomalies || []);
+                    const fetchedSolves = data.solves || [];
+                    const fetchedAnomalies = data.anomalies || [];
+                    const fetchedTotal = typeof data.totalCount === 'number' ? data.totalCount : (totalCountRef.current ?? 0);
+
+                    pageCacheRef.current.set(currentPage, { solves: fetchedSolves, anomalies: fetchedAnomalies });
+                    setPaginatedSolves(fetchedSolves);
+                    setTotalCount(fetchedTotal);
+                    setAnomalies(fetchedAnomalies);
                 }
             } catch (err) {
                 console.warn('Failed to fetch paginated solves:', err);
@@ -176,14 +223,15 @@ export default function Logs() {
 
         fetchSolves();
         return () => { isMounted = false; };
-    }, [user?.uid, settings.scrambleType, grouping, selectedStr, currentPage, rowsPerPage, sortConfig.key, sortConfig.direction]);
+    }, [user, settings.scrambleType, grouping, selectedKeys, selectedStr, currentPage, rowsPerPage, sortConfig.key, sortConfig.direction]);
 
-    // Reset page to 1 when event, grouping, selection, rowsPerPage, or sort changes
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [settings.scrambleType, grouping, selectedStr, rowsPerPage, sortConfig.key, sortConfig.direction]);
+    const safeTotalCount = totalCount ?? 0;
+    const totalPages = Math.max(1, Math.ceil(safeTotalCount / rowsPerPage));
+    const isInitialLoading = loading && totalCount === null;
 
-    const totalPages = Math.max(1, Math.ceil(totalCount / rowsPerPage));
+    if (totalCount !== null && totalCount > 0 && currentPage > totalPages) {
+        setCurrentPage(totalPages);
+    }
 
     const anomalySolves = useMemo(() => {
         return anomalies.filter(s => !s.anomalyApproved && !approvedAnomalyIds.has(s.id));
@@ -215,12 +263,14 @@ export default function Logs() {
         e.stopPropagation();
         if (action === 'delete') {
             await deleteSolve(solve.id);
+            pageCacheRef.current.clear();
             setPaginatedSolves(prev => prev.filter(s => s.id !== solve.id));
             setAnomalies(prev => prev.filter(s => s.id !== solve.id));
-            setTotalCount(prev => Math.max(0, prev - 1));
+            setTotalCount(prev => (prev !== null ? Math.max(0, prev - 1) : 0));
             if (selectedSolveId === solve.id) setSelectedSolveId(null);
         } else if (action === 'approve') {
             await updateSolve(solve.id, { anomalyApproved: true });
+            pageCacheRef.current.clear();
             setApprovedAnomalyIds(prev => new Set(prev).add(solve.id));
             setAnomalies(prev => prev.filter(s => s.id !== solve.id));
         }
@@ -239,12 +289,28 @@ export default function Logs() {
     }, [paginatedSolves, anomalySolves, selectedSolveId]);
 
     // -- Render --
-    if (!user) {
-        return <div className="p-8 text-center text-text-secondary">Please sign in to view data analysis.</div>;
+    if (!user || user.isAnonymous) {
+        return (
+            <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
+                <div className="w-16 h-16 bg-bg-secondary rounded-2xl flex items-center justify-center mb-4 border border-border/80 shadow-sm">
+                    <Database className="w-8 h-8 text-text-secondary" />
+                </div>
+                <h2 className="text-xl font-bold text-text-primary mb-2 tracking-tight">Data Logs Locked</h2>
+                <p className="text-sm text-text-secondary max-w-sm mb-6 leading-relaxed">
+                    Sign in to your account to unlock comprehensive solve logs, advanced analytics, and anomaly detection.
+                </p>
+                <Link
+                    to="/account"
+                    state={{ mode: 'signin' }}
+                    className="px-6 py-2.5 bg-accent hover:bg-accent/90 text-white rounded-xl font-semibold shadow-sm transition-all"
+                >
+                    Sign In
+                </Link>
+            </div>
+        );
     }
 
-    const isSkeleton = loading;
-    const showEmptyState = !isSkeleton && totalCount === 0;
+    const showEmptyState = !isInitialLoading && !loading && safeTotalCount === 0;
 
     return (
         <div className="w-full h-full flex flex-col overflow-hidden relative">
@@ -314,22 +380,23 @@ export default function Logs() {
                         {/* Table Controls: Showing count (left), Pagination (center), Show X dropdown (right) */}
                         <div className="flex items-center justify-between gap-2">
                             <div className="flex-1 text-xs text-text-secondary">
-                                {isSkeleton ? (
+                                {isInitialLoading ? (
                                     <span className="inline-block h-3.5 w-32 bg-text-secondary/20 rounded animate-pulse align-middle" />
                                 ) : (
-                                    `Showing ${totalCount === 0 ? 0 : `${(currentPage - 1) * rowsPerPage + 1} to ${Math.min(currentPage * rowsPerPage, totalCount)}`} of ${totalCount} solves`
+                                    `Showing ${safeTotalCount === 0 ? 0 : `${(currentPage - 1) * rowsPerPage + 1} to ${Math.min(currentPage * rowsPerPage, safeTotalCount)}`} of ${safeTotalCount} solves`
                                 )}
                             </div>
                             <div className="flex items-center justify-center gap-2">
                                 <button
                                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                    disabled={currentPage === 1 || isSkeleton}
-                                    className="p-1.5 rounded bg-bg-secondary text-text-secondary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    disabled={currentPage === 1 || isInitialLoading}
+                                    className="p-1.5 rounded bg-bg-secondary text-text-secondary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                    aria-label="Previous page"
                                 >
                                     <ChevronLeft className="w-4 h-4" />
                                 </button>
                                 <div className="text-xs font-medium text-text-primary select-none whitespace-nowrap">
-                                    {isSkeleton ? (
+                                    {isInitialLoading ? (
                                         <span className="inline-block h-3.5 w-16 bg-text-secondary/20 rounded animate-pulse align-middle" />
                                     ) : (
                                         `Page ${currentPage} of ${totalPages}`
@@ -337,8 +404,9 @@ export default function Logs() {
                                 </div>
                                 <button
                                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                    disabled={currentPage === totalPages || isSkeleton}
-                                    className="p-1.5 rounded bg-bg-secondary text-text-secondary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    disabled={currentPage === totalPages || isInitialLoading}
+                                    className="p-1.5 rounded bg-bg-secondary text-text-secondary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                    aria-label="Next page"
                                 >
                                     <ChevronRight className="w-4 h-4" />
                                 </button>
@@ -346,10 +414,10 @@ export default function Logs() {
                             <div className="flex-1 flex items-center justify-end gap-2">
                                 <span className="text-xs text-text-secondary">Show:</span>
                                 <select 
-                                    className="bg-bg-secondary text-text-primary text-xs border border-border rounded px-2 py-1 outline-none focus:border-accent"
+                                    className="bg-bg-secondary text-text-primary text-xs border border-border rounded px-2 py-1 outline-none focus:border-accent cursor-pointer"
                                     value={rowsPerPage}
                                     onChange={(e) => handleRowsPerPageChange(Number(e.target.value))}
-                                    disabled={isSkeleton}
+                                    disabled={isInitialLoading}
                                 >
                                     <option value={10}>10</option>
                                     <option value={25}>25</option>
@@ -365,7 +433,7 @@ export default function Logs() {
                                     Complete solves in this event or select a different session/filter in the sidebar.
                                 </p>
                             </div>
-                        ) : isSkeleton ? (
+                        ) : loading ? (
                             <div className="w-full overflow-x-auto border border-border rounded-lg">
                                 <table className="w-full text-left text-sm border-collapse table-fixed select-none">
                                     <thead className="bg-bg-secondary border border-border">
@@ -419,7 +487,7 @@ export default function Logs() {
                                         accessor: (s: Solve, i: number) => (
                                             <div className="flex items-center justify-center w-full relative">
                                                 <span className="group-hover:opacity-0 transition-opacity">
-                                                    {totalCount - ((currentPage - 1) * rowsPerPage + i)}
+                                                    {safeTotalCount - ((currentPage - 1) * rowsPerPage + i)}
                                                 </span>
                                                 <button 
                                                     onClick={(e) => handleAction(e, 'delete', s)}
