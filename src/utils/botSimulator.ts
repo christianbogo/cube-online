@@ -71,7 +71,7 @@ export function generateBotSolve(config: BotConfig): SimulatedBotSolve {
 
   // 1. Generate Gaussian solve time (clamped to realistic minimum)
   const rawSample = sampleGaussian(averageTimeMs, stdDevMs);
-  const targetSolveTimeMs = Math.max(800, Math.round(rawSample));
+  const targetSolveTimeMs = Math.max(500, Math.round(rawSample));
 
   // 2. Check for penalties
   let penalty: PenaltyType = PenaltyTypeConstants.NONE;
@@ -82,16 +82,10 @@ export function generateBotSolve(config: BotConfig): SimulatedBotSolve {
     penalty = PenaltyTypeConstants.PLUS_2;
   }
 
-  // 3. Check for false start
-  let falseStartDeltaMs = 0;
-  if (Math.random() < probs.falseStartRate) {
-    falseStartDeltaMs = Math.round(Math.random() * probs.maxFalseStartDeltaMs + 40);
-  }
-
   return {
     targetSolveTimeMs,
     penalty,
-    falseStartDeltaMs,
+    falseStartDeltaMs: 0,
   };
 }
 

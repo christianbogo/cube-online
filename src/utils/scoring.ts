@@ -84,79 +84,37 @@ export function calculateGameScores(
 
   const results: Record<string, CalculatedSolveResult> = {};
 
-  if (settings.scoringMode === 'RANK_BASED') {
-    // Rank-based scoring:
-    // 1st place receives N points (+ firstPlaceBonus)
-    // 2nd receives N-1, down to 1 point.
-    // DNF receives 0 points.
-    validSolves.forEach((entry, idx) => {
-      const rank = idx + 1;
-      let points = totalActive - idx;
-      if (rank === 1 && totalActive > 0) {
-        points += settings.firstPlaceBonus;
-      }
-      results[entry.playerId] = {
-        playerId: entry.playerId,
-        rawTimeMs: entry.rawTimeMs,
-        finalTimeMs: entry.finalTimeMs,
-        penalty: entry.penalty,
-        falseStartDeltaMs: entry.falseStartDeltaMs,
-        isDNF: false,
-        rank,
-        score: points,
-      };
-    });
+  // Rank-based scoring:
+  // 1st place receives N points.
+  // 2nd receives N-1, down to 1 point.
+  // DNF receives 0 points.
+  validSolves.forEach((entry, idx) => {
+    const rank = idx + 1;
+    let points = totalActive - idx;
+    results[entry.playerId] = {
+      playerId: entry.playerId,
+      rawTimeMs: entry.rawTimeMs,
+      finalTimeMs: entry.finalTimeMs,
+      penalty: entry.penalty,
+      falseStartDeltaMs: entry.falseStartDeltaMs,
+      isDNF: false,
+      rank,
+      score: points,
+    };
+  });
 
-    dnfSolves.forEach((entry) => {
-      results[entry.playerId] = {
-        playerId: entry.playerId,
-        rawTimeMs: entry.rawTimeMs,
-        finalTimeMs: Infinity,
-        penalty: entry.penalty === 'NONE' && !entry.hasSolve ? 'DNF' : entry.penalty,
-        falseStartDeltaMs: entry.falseStartDeltaMs,
-        isDNF: true,
-        rank: totalActive,
-        score: 0,
-      };
-    });
-  } else {
-    // Differential scoring:
-    // Fastest solver sets the baseline (Score = 0).
-    // Subsequent players' scores = (Player Time - Fastest Time in seconds) * 100
-    // Low score wins.
-    // DNF yields differentialDNFScore (e.g. 5000 pts).
-    const fastestTimeMs = validSolves.length > 0 ? validSolves[0].finalTimeMs : 0;
-
-    validSolves.forEach((entry, idx) => {
-      const rank = idx + 1;
-      const deltaSeconds = (entry.finalTimeMs - fastestTimeMs) / 1000;
-      const score = Math.round(deltaSeconds * 100);
-
-      results[entry.playerId] = {
-        playerId: entry.playerId,
-        rawTimeMs: entry.rawTimeMs,
-        finalTimeMs: entry.finalTimeMs,
-        penalty: entry.penalty,
-        falseStartDeltaMs: entry.falseStartDeltaMs,
-        isDNF: false,
-        rank,
-        score,
-      };
-    });
-
-    dnfSolves.forEach((entry) => {
-      results[entry.playerId] = {
-        playerId: entry.playerId,
-        rawTimeMs: entry.rawTimeMs,
-        finalTimeMs: Infinity,
-        penalty: entry.penalty === 'NONE' && !entry.hasSolve ? 'DNF' : entry.penalty,
-        falseStartDeltaMs: entry.falseStartDeltaMs,
-        isDNF: true,
-        rank: totalActive,
-        score: settings.differentialDNFScore ?? 300,
-      };
-    });
-  }
+  dnfSolves.forEach((entry) => {
+    results[entry.playerId] = {
+      playerId: entry.playerId,
+      rawTimeMs: entry.rawTimeMs,
+      finalTimeMs: Infinity,
+      penalty: entry.penalty === 'NONE' && !entry.hasSolve ? 'DNF' : entry.penalty,
+      falseStartDeltaMs: entry.falseStartDeltaMs,
+      isDNF: true,
+      rank: totalActive,
+      score: 0,
+    };
+  });
 
   return results;
 }

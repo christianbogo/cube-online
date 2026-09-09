@@ -6,7 +6,6 @@ export type TournamentMode = (typeof TournamentMode)[keyof typeof TournamentMode
 
 export const ScoringMode = {
   RANK_BASED: 'RANK_BASED',
-  DIFFERENTIAL: 'DIFFERENTIAL',
 } as const;
 export type ScoringMode = (typeof ScoringMode)[keyof typeof ScoringMode];
 
@@ -69,6 +68,8 @@ export const ActivityType = {
   SET_WON: 'SET_WON',
   MATCH_WON: 'MATCH_WON',
   RECORD_BROKEN: 'RECORD_BROKEN',
+  HIGHLIGHT_SET: 'HIGHLIGHT_SET',
+  HIGHLIGHT_GAME: 'HIGHLIGHT_GAME',
   CHAT_MESSAGE: 'CHAT_MESSAGE',
 } as const;
 export type ActivityType = (typeof ActivityType)[keyof typeof ActivityType];
@@ -76,6 +77,7 @@ export type ActivityType = (typeof ActivityType)[keyof typeof ActivityType];
 export const RecordType = {
   MATCH_RECORD: 'MATCH_RECORD',
   SET_RECORD: 'SET_RECORD',
+  GAME_RECORD: 'GAME_RECORD',
 } as const;
 export type RecordType = (typeof RecordType)[keyof typeof RecordType];
 
@@ -126,6 +128,7 @@ export interface MatchPlaceResult {
   penalty: PenaltyType;
   isDNF: boolean;
   score?: number;
+  falseStartDeltaMs?: number;
 }
 
 export interface Round {
@@ -165,14 +168,11 @@ export interface TournamentSettings {
   targetSets: number;
   targetGames: number;
   rankPointsFloor: number;
-  firstPlaceBonus: number;
-  differentialGapThreshold: number;
   falseStartMultiplier: number;
   soundEnabled: boolean;
   soundVolume?: number;
   scrambleEvent: string;
   lockInDurationMs?: number;
-  differentialDNFScore?: number;
 }
 
 export interface ActivityFeedItem {
@@ -190,6 +190,29 @@ export interface ActivityFeedItem {
   recordType?: RecordType;
   message: string;
   timestamp: number;
+}
+
+export type FeedItemType = 'CHAT' | 'HIGHLIGHT_SET' | 'HIGHLIGHT_GAME' | 'HIGHLIGHT_MATCH' | 'GAME_WON' | 'SET_WON' | 'MATCH_WON';
+
+export interface FeedItem {
+  id: string;
+  type: FeedItemType;
+  senderId?: string;
+  senderName?: string;
+  senderColor?: string;
+  senderRole?: 'host' | 'player' | 'spectator';
+  playerId?: string;
+  playerName?: string;
+  playerColor?: string;
+  team?: TeamId;
+  timeMs?: number;
+  formattedTime?: string;
+  roundIndex?: number;
+  gameIndex?: number;
+  setIndex?: number;
+  message: string;
+  timestamp: number;
+  likes?: Record<string, boolean>;
 }
 
 export const DEFAULT_HOME_ROW_KEYS: string[] = ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';'];

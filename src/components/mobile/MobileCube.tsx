@@ -485,7 +485,7 @@ export default function MobileCube() {
                     className="w-full flex-shrink-0 px-2 pt-0.5 pb-2 flex flex-col items-center z-20 animate-in slide-in-from-top-2 fade-in duration-200"
                     onPointerDown={(e) => e.stopPropagation()}
                 >
-                    <div className="w-full flex items-center overflow-x-auto min-h-[88px] py-1 px-4 no-scrollbar mask-fade-edges-cards touch-pan-x">
+                    <div className="w-full flex items-center overflow-x-auto min-h-[104px] sm:min-h-[120px] py-1 px-4 no-scrollbar mask-fade-edges-cards touch-pan-x">
                         <div className="flex items-center gap-3 min-w-max mx-auto px-4 justify-center">
                             {favoriteUsers.map(u => (
                                 <UserCard

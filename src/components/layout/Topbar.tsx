@@ -1,32 +1,25 @@
 import { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { useConfirm } from '../../contexts/ConfirmationContext';
+import { useRoomLeave } from '@/hooks/useRoomLeave';
 import { Logo } from '../ui/Logo';
 import { UserAvatar, WcaBadge } from '../ui/UserAvatar';
 import { hasLinkedWca } from '../../utils/wca';
-import { SlidersHorizontal, Info } from 'lucide-react';
+import { SlidersHorizontal, Info, Volume2, VolumeX } from 'lucide-react';
 import TimerSettingsModal from '../timer/TimerSettingsModal';
 import { NotificationBell } from '../notifications';
+import { useSoundStore } from '@/store/soundStore';
 
 export default function Topbar() {
     const { user } = useAuth();
-    const { confirm } = useConfirm();
-    const navigate = useNavigate();
     const location = useLocation();
     const [isTimerSettingsOpen, setIsTimerSettingsOpen] = useState(false);
+    const { isMuted, toggleMute } = useSoundStore();
 
-    const knownPrefixes = ['/', '/arena', '/logs', '/social', '/account', '/keybinds', '/goals', '/dev', '/privacy', '/info', '/records', '/data', '/stats', '/callback'];
-    const isRoomPage = !knownPrefixes.some(p => location.pathname === p || (p !== '/' && location.pathname.startsWith(p + '/')));
-    const isArenaOrRoom = location.pathname === '/arena' || isRoomPage;
+    const { isRoomPage, confirmLeaveRoom } = useRoomLeave();
 
-    const handleArenaLeavingNavigation = async (targetPath: string, state?: any) => {
-        if (isRoomPage) {
-            const ok = await confirm('Are you sure you want to leave the Arena?', { confirmText: 'Leave', isDanger: true });
-            if (!ok) return false;
-        }
-        navigate(targetPath, state ? { state } : undefined);
-        return true;
+    const handleArenaLeavingNavigation = async (targetPath: string, state?: unknown) => {
+        return confirmLeaveRoom(targetPath, state);
     };
 
     return (
@@ -40,9 +33,7 @@ export default function Topbar() {
                             (e.currentTarget as HTMLElement).blur();
                             if (isRoomPage) {
                                 e.preventDefault();
-                                const ok = await confirm('Are you sure you want to leave the Arena?', { confirmText: 'Leave', isDanger: true });
-                                if (!ok) return;
-                                navigate('/');
+                                await confirmLeaveRoom('/');
                             }
                         }}
                         className="flex items-center gap-3 hover:opacity-80 transition-opacity outline-none focus:outline-none"
@@ -76,9 +67,7 @@ export default function Topbar() {
                         (e.currentTarget as HTMLElement).blur();
                         if (isRoomPage) {
                             e.preventDefault();
-                            const ok = await confirm('Are you sure you want to leave the Arena?', { confirmText: 'Leave', isDanger: true });
-                            if (!ok) return;
-                            navigate('/info');
+                            await confirmLeaveRoom('/info');
                         }
                     }}
                     className={`relative p-2 rounded-lg transition-colors outline-none focus:outline-none flex items-center justify-center ${
@@ -91,6 +80,17 @@ export default function Topbar() {
                 >
                     <Info className="w-5 h-5" />
                 </Link>
+                <button
+                    onClick={(e) => {
+                        (e.currentTarget as HTMLElement).blur();
+                        toggleMute();
+                    }}
+                    className="relative p-2 rounded-lg transition-colors outline-none focus:outline-none flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-hover cursor-pointer"
+                    title={isMuted ? "Unmute Sound" : "Mute Sound"}
+                    aria-label={isMuted ? "Unmute Sound" : "Mute Sound"}
+                >
+                    {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                </button>
                 <NotificationBell />
                 {user && !user.isAnonymous ? (
                     <Link
@@ -99,9 +99,7 @@ export default function Topbar() {
                             (e.currentTarget as HTMLElement).blur();
                             if (isRoomPage) {
                                 e.preventDefault();
-                                const ok = await confirm('Are you sure you want to leave the Arena?', { confirmText: 'Leave', isDanger: true });
-                                if (!ok) return;
-                                navigate('/account');
+                                await confirmLeaveRoom('/account');
                             }
                         }}
                         className="flex items-center gap-2 py-1 pl-2 pr-1 rounded-lg hover:bg-bg-hover transition-colors border border-transparent hover:border-border/50 outline-none focus:outline-none"

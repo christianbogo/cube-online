@@ -76,24 +76,24 @@ export const UserCard = ({ user, onHide, draggable, onDragStart, className = '',
             }}
             onClick={handleCardClick}
             title={`View ${user.username}'s profile`}
-            className={`flex-shrink-0 w-28 h-20 bg-surface-elevation-1 rounded-xl border flex flex-col relative group hover:shadow-lg hover:z-10 transition-all outline-none focus:outline-none cursor-pointer ${className}
+            className={`flex-shrink-0 w-36 sm:w-40 h-24 sm:h-28 bg-surface-elevation-1 rounded-xl border flex flex-col relative group hover:shadow-lg hover:z-10 transition-all outline-none focus:outline-none cursor-pointer ${className}
             ${getBorderColor(user.status)}`}
         >
             {/* Header: Avatar + Name + Subtle Hide Button */}
-            <div className="relative flex items-center px-2 pt-1.5 pb-0 min-w-0">
-                <div className={`flex items-center gap-1.5 overflow-hidden min-w-0 flex-1 ${onHide ? 'group-hover:pr-4 transition-all' : ''}`}>
+            <div className="relative flex items-center px-2.5 pt-2 pb-0 min-w-0">
+                <div className={`flex items-center gap-1.5 overflow-hidden min-w-0 flex-1 ${onHide ? 'group-hover:pr-5 transition-all' : ''}`}>
                     <UserAvatar
                         user={user}
-                        className="w-3.5 h-3.5 flex-shrink-0 rounded-xs shadow-xs"
+                        className="w-4 h-4 sm:w-4.5 sm:h-4.5 flex-shrink-0 rounded-xs shadow-xs"
                         roundedClassName="rounded-xs"
                     />
-                    <span className="font-semibold text-text-primary truncate text-xs">{user.username}</span>
+                    <span className="font-semibold text-text-primary truncate text-xs sm:text-[13px]">{user.username}</span>
                     {hasLinkedWca(user) && (
                         <span
                             title={`Verified WCA Competitor (${user.wcaId || 'Linked'})`}
                             className="inline-flex items-center align-middle shrink-0"
                         >
-                            <WcaBadge user={user} className="w-3 h-3 drop-shadow-2xs" />
+                            <WcaBadge user={user} className="w-3.5 h-3.5 drop-shadow-2xs" />
                         </span>
                     )}
                 </div>
@@ -105,35 +105,35 @@ export const UserCard = ({ user, onHide, draggable, onDragStart, className = '',
                             e.stopPropagation();
                             onHide(user.uid, e);
                         }}
-                        className="absolute right-1 top-1 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover cursor-pointer"
+                        className="absolute right-1.5 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-text-secondary hover:text-text-primary hover:bg-bg-hover cursor-pointer"
                         title={`Minimize ${user.username} to chip`}
                         aria-label={`Minimize ${user.username}`}
                     >
-                        <Minimize2 className="w-3 h-3" />
+                        <Minimize2 className="w-3.5 h-3.5" />
                     </button>
                 )}
             </div>
 
             {/* Solves Area */}
-            <div className="flex-1 flex flex-col items-center justify-center px-1 pb-1.5 pt-0 gap-0.5">
+            <div className="flex-1 flex flex-col items-center justify-center px-1 pb-2 pt-0.5 gap-0.5 sm:gap-1">
                 {/* Main (Recent) Solve */}
                 {recent ? (
-                    <div className={`${formatTimeStr(recent).length > 5 ? 'text-xl' : 'text-2xl'} font-mono font-medium tracking-tight leading-tight
+                    <div className={`${formatTimeStr(recent).length > 5 ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'} font-mono font-medium tracking-tight leading-tight
                         ${recent.penalty === 'DNF' ? 'text-red-500' : 'text-text-primary'}
                     `}>
                         {formatTimeStr(recent)}
                     </div>
                 ) : (
-                    <div className="text-xl text-text-secondary/20 font-mono">--.--</div>
+                    <div className="text-xl sm:text-2xl text-text-secondary/20 font-mono">--.--</div>
                 )}
 
                 {/* History (2 solves after most recent, no background color) */}
-                <div className="flex gap-1.5 leading-none">
+                <div className="flex gap-2 leading-none">
                     {[0, 1].map(i => {
                         const s = history[i];
-                        if (!s) return <div key={i} className="text-[10px] font-mono text-text-secondary/25 px-0.5">--.--</div>;
+                        if (!s) return <div key={i} className="text-[11px] sm:text-xs font-mono text-text-secondary/25 px-0.5">--.--</div>;
                         return (
-                            <div key={i} className={`text-[10px] font-mono px-0.5
+                            <div key={i} className={`text-[11px] sm:text-xs font-mono px-0.5
                                 ${s.penalty === 'DNF' ? 'text-red-500' : 'text-text-secondary'}
                             `}>
                                 {formatTimeStr(s)}

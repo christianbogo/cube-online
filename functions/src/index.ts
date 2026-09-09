@@ -327,6 +327,38 @@ export const cleanupStalePresence = functions.pubsub.schedule('every 10 minutes'
     return null;
 });
 
+export const cleanupStaleRooms = functions.pubsub.schedule('every 5 minutes').onRun(async (context) => {
+    const rtdb = admin.database();
+    const roomsRef = rtdb.ref('rooms');
+    const snapshot = await roomsRef.once('value');
+    const data = snapshot.val();
+    if (!data) return null;
+
+    const now = Date.now();
+    const updates: Record<string, null> = {};
+
+    for (const [roomId, room] of Object.entries(data as Record<string, any>)) {
+        const players = room?.players ? Object.keys(room.players) : [];
+        const ageMs = now - (room?.createdAt || 0);
+        const heartbeatAgeMs = room?.hostHeartbeat ? (now - room.hostHeartbeat) : null;
+        // Stale if room is older than 30s with no host heartbeat, or if host heartbeat hasn't updated in > 45s
+        const isStale = (ageMs > 30000 && heartbeatAgeMs === null) || (heartbeatAgeMs !== null && heartbeatAgeMs > 45000);
+        const isMissingHost = Boolean(room?.host && !room?.players?.[room.host]);
+
+        if (players.length === 0 || isMissingHost || isStale) {
+            updates[roomId] = null;
+        }
+    }
+
+    const count = Object.keys(updates).length;
+    if (count > 0) {
+        await roomsRef.update(updates);
+        console.log(`Cleaned up ${count} stale arena rooms:`, Object.keys(updates));
+    }
+
+    return null;
+});
+
 export const purgeStalePresenceManual = functions.https.onRequest(async (req, res) => {
     const rtdb = admin.database();
     const presenceRef = rtdb.ref('presence');
@@ -506,6 +538,6 @@ export const getRecordsData = functions.runWith({ timeoutSeconds: 540, memory: '
 
     return result.filter((r: any) => (r.count ?? 0) > 0 || r.single !== null);
 });
-export { getEventSolves } from './getEventSolves';
 export { getPaginatedSolves, getLogsSidebarData, getLogsBottomStats } from './solvesLogs';
 export { getDailyVolumeStats, getGoalStreaks } from './goalsFunctions';
+export { exportUserData, deleteUserAccountFn, deleteAllSolvesFn, deleteImportedSolvesFn, adminDeleteUserAccountFn } from './bulkOperations';

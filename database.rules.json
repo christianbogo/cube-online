@@ -30,6 +30,12 @@
         "recentSolves": {
           ".validate": true
         },
+        "hasWca": {
+          ".validate": "newData.isBoolean()"
+        },
+        "wcaId": {
+          ".validate": "newData.val() == null || newData.isString()"
+        },
         "$other": {
           ".validate": false
         }

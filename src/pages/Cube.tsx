@@ -755,7 +755,7 @@ function DesktopCube() {
 
                     {/* Open Cards Row */}
                     {topCards.length > 0 && (
-                        <div className="w-full flex items-center overflow-x-auto min-h-[112px] py-4 px-4 no-scrollbar mask-fade-edges-cards">
+                        <div className="w-full flex items-center overflow-x-auto min-h-[128px] sm:min-h-[144px] py-4 px-4 no-scrollbar mask-fade-edges-cards">
                             <div className="flex items-center gap-3 min-w-max mx-auto px-4 justify-center">
                                 {topCards.map(u => (
                                     <UserCard
@@ -950,7 +950,7 @@ function DesktopCube() {
                 >
                     {/* Bottom Cards Row (in Popular mode) */}
                     {bottomCards.length > 0 && (
-                        <div className="w-full flex items-center overflow-x-auto min-h-[112px] py-4 px-4 no-scrollbar mask-fade-edges-cards mb-1">
+                        <div className="w-full flex items-center overflow-x-auto min-h-[128px] sm:min-h-[144px] py-4 px-4 no-scrollbar mask-fade-edges-cards mb-1">
                             <div className="flex items-center gap-3 min-w-max mx-auto px-4 justify-center">
                                 {bottomCards.map(u => (
                                     <UserCard

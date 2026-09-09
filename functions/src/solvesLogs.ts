@@ -60,41 +60,45 @@ export const getPaginatedSolves = functions.runWith({ timeoutSeconds: 60, memory
 
     // 1. Fast Path: No grouping filters and sorting by date
     if (selectedKeys.length === 0 && sortKey === 'date') {
-        const baseQuery = db.collection('solves')
-            .where('userId', '==', userId)
-            .where('scrambleType', '==', scrambleType);
+        try {
+            const baseQuery = db.collection('solves')
+                .where('userId', '==', userId)
+                .where('scrambleType', '==', scrambleType);
 
-        let totalCount: number;
-        if (typeof data?.knownTotalCount === 'number' && data.knownTotalCount >= 0) {
-            totalCount = data.knownTotalCount;
-        } else {
-            const countSnap = await baseQuery.count().get();
-            totalCount = countSnap.data().count;
-        }
+            let totalCount: number;
+            if (typeof data?.knownTotalCount === 'number' && data.knownTotalCount >= 0) {
+                totalCount = data.knownTotalCount;
+            } else {
+                const countSnap = await baseQuery.count().get();
+                totalCount = countSnap.data().count;
+            }
 
-        const pageSnap = await baseQuery
-            .orderBy('date', sortDirection)
-            .offset((page - 1) * pageSize)
-            .limit(pageSize)
-            .get();
+            const pageSnap = await baseQuery
+                .orderBy('date', sortDirection)
+                .offset((page - 1) * pageSize)
+                .limit(pageSize)
+                .get();
 
-        const solves = pageSnap.docs.map(d => ({ id: d.id, ...d.data() } as Solve));
+            const solves = pageSnap.docs.map(d => ({ id: d.id, ...d.data() } as Solve));
 
-        // Anomalies for the page
-        const anomalies: any[] = [];
-        if (solves.length >= 10) {
-            const validTimes = solves.filter(s => s.penalty !== 'DNF' && s.inspectionPenalty !== 'DNF').map(s => s.time);
-            solves.forEach(s => {
-                if (!s.anomalyApproved) {
-                    const res = detectOutliers(s.time, validTimes);
-                    if (res.isOutlier) {
-                        anomalies.push({ ...s, anomalyReason: res.reason });
+            // Anomalies for the page
+            const anomalies: any[] = [];
+            if (solves.length >= 10) {
+                const validTimes = solves.filter(s => s.penalty !== 'DNF' && s.inspectionPenalty !== 'DNF').map(s => s.time);
+                solves.forEach(s => {
+                    if (!s.anomalyApproved) {
+                        const res = detectOutliers(s.time, validTimes);
+                        if (res.isOutlier) {
+                            anomalies.push({ ...s, anomalyReason: res.reason });
+                        }
                     }
-                }
-            });
-        }
+                });
+            }
 
-        return { solves, totalCount, anomalies };
+            return { solves, totalCount, anomalies };
+        } catch (fastPathErr) {
+            console.warn('Fast path query failed, falling back to full query:', fastPathErr);
+        }
     }
 
     // 2. Filtered or custom-sorted path
@@ -159,8 +163,8 @@ export const getPaginatedSolves = functions.runWith({ timeoutSeconds: 60, memory
             valA = getEffTime(a);
             valB = getEffTime(b);
         } else {
-            valA = new Date(a.date).getTime();
-            valB = new Date(b.date).getTime();
+            valA = new Date(a.date).getTime() || 0;
+            valB = new Date(b.date).getTime() || 0;
         }
 
         if (valA < valB) return sortDirection === 'asc' ? -1 : 1;

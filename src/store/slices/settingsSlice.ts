@@ -8,8 +8,6 @@ const DEFAULT_SETTINGS: TournamentSettings = {
   targetSets: 1,
   targetGames: 1,
   rankPointsFloor: 15,
-  firstPlaceBonus: 2,
-  differentialGapThreshold: 500,
   falseStartMultiplier: 5,
   soundEnabled: true,
   scrambleEvent: '333',

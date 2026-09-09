@@ -24,96 +24,68 @@ interface NotificationsContextType {
 
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = 'cube-online-notifications';
-
 export function NotificationsProvider({ children }: { children: ReactNode }) {
     const { user } = useAuth();
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     
-    const prevUserRef = useRef<{ uid: string } | null | undefined>(undefined);
+    // Only registered, authenticated accounts sync notifications
+    const accountUid = user && !user.isAnonymous ? user.uid : null;
 
-    // Handle Auth state changes (Sign In / Sign Out)
+    // Synchronize notifications with the current account's Firestore document
     useEffect(() => {
-        const isFirstRun = prevUserRef.current === undefined;
-        const prevUser = prevUserRef.current;
-        const currentUser = user;
+        // Purge any legacy localStorage cache
+        try {
+            localStorage.removeItem('cube-online-notifications');
+        } catch {
+            // Ignore storage errors
+        }
 
-        if (isFirstRun) {
-            // Initial load: if not signed in, load from local storage
-            if (!currentUser) {
-                const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-                if (stored) {
-                    try {
-                        setNotifications(JSON.parse(stored));
-                    } catch (e) {
-                        console.error("Failed to parse local notifications", e);
+        // When logged out or in guest/anonymous mode, keep notifications empty
+        if (!accountUid) {
+            setNotifications([]);
+            return;
+        }
+
+        // Reset notifications immediately on account switch while loading
+        setNotifications([]);
+
+        const notificationsRef = doc(db, 'users', accountUid, 'notifications', 'data');
+        const unsubscribe = onSnapshot(
+            notificationsRef,
+            (snap) => {
+                if (snap.exists()) {
+                    const data = snap.data();
+                    if (Array.isArray(data.notifications)) {
+                        setNotifications(data.notifications);
+                    } else {
+                        setNotifications([]);
                     }
                 } else {
                     setNotifications([]);
                 }
+            },
+            (error) => {
+                console.error("Error listening to account notifications:", error);
             }
-        } else {
-            const prevUid = prevUser?.uid;
-            const currentUid = currentUser?.uid;
+        );
 
-            if (prevUid !== currentUid) {
-                // Check if this was a new account sign up
-                const justSignedUpUid = sessionStorage.getItem('just_signed_up_uid');
-                if (currentUid && justSignedUpUid === currentUid) {
-                    // Keep existing notifications, they will be merged to Firestore in the other effect
-                    sessionStorage.removeItem('just_signed_up_uid');
-                } else {
-                    // Regular Sign In or Sign Out: wipe local notifications
-                    setNotifications([]);
-                    localStorage.removeItem(LOCAL_STORAGE_KEY);
-                }
-            }
-        }
+        return () => {
+            unsubscribe();
+        };
+    }, [accountUid]);
 
-        prevUserRef.current = currentUser;
-    }, [user]);
+    const persistNotifications = useCallback((newNotifications: AppNotification[]) => {
+        if (!accountUid) return;
 
-    // Load from firestore
-    useEffect(() => {
-        if (!user) return;
-        const notificationsRef = doc(db, 'users', user.uid, 'notifications', 'data');
-        const unsubscribe = onSnapshot(notificationsRef, (snap) => {
-            if (snap.exists()) {
-                const data = snap.data();
-                if (Array.isArray(data.notifications)) {
-                    setNotifications(data.notifications);
-                    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data.notifications));
-                }
-            } else {
-                // Merge local storage to firestore if it doesn't exist
-                const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-                let localNotes: AppNotification[] = [];
-                if (stored) {
-                    try {
-                        localNotes = JSON.parse(stored);
-                    } catch (e) {}
-                }
-                setDoc(notificationsRef, { notifications: localNotes }, { merge: true });
-                setNotifications(localNotes);
-            }
+        const notificationsRef = doc(db, 'users', accountUid, 'notifications', 'data');
+        setDoc(notificationsRef, { notifications: newNotifications }, { merge: true }).catch(err => {
+            console.error("Error syncing notifications to Firestore:", err);
         });
-
-        return () => unsubscribe();
-    }, [user]);
-
-    const syncNotifications = useCallback((newNotifications: AppNotification[]) => {
-        setNotifications(newNotifications);
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newNotifications));
-        
-        if (user) {
-            const notificationsRef = doc(db, 'users', user.uid, 'notifications', 'data');
-            setDoc(notificationsRef, { notifications: newNotifications }, { merge: true }).catch(err => {
-                console.error("Error syncing notifications to Firestore:", err);
-            });
-        }
-    }, [user]);
+    }, [accountUid]);
 
     const upsertNotification = useCallback((notif: Omit<AppNotification, 'timestamp' | 'status'> & Partial<AppNotification>) => {
+        if (!accountUid) return;
+
         setNotifications(prev => {
             const existingIndex = prev.findIndex(n => n.id === notif.id);
             const newNotif: AppNotification = {
@@ -135,36 +107,40 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
             
             // Sort by timestamp desc
             updated.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-            
-            // Schedule sync
-            setTimeout(() => syncNotifications(updated), 0);
+            persistNotifications(updated);
             return updated;
         });
-    }, [syncNotifications]);
+    }, [accountUid, persistNotifications]);
 
     const removeNotification = useCallback((id: string) => {
+        if (!accountUid) return;
+
         setNotifications(prev => {
             const updated = prev.filter(n => n.id !== id);
-            setTimeout(() => syncNotifications(updated), 0);
+            persistNotifications(updated);
             return updated;
         });
-    }, [syncNotifications]);
+    }, [accountUid, persistNotifications]);
 
     const markAsRead = useCallback((id: string) => {
+        if (!accountUid) return;
+
         setNotifications(prev => {
             const updated = prev.map(n => n.id === id ? { ...n, status: 'read' as const } : n);
-            setTimeout(() => syncNotifications(updated), 0);
+            persistNotifications(updated);
             return updated;
         });
-    }, [syncNotifications]);
+    }, [accountUid, persistNotifications]);
 
     const archiveNotification = useCallback((id: string) => {
+        if (!accountUid) return;
+
         setNotifications(prev => {
             const updated = prev.map(n => n.id === id ? { ...n, status: 'archived' as const } : n);
-            setTimeout(() => syncNotifications(updated), 0);
+            persistNotifications(updated);
             return updated;
         });
-    }, [syncNotifications]);
+    }, [accountUid, persistNotifications]);
 
     const unreadCount = notifications.filter(n => n.status === 'unread').length;
 

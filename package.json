@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@radix-ui/react-slot": "^1.2.4",
     "@types/recharts": "^1.8.29",
     "cubing": "^0.61.0",
     "date-fns": "^4.1.0",

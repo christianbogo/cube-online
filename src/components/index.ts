@@ -12,17 +12,15 @@ export { default as Table } from './ui/Table';
 export type { Column, TableProps } from './ui/Table';
 export { default as Tabs } from './ui/Tabs';
 export type { Tab, TabsProps } from './ui/Tabs';
-export { default as Toast } from './ui/Toast';
-export type { ToastProps, ToastAction } from './ui/Toast';
 export { UserCard } from './ui/UserCard';
 export type { UserCardProps } from './ui/UserCard';
-export { UserAvatar, default as UserAvatarDefault } from './ui/UserAvatar';
+export { UserAvatar } from './ui/UserAvatar';
 export type { UserAvatarProps } from './ui/UserAvatar';
-export { WcaBadge, default as WcaBadgeDefault } from './ui/WcaBadge';
+export { WcaBadge } from './ui/WcaBadge';
 export type { WcaBadgeProps } from './ui/WcaBadge';
 export { Logo } from './ui/Logo';
 export type { LogoProps } from './ui/Logo';
-export { default as KeybindTooltip, resetKeybindTooltips, setTooltipsDisabled, isTooltipsDisabled, KEYBIND_TOOLTIPS, type TooltipItem } from './ui/KeybindTooltip';
+export { default as KeybindTooltip } from './ui/KeybindTooltip';
 export { ThemeProvider, useTheme } from './ui/ThemeProvider';
 export type { Theme, ThemeProviderProps, ThemeProviderState } from './ui/ThemeProvider';
 export { default as TimerSettingsModal } from './timer/TimerSettingsModal';
@@ -30,13 +28,8 @@ export { default as CreateEventModal } from './timer/CreateEventModal';
 
 // Account Components
 export { default as CubingFriendsTab } from './account/CubingFriendsTab';
-export { default as ProfileStatsTab } from './account/ProfileStatsTab';
 export { default as SocialsTab } from './account/SocialsTab';
 export { default as ImportCsTimerModal } from './account/ImportCsTimerModal';
-
-// Dev Components
-export { default as FeedbackTab } from './dev/FeedbackTab';
-export { default as ChangelogTab } from './dev/ChangelogTab';
 
 // Records Components
 export { default as RecordTable } from './records/RecordTable';

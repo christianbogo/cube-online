@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Swords, X, Check, Loader2, Volume2, VolumeX, Settings, Bot, ChevronRight, Trash } from 'lucide-react';
+import { Plus, Swords, X, Check, Loader2, Volume2, VolumeX, Settings, Bot, ChevronRight, Trash, Pencil } from 'lucide-react';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirm } from '@/contexts/ConfirmationContext';
@@ -13,6 +13,7 @@ import type { LiveUser } from '@/types';
 import { useTimerStore } from '@/store/timerStore';
 import { useTournamentStore } from '@/store/tournamentStore';
 import { useKeyboardController } from '@/hooks/useKeyboardController';
+import { useFinishSoundController } from '@/hooks/useFinishSoundController';
 import { useFirebaseHost, useFirebaseGuest } from '@/hooks/useFirebaseMatch';
 import { formatTime } from '@/utils/formatters';
 import { ScoringMode } from '@/types/tournament';
@@ -87,93 +88,213 @@ function DragRaceOverlay() {
   );
 }
 
-function LiveTimer({ playerId }: { playerId: string }) {
-  const [displayTime, setDisplayTime] = useState('0.00');
-  const [isHeld, setIsHeld] = useState(false);
-  
-  useEffect(() => {
-    let frame: number;
-    const updateTime = () => {
-      const state = useTimerStore.getState();
-      const p = state.players[playerId];
-      if (!p) return;
-      
-      if (p.isFinished) {
-        setDisplayTime(formatTime(p.finishTimeMs || p.rawTimeMs || 0));
-        return;
-      }
-      if (p.isRunning && state.raceStartTime) {
-        const elapsed = Date.now() - state.raceStartTime;
-        setDisplayTime(formatTime(elapsed));
-        frame = requestAnimationFrame(updateTime);
-        return;
-      }
-      setDisplayTime('0.00');
-    };
-    
-    frame = requestAnimationFrame(updateTime);
-    
-    const unsub = useTimerStore.subscribe((state, prevState) => {
-      const p = state.players[playerId];
-      const prevP = prevState.players[playerId];
-      
-      setIsHeld(!!p?.isHeld);
 
-      if (p?.isRunning && !prevP?.isRunning) {
-        frame = requestAnimationFrame(updateTime);
-      } else if (p?.isFinished && !prevP?.isFinished) {
-        cancelAnimationFrame(frame);
-        setDisplayTime(formatTime(p.finishTimeMs || p.rawTimeMs || 0));
-      } else if (!p?.isRunning && !p?.isFinished) {
-        setDisplayTime('0.00');
-      }
-    });
-    
-    setIsHeld(!!useTimerStore.getState().players[playerId]?.isHeld);
-    
-    return () => {
-      cancelAnimationFrame(frame);
-      unsub();
-    };
-  }, [playerId]);
-
-  if (isHeld) {
-    return <div className="font-mono text-xl font-bold tracking-wider text-green-400">READY</div>;
-  }
-  return <div className="font-mono text-xl font-bold tracking-wider">{displayTime}</div>;
+function AddBotCard({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="relative group rounded-xl border border-dashed border-border/80 hover:border-accent/60 bg-bg-primary/50 hover:bg-bg-hover px-3 py-2 flex items-center gap-2.5 transition-all w-full max-w-[280px] shrink-0 cursor-pointer text-left focus:outline-none"
+    >
+      <div className="w-6 h-6 rounded-full border border-dashed border-border/80 group-hover:border-accent/80 flex items-center justify-center shrink-0 transition-colors">
+        <Plus className="w-3.5 h-3.5 text-text-secondary group-hover:text-accent transition-colors" />
+      </div>
+      <span className="text-sm font-bold text-text-secondary group-hover:text-accent transition-colors">
+        Add bot
+      </span>
+    </button>
+  );
 }
 
-function PlayerRow({ p, isHost }: { p: Player, isHost: boolean }) {
+function PlayerRow({
+  p,
+  isHost,
+  onDelete,
+  onUpdateBot,
+}: {
+  p: Player;
+  isHost: boolean;
+  onDelete?: (id: string) => void;
+  onUpdateBot?: (id: string, newName: string, avgMs: number, stdDevMs: number) => void;
+}) {
+  const isBot = p.role === 'BOT';
   const [isHeld, setIsHeld] = useState(false);
-  const [isWaiting, setIsWaiting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+
+  const parts = p.name.includes('-') ? p.name.split('-') : [];
+  const defaultAvgStr = parts[0] || (p.botConfig ? (p.botConfig.averageTimeMs / 1000).toFixed(2) : '15.00');
+  const defaultStdStr = parts[1] || (p.botConfig ? (p.botConfig.stdDevMs / 1000).toString() : '1.0');
+
+  const [avgInput, setAvgInput] = useState(defaultAvgStr);
+  const [stdInput, setStdInput] = useState(defaultStdStr);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
+    if (p.name.includes('-')) {
+      const [a, s] = p.name.split('-');
+      setAvgInput(a);
+      setStdInput(s);
+    }
+  }, [p.name]);
+
+  useEffect(() => {
+    if (isBot) return; // Bots never ready up
     const unsub = useTimerStore.subscribe((state) => {
       setIsHeld(!!state.players[p.id]?.isHeld);
-      setIsWaiting(state.raceState === 'WAITING_FOR_ALL');
     });
     const state = useTimerStore.getState();
     setIsHeld(!!state.players[p.id]?.isHeld);
-    setIsWaiting(state.raceState === 'WAITING_FOR_ALL');
     return unsub;
-  }, [p.id]);
+  }, [p.id, isBot]);
 
-  const fading = isWaiting && !isHeld;
-  const glowing = isHeld;
+  const handleSave = () => {
+    const cleanAvg = avgInput.trim();
+    const cleanStd = stdInput.trim();
+    const avgNum = Number(cleanAvg);
+    const stdNum = Number(cleanStd);
+
+    // Double check: supported finite positive numbers
+    const isAvgValid = cleanAvg !== '' && !isNaN(avgNum) && isFinite(avgNum) && avgNum > 0;
+    const isStdValid = cleanStd !== '' && !isNaN(stdNum) && isFinite(stdNum) && stdNum >= 0;
+
+    if (!isAvgValid || !isStdValid) {
+      setError(true);
+      return;
+    }
+
+    setError(false);
+    const newName = `${cleanAvg}-${cleanStd}`;
+    const avgMs = Math.round(avgNum * 1000);
+    const stdMs = Math.round(stdNum * 1000);
+
+    onUpdateBot?.(p.id, newName, avgMs, stdMs);
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    if (p.name.includes('-')) {
+      const [a, s] = p.name.split('-');
+      setAvgInput(a);
+      setStdInput(s);
+    } else {
+      setAvgInput(defaultAvgStr);
+      setStdInput(defaultStdStr);
+    }
+    setError(false);
+    setIsEditing(false);
+  };
 
   return (
-    <div 
-      draggable={isHost}
-      onDragStart={isHost ? (e) => {
+    <div
+      draggable={isHost && !isBot && !isEditing}
+      onDragStart={isHost && !isBot ? (e) => {
         e.dataTransfer.setData('text/plain', p.id);
       } : undefined}
-      className={`relative group bg-bg-primary rounded-xl border p-2 flex justify-between items-center transition-all w-full max-w-[280px] shrink-0 ${fading ? 'opacity-50' : ''} ${glowing ? 'border-green-400 shadow-[0_0_10px_rgba(74,222,128,0.3)]' : 'border-border/80'} ${isHost ? 'cursor-grab active:cursor-grabbing hover:border-accent/50' : ''}`}
+      onClick={isHost && isBot && !isEditing ? () => setIsEditing(true) : undefined}
+      className={`relative group rounded-xl border px-3 py-2 flex items-center gap-2.5 transition-colors w-full max-w-[280px] shrink-0 ${
+        !isBot && isHeld
+          ? 'bg-zinc-200 dark:bg-zinc-700 border-border'
+          : 'bg-bg-primary border-border/80'
+      } ${isHost && !isBot ? 'cursor-grab active:cursor-grabbing hover:border-accent/50' : ''} ${
+        isHost && isBot && !isEditing ? 'cursor-pointer hover:border-accent/40' : ''
+      }`}
     >
-      <div className="flex items-center gap-2">
+      {isBot ? (
+        <div
+          className="w-6 h-6 rounded-full shadow-sm shrink-0"
+          style={{ backgroundColor: p.color === '#18181b' ? 'var(--profile-black, #2d333b)' : (p.color || '#64748b') }}
+        />
+      ) : (
         <div className="w-6 h-6 rounded-lg shadow-sm shrink-0" style={{ backgroundColor: p.color }} />
-        <span className="text-sm font-bold text-text-primary">{p.name}</span>
-      </div>
-      <LiveTimer playerId={p.id} />
+      )}
+
+      {isEditing ? (
+        <div className="flex items-center gap-1 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="text"
+            value={avgInput}
+            onChange={(e) => { setAvgInput(e.target.value); setError(false); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSave();
+              if (e.key === 'Escape') handleCancel();
+            }}
+            placeholder="Avg"
+            title="Average solve time (seconds)"
+            className={`w-14 px-1.5 py-0.5 text-xs font-mono font-bold bg-bg-secondary border rounded text-text-primary focus:outline-none focus:ring-1 focus:ring-accent ${
+              error ? 'border-red-500' : 'border-border'
+            }`}
+            autoFocus
+          />
+          <span className="text-text-secondary text-xs font-bold shrink-0">-</span>
+          <input
+            type="text"
+            value={stdInput}
+            onChange={(e) => { setStdInput(e.target.value); setError(false); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSave();
+              if (e.key === 'Escape') handleCancel();
+            }}
+            placeholder="Std"
+            title="Standard deviation (seconds)"
+            className={`w-12 px-1.5 py-0.5 text-xs font-mono font-bold bg-bg-secondary border rounded text-text-primary focus:outline-none focus:ring-1 focus:ring-accent ${
+              error ? 'border-red-500' : 'border-border'
+            }`}
+          />
+          <button
+            type="button"
+            onClick={handleSave}
+            className="p-1 rounded hover:bg-emerald-500/20 text-emerald-500 transition-colors cursor-pointer shrink-0 ml-auto"
+            title="Save Bot"
+          >
+            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+          </button>
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="p-1 rounded hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors cursor-pointer shrink-0"
+            title="Cancel"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ) : (
+        <>
+          <span
+            onClick={isHost && isBot ? (e) => { e.stopPropagation(); setIsEditing(true); } : undefined}
+            className={`text-sm font-bold text-text-primary truncate flex-1 min-w-0 ${
+              isHost && isBot ? 'cursor-pointer hover:text-accent transition-colors' : ''
+            }`}
+          >
+            {p.name}
+          </span>
+          {isHost && isBot && (
+            <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsEditing(true);
+                }}
+                className="p-1 rounded hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+                title="Edit Bot"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete?.(p.id);
+                }}
+                className="p-1 rounded hover:bg-red-500/10 text-text-secondary hover:text-red-400 transition-colors cursor-pointer"
+                title="Delete Bot"
+              >
+                <Trash className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -213,19 +334,131 @@ function ShapeIndicator({ total, filled, isHost, onClick, type, team }: { total:
   return <div className="flex items-center gap-1.5">{shapes}</div>;
 }
 
-function HostKeyboardControllerMount() {
-  useKeyboardController();
+function HostKeyboardControllerMount({ roomId }: { roomId?: string }) {
+  useKeyboardController({ roomId });
   return null;
 }
 
 function HostMatchSync({ roomId }: { roomId: string }) {
-  useFirebaseHost(roomId);
+  const { pushState } = useFirebaseHost(roomId);
+  useEffect(() => {
+    (window as any).__forcePushState = pushState;
+    return () => { delete (window as any).__forcePushState; };
+  }, [pushState]);
   return null;
 }
 
 function GuestMatchSync({ roomId, slotId }: { roomId: string; slotId: string }) {
-  useFirebaseGuest(roomId, slotId);
+  const { setHeld, pushSolve, pushPenalty } = useFirebaseGuest(roomId, slotId);
+
+  useEffect(() => {
+    (window as any).__guestPushPenalty = pushPenalty;
+    return () => { delete (window as any).__guestPushPenalty; };
+  }, [pushPenalty]);
+
+  // Clean up held state on disconnect / unmount
+  useEffect(() => {
+    const heldSlotRef = ref(rtdb, `rooms/${roomId}/held/${slotId}`);
+    onDisconnect(heldSlotRef).remove();
+    return () => {
+      remove(heldSlotRef).catch(console.error);
+    };
+  }, [roomId, slotId]);
+
+  // Guest keyboard controller — spacebar to ready / solve
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' && e.key !== ' ') return;
+      if (e.repeat) return;
+
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        if ((target as HTMLInputElement).value === '') {
+          target.blur();
+        } else {
+          return;
+        }
+      }
+
+      e.preventDefault();
+
+      const { raceState, players, raceStartTime } = useTimerStore.getState();
+      const player = players[slotId];
+
+      if (raceState === 'RACING') {
+        if (player && player.isRunning && !player.isFinished) {
+          const rawTimeMs = raceStartTime ? Math.max(10, Date.now() - raceStartTime) : 0;
+          // Optimistic local stop so the guest's own timer freezes immediately
+          useTimerStore.getState().stopPlayer(slotId, Date.now());
+          pushSolve(rawTimeMs, 'NONE', 0);
+        }
+      } else if (raceState === 'IDLE' || raceState === 'WAITING_FOR_ALL' || raceState === 'FINISHED') {
+        setHeld(true);
+      }
+    };
+
+    const onUp = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' && e.key !== ' ') return;
+
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+
+      e.preventDefault();
+      setHeld(false);
+    };
+
+    const onBlur = () => {
+      setHeld(false);
+    };
+
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, [slotId, setHeld, pushSolve]);
+
   return null;
+}
+
+function SyncDebuggerOverlay({ isHost }: { isHost: boolean }) {
+  const [lastUpdate, setLastUpdate] = useState(0);
+  const ts = useTournamentStore();
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLastUpdate(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[200] bg-black/80 text-green-400 font-mono text-xs p-2 rounded border border-green-500/30 whitespace-pre flex flex-col gap-1 pointer-events-auto opacity-100 shadow-xl">
+      <div>Sync Role: {isHost ? 'HOST' : 'GUEST'}</div>
+      <div>Points to Win (Local Store): {ts.settings.rankPointsFloor}</div>
+      <div>Match ID: {ts.matchId}</div>
+      <div>Scoring Mode: {ts.settings.scoringMode}</div>
+      {isHost && (
+        <button 
+          onClick={(e) => { 
+            e.preventDefault(); 
+            console.log('[Host] Force sync clicked!'); 
+            if (typeof (window as any).__forcePushState === 'function') {
+              (window as any).__forcePushState();
+            } else {
+              console.log('[Host] __forcePushState not found on window');
+            }
+          }}
+          className="mt-1 bg-green-500/20 hover:bg-green-500/40 text-green-200 px-2 py-1 rounded border border-green-500/50 cursor-pointer"
+        >
+          Force Sync Push
+        </button>
+      )}
+    </div>
+  );
 }
 
 function ArenaInner() {
@@ -243,27 +476,56 @@ function ArenaInner() {
 
   const {
     matchStatus, startMatch, currentScramble, settings, updateSettings, players: tournamentPlayers, addPlayer, removePlayer, updatePlayerBotConfig,
-    teamGamePoints, teamGameWins, teamSetWins, currentSetIndex, currentGameIndex, currentRoundIndex, lastMatchPlaces,
-    isAdminOpen, toggleAdmin
+    teamGamePoints, teamGameWins, teamSetWins, currentSetIndex, currentGameIndex, currentRoundIndex, lastMatchPlaces, sets, applyPenalty
   } = useTournamentStore();
 
+  const localPlayerId = user?.uid || (isHost ? tournamentPlayers.find(p => p.role === 'HOST')?.id : undefined);
+  useFinishSoundController(localPlayerId);
+
   const timerPlayers = useTimerStore((s) => s.players);
+  const raceState = useTimerStore((s) => s.raceState);
+
+  const handlePenalty = (playerId: string, penalty: string) => {
+    const currentGame = sets?.[currentSetIndex]?.games?.[currentGameIndex];
+    if (!currentGame) return;
+    
+    // Find the latest round that actually has solves (which corresponds to lastMatchPlaces), 
+    // or fallback to the most recent round.
+    const targetRoundId = currentGame.rounds.slice().reverse().find(r => Object.keys(r.solves || {}).length > 0)?.id 
+      || currentGame.rounds[currentGame.rounds.length - 1]?.id;
+
+    if (isHost) {
+      applyPenalty(currentGame.id, playerId, penalty as any, targetRoundId);
+    } else {
+      if ((window as any).__guestPushPenalty) {
+        (window as any).__guestPushPenalty(currentGame.id, penalty, targetRoundId);
+      }
+    }
+  };
 
   const displayPlaces = useMemo(() => {
     if (lastMatchPlaces && lastMatchPlaces.length > 0) {
       return lastMatchPlaces;
     }
+    const hasCurrentFinish = Object.values(timerPlayers).some((tp) => tp.finishRank != null);
+    
     const timerEntries = Object.values(timerPlayers).filter(
-      (tp) => tp.finishRank != null || tp.lastFinishRank != null
+      (tp) => hasCurrentFinish ? tp.finishRank != null : tp.lastFinishRank != null
     );
     if (timerEntries.length === 0) return [];
 
-    const hasCurrentFinish = timerEntries.some((tp) => tp.finishRank != null);
+    const activePlayersCount = tournamentPlayers.filter(p => p.team === 'RED' || p.team === 'BLUE').length;
     const mapped = timerEntries.map((tp) => {
       const p = tournamentPlayers.find((x) => x.id === tp.playerId);
       const rank = (hasCurrentFinish ? tp.finishRank : tp.lastFinishRank) ?? 999;
       const timeMs = (hasCurrentFinish ? tp.finishTimeMs : tp.lastFinishTimeMs) ?? 0;
       const penalty = (hasCurrentFinish ? tp.penalty : tp.lastPenalty) ?? 'NONE';
+      const isDNF = penalty === 'DNF';
+      const score = (tp as any).score ?? (
+        isDNF
+          ? 0
+          : Math.max(1, activePlayersCount - (rank - 1))
+      );
       return {
         playerId: tp.playerId,
         name: p?.name || 'Player',
@@ -272,11 +534,13 @@ function ArenaInner() {
         rank,
         timeMs,
         penalty,
-        isDNF: penalty === 'DNF',
+        isDNF,
+        score,
+        falseStartDeltaMs: hasCurrentFinish ? tp.falseStartDeltaMs : tp.lastFalseStartDeltaMs,
       };
     });
     return mapped.sort((a, b) => a.rank - b.rank);
-  }, [lastMatchPlaces, timerPlayers, tournamentPlayers]);
+  }, [lastMatchPlaces, timerPlayers, tournamentPlayers, settings]);
 
 
 
@@ -309,9 +573,20 @@ function ArenaInner() {
       const data = snapshot.val();
       if (data) {
         const activeRooms: any[] = [];
+        const now = Date.now();
         Object.entries(data).forEach(([id, val]: [string, any]) => {
           const players = val.players ? Object.keys(val.players) : [];
-          if (players.length === 0 || (val.host && !val.players?.[val.host])) {
+          const ageMs = now - (val.createdAt || 0);
+          const heartbeatAgeMs = val.hostHeartbeat ? (now - val.hostHeartbeat) : null;
+          // A room is stale/zombie if:
+          // 1. It has 0 players
+          // 2. The designated host is not in players
+          // 3. Room is older than 20s with no host heartbeat
+          // 4. Host heartbeat is older than 25s
+          const isStale = (ageMs > 20000 && heartbeatAgeMs === null) || (heartbeatAgeMs !== null && heartbeatAgeMs > 25000);
+          const isMissingHost = Boolean(val.host && !val.players?.[val.host] && ageMs > 10000);
+
+          if (players.length === 0 || isMissingHost || isStale) {
             remove(ref(rtdb, `rooms/${id}`)).catch(() => {});
           } else {
             activeRooms.push({ id, ...val });
@@ -323,6 +598,30 @@ function ArenaInner() {
       }
     });
     return () => unsubscribe();
+  }, [roomId]);
+
+  // Periodic check to remove stale rooms in the lobby even if no RTDB write events occur
+  useEffect(() => {
+    if (roomId) return;
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setRooms((prevRooms) => {
+        let changed = false;
+        const filtered = prevRooms.filter((room) => {
+          const ageMs = now - (room.createdAt || 0);
+          const heartbeatAgeMs = room.hostHeartbeat ? (now - room.hostHeartbeat) : null;
+          const isStale = (ageMs > 20000 && heartbeatAgeMs === null) || (heartbeatAgeMs !== null && heartbeatAgeMs > 25000);
+          if (isStale) {
+            changed = true;
+            remove(ref(rtdb, `rooms/${room.id}`)).catch(() => {});
+            return false;
+          }
+          return true;
+        });
+        return changed ? filtered : prevRooms;
+      });
+    }, 5000);
+    return () => clearInterval(interval);
   }, [roomId]);
 
   const hasJoinedRef = useRef(false);
@@ -343,16 +642,53 @@ function ArenaInner() {
       const data = snapshot.val();
       if (data) {
         const { fullState: _fs, held: _h, solves: _s, hostHeartbeat: _hb, guests: _g, ...roomMeta } = data;
+
+        // Check if current user is banned
+        if (user && data.banned?.[user.uid]) {
+          remove(ref(rtdb, `rooms/${roomId}/players/${user.uid}`)).catch(() => {});
+          if (!hasRedirectedRef.current) {
+            hasRedirectedRef.current = true;
+            navigate('/arena', { replace: true, state: { notice: 'You are banned from this room.' } });
+          }
+          return;
+        }
+
+        // Check if current user was kicked
+        if (user && data.kicked?.[user.uid]) {
+          remove(ref(rtdb, `rooms/${roomId}/players/${user.uid}`)).catch(() => {});
+          if (!hasRedirectedRef.current) {
+            hasRedirectedRef.current = true;
+            navigate('/arena', { replace: true, state: { notice: 'You were kicked from the room by the host.' } });
+          }
+          return;
+        }
+
+        // If spectator visits a room whose host is already dead/stale, clean it up
+        const isSelfHost = user && roomMeta.host === user.uid;
+        const ageMs = Date.now() - (roomMeta.createdAt || 0);
+        const heartbeatAgeMs = data.hostHeartbeat ? (Date.now() - data.hostHeartbeat) : null;
+        const isStale = !isSelfHost && ((ageMs > 20000 && heartbeatAgeMs === null) || (heartbeatAgeMs !== null && heartbeatAgeMs > 25000));
+
+        if (isStale) {
+          remove(roomRef).catch(() => {});
+          if (!hasRedirectedRef.current) {
+            hasRedirectedRef.current = true;
+            navigate('/arena', { replace: true, state: { notice: 'The host ended the room.' } });
+          }
+          return;
+        }
+
         setRoomData(roomMeta);
         roomEverLoadedRef.current = true;
-        // Auto-join only once per room visit
-        if (user && !user.isAnonymous && !hasJoinedRef.current && (!roomMeta.players || !roomMeta.players[user.uid])) {
+        // Auto-join only once per room visit if not banned
+        if (user && !user.isAnonymous && !data.banned?.[user.uid] && !hasJoinedRef.current && (!roomMeta.players || !roomMeta.players[user.uid])) {
           hasJoinedRef.current = true;
           const role = roomMeta.host === user.uid ? 'host' : 'spectator';
           update(ref(rtdb, `rooms/${roomId}/players/${user.uid}`), {
             role,
             team: 'none',
-            username: user.username || user.email?.split('@')[0] || 'Unknown'
+            username: user.username || user.email?.split('@')[0] || 'Unknown',
+            color: user.color || '#cccccc'
           }).catch(console.error);
         } else if (user && roomMeta.players?.[user.uid]) {
           hasJoinedRef.current = true;
@@ -372,15 +708,30 @@ function ArenaInner() {
 
   useEffect(() => {
     if (!roomId || !user) return;
+
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+    const playerRef = ref(rtdb, `rooms/${roomId}/players/${user.uid}`);
+
     if (isHost) {
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
+      onDisconnect(playerRef).cancel().catch(() => {});
       onDisconnect(roomRef).remove();
-      return () => { onDisconnect(roomRef).cancel(); };
     } else {
-      const playerRef = ref(rtdb, `rooms/${roomId}/players/${user.uid}`);
       onDisconnect(playerRef).remove();
-      return () => { onDisconnect(playerRef).cancel(); };
     }
+
+    return () => {
+      // Clean up ONLY when navigating away from this room within the SPA
+      const currentPath = window.location.pathname;
+      const isNavigatingAway = !currentPath.includes(roomId);
+
+      if (isNavigatingAway) {
+        if (isHost) {
+          remove(roomRef).catch(() => {});
+        } else if (user?.uid) {
+          update(ref(rtdb, `rooms/${roomId}/players`), { [user.uid]: null }).catch(() => {});
+        }
+      }
+    };
   }, [roomId, user?.uid, isHost]);
 
   useEffect(() => {
@@ -406,37 +757,67 @@ function ArenaInner() {
     return () => unsubscribe();
   }, [roomId]);
 
-  const lastSyncedPlayersRef = useRef('');
+  const lastSyncedPlayersRef = useRef('__init__');
   useEffect(() => {
     if (!roomData?.players) return;
+    if (!isHost) return; // Only host manages tournamentPlayers sync from roomData; guests receive via fullState
     
-    const playersToSync: Player[] = Object.entries(roomData.players)
+    const humanPlayersToSync: Player[] = Object.entries(roomData.players)
       .filter(([, p]: [string, any]) => p.team === '1' || p.team === '2')
       .map(([id, p]: [string, any]) => {
         const u = liveUsers[id];
         const isSelf = id === user?.uid;
+        const playerColor = p.color || u?.color || '#cccccc';
         return {
           id,
-          name: u?.username || roomData.players?.[id]?.username || (isSelf ? 'You' : id.substring(0, 5)),
-          role: (isSelf && isHost ? 'HOST' : isSelf ? 'PLAYER' : 'PLAYER') as PlayerRole,
+          name: u?.username || (roomData.players as any)?.[id]?.username || (isSelf ? 'You' : id.substring(0, 5)),
+          role: (isSelf && isHost ? 'HOST' : 'PLAYER') as PlayerRole,
           key: isSelf ? ' ' : '',
-          color: u?.color || '#cccccc',
-          accentColor: u?.color || '#cccccc',
+          color: playerColor,
+          accentColor: playerColor,
           active: true,
           team: (p.team === '1' ? 'RED' : 'BLUE') as TeamId,
         };
       });
 
-    const syncKey = playersToSync.map(p => `${p.id}:${p.team}:${p.role}`).join('|');
+    const botMap: Record<string, Player> = {};
+    if (roomData.bots) {
+      Object.entries(roomData.bots).forEach(([id, b]: [string, any]) => {
+        const botColor = b.color || AVAILABLE_COLORS[Math.floor(Math.random() * AVAILABLE_COLORS.length)].hex;
+        botMap[id] = {
+          id,
+          name: b.name || '15.00-1.0',
+          role: 'BOT',
+          key: '',
+          color: botColor,
+          accentColor: botColor,
+          active: true,
+          team: (b.team === '1' || b.team === 'RED' ? 'RED' : 'BLUE') as TeamId,
+          botConfig: {
+            averageTimeMs: b.averageTimeMs || 15000,
+            stdDevMs: b.stdDevMs || 1000,
+            maturity: 'INTERMEDIATE',
+          },
+        };
+      });
+    }
+
+    const currentBots = useTournamentStore.getState().players.filter(p => p.role === 'BOT');
+    currentBots.forEach(b => {
+      if (!botMap[b.id]) {
+        botMap[b.id] = b;
+      }
+    });
+
+    const allBots = Object.values(botMap);
+    const syncKey = [...humanPlayersToSync, ...allBots].map(p => `${p.id}:${p.team}:${p.role}:${p.name}:${p.color}`).join('|');
     if (syncKey === lastSyncedPlayersRef.current) return;
     lastSyncedPlayersRef.current = syncKey;
 
     useTournamentStore.setState(s => {
-      // Host keeps bots, guests should not have any local bots
-      const bots = isHost ? s.players.filter(p => p.role === 'BOT') : [];
-      s.players = [...playersToSync, ...bots];
+      s.players = [...humanPlayersToSync, ...allBots];
     });
-  }, [roomData?.players, isHost, liveUsers, user?.uid]);
+  }, [roomData?.players, roomData?.bots, isHost, liveUsers, user?.uid]);
 
   const handleCreateRoom = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -461,19 +842,21 @@ function ArenaInner() {
         color: selectedColor,
         host: user.uid,
         createdAt: Date.now(),
+        hostHeartbeat: Date.now(),
         gamemode: 'Standard',
         players: {
           [user.uid]: { 
             role: 'host', 
             team: 'none',
-            username: user.username || user.email?.split('@')[0] || 'Unknown' 
+            username: user.username || user.email?.split('@')[0] || 'Unknown',
+            color: user.color || '#cccccc'
           }
         },
       });
       useTournamentStore.getState().resetTournament();
       useTournamentStore.getState().updateSettings({ tournamentMode: 'TEAMS' });
       useTournamentStore.setState(s => {
-        s.players = s.players.filter(p => p.role !== 'BOT');
+        s.players = [];
       });
       await useTournamentStore.getState().startMatch();
       setIsCreateModalOpen(false);
@@ -493,24 +876,68 @@ function ArenaInner() {
     update(ref(rtdb, `rooms/${roomId}/players/${playerId}`), { team });
   };
 
+  const handleAddBot = (team: 'RED' | 'BLUE') => {
+    if (!isHost || !roomId) return;
+    const botId = `bot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const defaultAvg = '15.00';
+    const defaultStd = '1.0';
+    const defaultName = `${defaultAvg}-${defaultStd}`;
+    const avgMs = 15000;
+    const stdDevMs = 1000;
+    const randomColor = AVAILABLE_COLORS[Math.floor(Math.random() * AVAILABLE_COLORS.length)].hex;
+
+    set(ref(rtdb, `rooms/${roomId}/bots/${botId}`), {
+      id: botId,
+      name: defaultName,
+      team,
+      color: randomColor,
+      averageTimeMs: avgMs,
+      stdDevMs,
+    }).catch(console.error);
+
+    addPlayer(defaultName, team, 'BOT', {
+      averageTimeMs: avgMs,
+      stdDevMs,
+      maturity: 'INTERMEDIATE',
+    }, botId, randomColor);
+  };
+
+  const handleDeleteBot = (botId: string) => {
+    if (!isHost || !roomId) return;
+    remove(ref(rtdb, `rooms/${roomId}/bots/${botId}`)).catch(console.error);
+    removePlayer(botId);
+  };
+
+  const handleUpdateBot = (botId: string, newName: string, averageTimeMs: number, stdDevMs: number) => {
+    if (!isHost || !roomId) return;
+    update(ref(rtdb, `rooms/${roomId}/bots/${botId}`), {
+      name: newName,
+      averageTimeMs,
+      stdDevMs,
+    }).catch(console.error);
+
+    useTournamentStore.setState(s => {
+      const p = s.players.find(x => x.id === botId);
+      if (p) {
+        p.name = newName;
+        if (!p.botConfig) {
+          p.botConfig = { averageTimeMs, stdDevMs, maturity: 'INTERMEDIATE' };
+        } else {
+          p.botConfig.averageTimeMs = averageTimeMs;
+          p.botConfig.stdDevMs = stdDevMs;
+        }
+      }
+    });
+  };
+
   const removePlayerFromMatch = (playerId: string) => {
     if (!isHost || !roomId) return;
     const isBot = tournamentPlayers.find(p => p.id === playerId)?.role === 'BOT';
     if (isBot) {
-      removePlayer(playerId);
+      handleDeleteBot(playerId);
     } else {
       assignTeam(playerId, 'none');
     }
-  };
-
-
-  const botCounterRef = useRef(0);
-
-  const addBot = () => {
-    if (!isHost) return;
-    botCounterRef.current += 1;
-    const paddedCount = botCounterRef.current.toString().padStart(2, '0');
-    addPlayer(`Bot ${paddedCount}`, 'BLUE', 'BOT', { averageTimeMs: 20000, stdDevMs: 1000, maturity: 'INTERMEDIATE' });
   };
 
   if (!roomId || !roomData) {
@@ -532,7 +959,7 @@ function ArenaInner() {
               <div
                 key={room.id}
                 onClick={() => navigate(`/${room.id}`)}
-                className="w-full sm:w-[260px] flex items-center gap-3.5 p-3.5 bg-bg-secondary hover:bg-bg-hover border border-border/80 hover:border-accent/60 rounded-xl cursor-pointer transition-all duration-200 shadow-2xs hover:shadow-md group text-left shrink-0"
+                className="w-full sm:w-[260px] flex items-center gap-3.5 p-3.5 bg-bg-secondary hover:bg-bg-hover border border-border/80 hover:border-accent/60 rounded-xl cursor-pointer transition-all duration-200 shadow-2xs hover:shadow-md group text-left shrink-0 relative"
               >
                 <div
                   className="w-12 h-12 rounded-xl shadow-xs shrink-0 transition-transform group-hover:scale-105"
@@ -542,6 +969,19 @@ function ArenaInner() {
                   <h2 className="text-base font-bold text-text-primary truncate group-hover:text-accent transition-colors">{room.name}</h2>
                   <p className="text-text-secondary text-xs mt-0.5 truncate">{totalCount} {totalCount === 1 ? 'user' : 'users'}</p>
                 </div>
+                {user && room.host === user.uid && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      remove(ref(rtdb, `rooms/${room.id}`)).catch(() => {});
+                    }}
+                    className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/10 text-text-secondary hover:text-red-400 transition-all cursor-pointer shrink-0"
+                    title="Delete Room"
+                  >
+                    <Trash className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             );
           })}
@@ -646,95 +1086,121 @@ function ArenaInner() {
       <DragRaceOverlay />
       {isHost && roomId && <HostMatchSync roomId={roomId} />}
       {!isHost && roomId && user && <GuestMatchSync roomId={roomId} slotId={user.uid} />}
-      {isHost && <HostKeyboardControllerMount />}
+      {isHost && roomId && <HostKeyboardControllerMount roomId={roomId} />}
 
       <div className="flex-1 flex flex-col min-w-0">
-        <div className="flex justify-between items-center mb-2 bg-bg-secondary p-2 sm:p-3 rounded-xl border border-border/80 relative shrink-0 shadow-2xs">
-           <div className="flex-1 flex justify-center items-center gap-8 sm:gap-14">
-             <div className="flex items-center gap-4 sm:gap-6 font-mono font-bold text-xl sm:text-2xl text-red-400">
-               <ShapeIndicator 
-                 total={settings.targetSets} 
-                 filled={team1Sets} 
-                 isHost={isHost} 
-                 type="diamond" 
-                 team="RED" 
-                 onClick={() => isHost && useTournamentStore.setState(s => { 
-                   s.teamSetWins.RED = s.teamSetWins.RED === settings.targetSets ? 0 : s.teamSetWins.RED + 1; 
-                 })} 
-               />
-               <ShapeIndicator 
-                 total={settings.targetGames} 
-                 filled={team1Games} 
-                 isHost={isHost} 
-                 type="circle" 
-                 team="RED" 
-                 onClick={() => isHost && useTournamentStore.setState(s => { 
-                   const newVal = s.teamGameWins.RED === settings.targetGames ? 0 : s.teamGameWins.RED + 1;
-                   s.teamGameWins.RED = newVal;
-                   if (newVal > 0) { s.teamGamePoints.RED = 0; s.teamGamePoints.BLUE = 0; }
-                 })} 
-               />
-               <EditableScore 
-                 value={team1Points} 
-                 isHost={isHost} 
-                 onIncrement={() => useTournamentStore.setState(s => { s.teamGamePoints.RED += 1; })}
-                 onDecrement={() => useTournamentStore.setState(s => { s.teamGamePoints.RED = Math.max(0, s.teamGamePoints.RED - 1); })}
-               />
-             </div>
-             
-             <div className="font-mono font-bold text-xl sm:text-2xl text-text-secondary select-none flex items-center justify-center" title="Points to Win">
-               {isHost ? (
-                 <EditableScore 
-                   value={settings.rankPointsFloor ?? 15} 
-                   isHost={isHost} 
-                   onIncrement={() => updateSettings({ rankPointsFloor: (settings.rankPointsFloor ?? 15) + 1 })}
-                   onDecrement={() => updateSettings({ rankPointsFloor: Math.max(1, (settings.rankPointsFloor ?? 15) - 1) })}
-                 />
-               ) : (
-                 <span>{settings.rankPointsFloor ?? 15}</span>
-               )}
-             </div>
-             
-             <div className="flex items-center gap-4 sm:gap-6 font-mono font-bold text-xl sm:text-2xl text-blue-400">
-               <EditableScore 
-                 value={team2Points} 
-                 isHost={isHost} 
-                 onIncrement={() => useTournamentStore.setState(s => { s.teamGamePoints.BLUE += 1; })}
-                 onDecrement={() => useTournamentStore.setState(s => { s.teamGamePoints.BLUE = Math.max(0, s.teamGamePoints.BLUE - 1); })}
-               />
-               <ShapeIndicator 
-                 total={settings.targetGames} 
-                 filled={team2Games} 
-                 isHost={isHost} 
-                 type="circle" 
-                 team="BLUE" 
-                 onClick={() => isHost && useTournamentStore.setState(s => { 
-                   const newVal = s.teamGameWins.BLUE === settings.targetGames ? 0 : s.teamGameWins.BLUE + 1;
-                   s.teamGameWins.BLUE = newVal;
-                   if (newVal > 0) { s.teamGamePoints.RED = 0; s.teamGamePoints.BLUE = 0; }
-                 })} 
-               />
-               <ShapeIndicator 
-                 total={settings.targetSets} 
-                 filled={team2Sets} 
-                 isHost={isHost} 
-                 type="diamond" 
-                 team="BLUE" 
-                 onClick={() => isHost && useTournamentStore.setState(s => { 
-                   s.teamSetWins.BLUE = s.teamSetWins.BLUE === settings.targetSets ? 0 : s.teamSetWins.BLUE + 1; 
-                 })} 
-               />
-             </div>
-           </div>
+        <div className="grid grid-cols-7 w-full items-center mb-1 py-1 px-4 sm:px-8 relative shrink-0 font-mono font-bold text-xl sm:text-2xl">
+          <div className="flex items-center justify-center text-red-400">
+            <div className="relative group flex items-center justify-center cursor-default min-w-[24px]">
+              {isHost && <button onClick={() => updateSettings({ targetSets: Math.max(1, settings.targetSets - 1) })} className="absolute -left-6 opacity-0 group-hover:opacity-100 text-sm bg-bg-hover rounded px-1.5 hover:text-white transition-opacity cursor-pointer z-10">-</button>}
+              <ShapeIndicator 
+                total={settings.targetSets} 
+                filled={team1Sets} 
+                isHost={isHost} 
+                type="diamond" 
+                team="RED" 
+                onClick={() => isHost && useTournamentStore.setState(s => { 
+                  s.teamSetWins.RED = s.teamSetWins.RED === settings.targetSets ? 0 : s.teamSetWins.RED + 1; 
+                })} 
+              />
+              {isHost && <button onClick={() => updateSettings({ targetSets: settings.targetSets + 1 })} className="absolute -right-6 opacity-0 group-hover:opacity-100 text-sm bg-bg-hover rounded px-1.5 hover:text-white transition-opacity cursor-pointer z-10">+</button>}
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-center text-red-400">
+            <div className="relative group flex items-center justify-center cursor-default min-w-[24px]">
+              {isHost && <button onClick={() => updateSettings({ targetGames: Math.max(1, settings.targetGames - 1) })} className="absolute -left-6 opacity-0 group-hover:opacity-100 text-sm bg-bg-hover rounded px-1.5 hover:text-white transition-opacity cursor-pointer z-10">-</button>}
+              <ShapeIndicator 
+                total={settings.targetGames} 
+                filled={team1Games} 
+                isHost={isHost} 
+                type="circle" 
+                team="RED" 
+                onClick={() => isHost && useTournamentStore.setState(s => { 
+                  const newVal = s.teamGameWins.RED === settings.targetGames ? 0 : s.teamGameWins.RED + 1;
+                  s.teamGameWins.RED = newVal;
+                  if (newVal > 0) { s.teamGamePoints.RED = 0; s.teamGamePoints.BLUE = 0; }
+                })} 
+              />
+              {isHost && <button onClick={() => updateSettings({ targetGames: settings.targetGames + 1 })} className="absolute -right-6 opacity-0 group-hover:opacity-100 text-sm bg-bg-hover rounded px-1.5 hover:text-white transition-opacity cursor-pointer z-10">+</button>}
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-center text-red-400">
+            <EditableScore 
+              value={team1Points} 
+              isHost={isHost} 
+              onIncrement={() => useTournamentStore.setState(s => { s.teamGamePoints.RED += 1; })}
+              onDecrement={() => useTournamentStore.setState(s => { s.teamGamePoints.RED = Math.max(0, s.teamGamePoints.RED - 1); })}
+            />
+          </div>
+          
+          <div className="flex items-center justify-center text-text-secondary select-none" title="Points to Win">
+            {isHost ? (
+              <EditableScore 
+                value={settings.rankPointsFloor ?? 15} 
+                isHost={isHost} 
+                onIncrement={() => updateSettings({ rankPointsFloor: (settings.rankPointsFloor ?? 15) + 1 })}
+                onDecrement={() => updateSettings({ rankPointsFloor: Math.max(1, (settings.rankPointsFloor ?? 15) - 1) })}
+              />
+            ) : (
+              <span>{settings.rankPointsFloor ?? 15}</span>
+            )}
+          </div>
+          
+          <div className="flex items-center justify-center text-blue-400">
+            <EditableScore 
+              value={team2Points} 
+              isHost={isHost} 
+              onIncrement={() => useTournamentStore.setState(s => { s.teamGamePoints.BLUE += 1; })}
+              onDecrement={() => useTournamentStore.setState(s => { s.teamGamePoints.BLUE = Math.max(0, s.teamGamePoints.BLUE - 1); })}
+            />
+          </div>
+          
+          <div className="flex items-center justify-center text-blue-400">
+            <div className="relative group flex items-center justify-center cursor-default min-w-[24px]">
+              {isHost && <button onClick={() => updateSettings({ targetGames: Math.max(1, settings.targetGames - 1) })} className="absolute -left-6 opacity-0 group-hover:opacity-100 text-sm bg-bg-hover rounded px-1.5 hover:text-white transition-opacity cursor-pointer z-10">-</button>}
+              <ShapeIndicator 
+                total={settings.targetGames} 
+                filled={team2Games} 
+                isHost={isHost} 
+                type="circle" 
+                team="BLUE" 
+                onClick={() => isHost && useTournamentStore.setState(s => { 
+                  const newVal = s.teamGameWins.BLUE === settings.targetGames ? 0 : s.teamGameWins.BLUE + 1;
+                  s.teamGameWins.BLUE = newVal;
+                  if (newVal > 0) { s.teamGamePoints.RED = 0; s.teamGamePoints.BLUE = 0; }
+                })} 
+              />
+              {isHost && <button onClick={() => updateSettings({ targetGames: settings.targetGames + 1 })} className="absolute -right-6 opacity-0 group-hover:opacity-100 text-sm bg-bg-hover rounded px-1.5 hover:text-white transition-opacity cursor-pointer z-10">+</button>}
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-center text-blue-400">
+            <div className="relative group flex items-center justify-center cursor-default min-w-[24px]">
+              {isHost && <button onClick={() => updateSettings({ targetSets: Math.max(1, settings.targetSets - 1) })} className="absolute -left-6 opacity-0 group-hover:opacity-100 text-sm bg-bg-hover rounded px-1.5 hover:text-white transition-opacity cursor-pointer z-10">-</button>}
+              <ShapeIndicator 
+                total={settings.targetSets} 
+                filled={team2Sets} 
+                isHost={isHost} 
+                type="diamond" 
+                team="BLUE" 
+                onClick={() => isHost && useTournamentStore.setState(s => { 
+                  s.teamSetWins.BLUE = s.teamSetWins.BLUE === settings.targetSets ? 0 : s.teamSetWins.BLUE + 1; 
+                })} 
+              />
+              {isHost && <button onClick={() => updateSettings({ targetSets: settings.targetSets + 1 })} className="absolute -right-6 opacity-0 group-hover:opacity-100 text-sm bg-bg-hover rounded px-1.5 hover:text-white transition-opacity cursor-pointer z-10">+</button>}
+            </div>
+          </div>
         </div>
 
         
-        <div className="font-mono text-sm sm:text-base font-bold text-center tracking-wide text-text-primary mb-2 shrink-0">{currentScramble}</div>
+        <div className="font-mono text-lg sm:text-xl md:text-2xl font-bold text-center tracking-wide text-text-primary mb-2 shrink-0 px-2">{currentScramble}</div>
 
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 flex-1 min-h-0 w-full mb-2">
           {/* Red Team */}
           <div 
-            className="flex-1 p-2 flex flex-col min-h-0 rounded-xl border-2 border-transparent transition-colors"
+            className="group/team flex-1 p-2 flex flex-col min-h-0 rounded-xl border-2 border-transparent transition-colors"
             onDragOver={isHost ? (e) => { e.preventDefault(); e.currentTarget.classList.add('border-red-400/50', 'bg-red-500/5'); } : undefined}
             onDragLeave={isHost ? (e) => { e.currentTarget.classList.remove('border-red-400/50', 'bg-red-500/5'); } : undefined}
             onDrop={isHost ? (e) => {
@@ -748,75 +1214,135 @@ function ArenaInner() {
               }
             } : undefined}
           >
-            {team1Players.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center text-sm font-medium text-text-secondary/50 italic">No players</div>
-            ) : (
-              <div className="flex flex-col items-center gap-1.5 overflow-y-auto flex-1 custom-scrollbar w-full">
-                {team1Players.map(p => <PlayerRow key={p.id} p={p} isHost={isHost} />)}
-              </div>
-            )}
-          </div>
-
-          {/* Center Div: Last Match Places */}
-          <div className="w-full sm:w-72 md:w-80 bg-bg-secondary p-3 rounded-xl border border-border/80 flex flex-col min-h-0 shadow-2xs shrink-0">
-            <div className="flex items-center justify-between pb-2 mb-2 border-b border-border/60 shrink-0">
-              <span className="text-xs font-bold uppercase tracking-wider text-text-secondary">Last Match Places</span>
-              {displayPlaces.length > 0 && (
-                <span className="text-[10px] font-mono font-medium text-text-secondary/70">
-                  {displayPlaces.length} {displayPlaces.length === 1 ? 'player' : 'players'}
-                </span>
+            <div className="flex flex-col items-center gap-1.5 overflow-y-auto flex-1 custom-scrollbar w-full">
+              {team1Players.length === 0 && (
+                <div className="py-4 text-sm font-medium text-text-secondary/50 italic">No players</div>
+              )}
+              {team1Players.map(p => (
+                <PlayerRow
+                  key={p.id}
+                  p={p}
+                  isHost={isHost}
+                  onDelete={handleDeleteBot}
+                  onUpdateBot={handleUpdateBot}
+                />
+              ))}
+              {isHost && (
+                <div className="w-full flex justify-center opacity-0 pointer-events-none group-hover/team:opacity-100 group-hover/team:pointer-events-auto transition-opacity duration-150 shrink-0">
+                  <AddBotCard onClick={() => handleAddBot('RED')} />
+                </div>
               )}
             </div>
+          </div>
 
-            {displayPlaces.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
-                <span className="text-xs font-medium text-text-secondary/60">No match results yet</span>
-                <span className="text-[10px] text-text-secondary/40 mt-1">Places will appear here after the match</span>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-1.5 overflow-y-auto flex-1 custom-scrollbar pr-0.5">
+          {/* Center Div: Last Match Places or Solve state */}
+          <div className="w-full sm:w-64 bg-bg-secondary p-3 rounded-xl border border-border/80 flex flex-col min-h-0 shadow-2xs">
+            {(() => {
+              const myPlayer = user?.uid ? timerPlayers[user.uid] : null;
+              const isRacing = raceState === 'RACING';
+              const hideResultsForMe = isRacing && myPlayer && !myPlayer.isFinished;
+
+              if (hideResultsForMe) {
+                return (
+                  <div className="flex-1 flex items-center justify-center p-4">
+                    <span className="text-4xl md:text-5xl font-black text-text-primary tracking-tight">Solve</span>
+                  </div>
+                );
+              }
+
+              if (displayPlaces.length === 0) {
+                return (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                    <span className="text-xs font-medium text-text-secondary/60">No match results yet</span>
+                    <span className="text-[10px] text-text-secondary/40 mt-1">Places will appear here after the match</span>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="flex flex-col gap-1.5 overflow-y-auto flex-1 custom-scrollbar pr-0.5">
                 {displayPlaces.map((result) => {
-                  const isFirst = result.rank === 1;
-                  const isSecond = result.rank === 2;
-                  const isThird = result.rank === 3;
+                  const fsPenaltyMs = (result.falseStartDeltaMs || 0) * settings.falseStartMultiplier;
                   const formattedTime = result.isDNF
                     ? 'DNF'
                     : formatTime(result.timeMs, { penalty: result.penalty }) + (result.penalty === 'PLUS_2' ? ' (+2)' : '');
 
+                  const activePlayersCount = tournamentPlayers.filter(p => p.team === 'RED' || p.team === 'BLUE').length;
+                  const pointsEarned = result.score ?? (result.isDNF ? 0 : Math.max(1, activePlayersCount - (result.rank - 1)));
+                  const isRed = result.team === 'RED' || (result.team as any) === '1';
+                  const isBlue = result.team === 'BLUE' || (result.team as any) === '2';
+                  const teamBgClass = isRed ? 'bg-red-500 text-white' : isBlue ? 'bg-blue-500 text-white' : 'bg-bg-tertiary text-text-secondary';
+                  const isMe = result.playerId === user?.uid;
+                  const isResultBot = tournamentPlayers.find(x => x.id === result.playerId)?.role === 'BOT';
+
                   return (
                     <div
                       key={result.playerId}
-                      className={`flex items-center justify-between px-2.5 py-2 rounded-xl transition-all border ${
-                        isFirst
-                          ? 'bg-amber-500/10 border-amber-500/30 text-text-primary shadow-2xs'
-                          : isSecond
-                          ? 'bg-slate-500/10 border-slate-400/20 text-text-primary'
-                          : isThird
-                          ? 'bg-amber-700/10 border-amber-700/20 text-text-primary'
-                          : 'bg-bg-primary border-border/70 text-text-primary'
-                      }`}
+                      className={`group relative flex items-center justify-between px-2.5 py-2 rounded-xl transition-all border bg-bg-primary border-border/70 text-text-primary ${isMe ? 'hover:border-border' : ''}`}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className={`w-5 text-center font-mono font-bold text-xs shrink-0 ${
-                          isFirst ? 'text-amber-400' : isSecond ? 'text-slate-300' : isThird ? 'text-amber-600' : 'text-text-secondary'
-                        }`}>
-                          #{result.rank}
-                        </span>
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
                         <div
-                          className="w-5 h-5 rounded-md shadow-xs shrink-0"
-                          style={{ backgroundColor: result.color }}
-                        />
-                        <div className="flex flex-col min-w-0">
-                          <span className="text-xs font-bold text-text-primary truncate">{result.name}</span>
-                          {result.team && (
-                            <span className={`text-[10px] font-semibold leading-none ${result.team === 'RED' ? 'text-red-400' : 'text-blue-400'}`}>
-                              {result.team === 'RED' ? 'Red' : 'Blue'}
-                            </span>
-                          )}
+                          className={`w-5 h-5 rounded-md shadow-xs shrink-0 flex items-center justify-center font-mono font-bold text-xs ${teamBgClass}`}
+                          title={`${pointsEarned} ${pointsEarned === 1 ? 'point' : 'points'}`}
+                        >
+                          {pointsEarned}
                         </div>
+                        {isResultBot ? (
+                          <div
+                            className="w-5 h-5 rounded-full shadow-xs shrink-0"
+                            style={{ backgroundColor: result.color === '#18181b' ? 'var(--profile-black, #2d333b)' : (result.color || '#64748b') }}
+                          />
+                        ) : (
+                          <div
+                            className="w-5 h-5 rounded-md shadow-xs shrink-0"
+                            style={{ backgroundColor: result.color === '#18181b' ? 'var(--profile-black, #2d333b)' : result.color }}
+                          />
+                        )}
+                        
+                        {/* Name (hidden on hover if it's the current user) */}
+                        <span className={`text-xs font-bold text-text-primary truncate ${isMe ? 'group-hover:hidden' : ''}`}>
+                          {result.name}
+                        </span>
+
+                        {/* Action Buttons (visible only on hover if it's the current user) */}
+                        {isMe && (
+                          <div className="hidden group-hover:flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handlePenalty(result.playerId, result.penalty === 'PLUS_2' ? 'NONE' : 'PLUS_2');
+                              }}
+                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                                result.penalty === 'PLUS_2' 
+                                  ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-500 hover:bg-yellow-500/30' 
+                                  : 'bg-bg-secondary border-border/80 text-text-secondary hover:text-text-primary hover:border-text-secondary'
+                              }`}
+                            >
+                              +2
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handlePenalty(result.playerId, result.penalty === 'DNF' ? 'NONE' : 'DNF');
+                              }}
+                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                                result.penalty === 'DNF' 
+                                  ? 'bg-red-500/20 border-red-500/50 text-red-500 hover:bg-red-500/30' 
+                                  : 'bg-bg-secondary border-border/80 text-text-secondary hover:text-text-primary hover:border-text-secondary'
+                              }`}
+                            >
+                              DNF
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <div className="font-mono text-xs font-bold shrink-0 ml-2">
-                        <span className={result.isDNF ? 'text-red-400' : isFirst ? 'text-amber-400' : 'text-text-primary'}>
+                      <div className="font-mono text-xs font-bold shrink-0 ml-2 flex items-center gap-1">
+                        {!result.isDNF && fsPenaltyMs > 0 && (
+                          <span className="text-[10px] text-red-400">+{formatTime(fsPenaltyMs)}</span>
+                        )}
+                        <span className={result.isDNF ? 'text-red-400' : 'text-text-primary'}>
                           {formattedTime}
                         </span>
                       </div>
@@ -824,12 +1350,13 @@ function ArenaInner() {
                   );
                 })}
               </div>
-            )}
-          </div>
+            );
+          })()}
+        </div>
 
           {/* Blue Team */}
           <div 
-            className="flex-1 p-2 flex flex-col min-h-0 rounded-xl border-2 border-transparent transition-colors"
+            className="group/team flex-1 p-2 flex flex-col min-h-0 rounded-xl border-2 border-transparent transition-colors"
             onDragOver={isHost ? (e) => { e.preventDefault(); e.currentTarget.classList.add('border-blue-400/50', 'bg-blue-500/5'); } : undefined}
             onDragLeave={isHost ? (e) => { e.currentTarget.classList.remove('border-blue-400/50', 'bg-blue-500/5'); } : undefined}
             onDrop={isHost ? (e) => {
@@ -843,18 +1370,30 @@ function ArenaInner() {
               }
             } : undefined}
           >
-            {team2Players.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center text-sm font-medium text-text-secondary/50 italic">No players</div>
-            ) : (
-              <div className="flex flex-col items-center gap-1.5 overflow-y-auto flex-1 custom-scrollbar w-full">
-                {team2Players.map(p => <PlayerRow key={p.id} p={p} isHost={isHost} />)}
-              </div>
-            )}
+            <div className="flex flex-col items-center gap-1.5 overflow-y-auto flex-1 custom-scrollbar w-full">
+              {team2Players.length === 0 && (
+                <div className="py-4 text-sm font-medium text-text-secondary/50 italic">No players</div>
+              )}
+              {team2Players.map(p => (
+                <PlayerRow
+                  key={p.id}
+                  p={p}
+                  isHost={isHost}
+                  onDelete={handleDeleteBot}
+                  onUpdateBot={handleUpdateBot}
+                />
+              ))}
+              {isHost && (
+                <div className="w-full flex justify-center opacity-0 pointer-events-none group-hover/team:opacity-100 group-hover/team:pointer-events-auto transition-opacity duration-150 shrink-0">
+                  <AddBotCard onClick={() => handleAddBot('BLUE')} />
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         <div 
-          className="flex flex-wrap items-center gap-2 mt-2 min-h-[32px] rounded-xl border-2 border-transparent transition-colors"
+          className="flex flex-wrap items-center justify-center gap-2 mt-2 min-h-[32px] rounded-xl border-2 border-transparent transition-colors w-full"
           onDragOver={isHost ? (e) => { e.preventDefault(); e.currentTarget.classList.add('border-accent/50', 'bg-accent/5'); } : undefined}
           onDragLeave={isHost ? (e) => { e.currentTarget.classList.remove('border-accent/50', 'bg-accent/5'); } : undefined}
           onDrop={isHost ? (e) => {
@@ -864,7 +1403,7 @@ function ArenaInner() {
             if (playerId) {
                const isBot = tournamentPlayers.find(p => p.id === playerId)?.role === 'BOT';
                if (isBot) {
-                 removePlayer(playerId);
+                 handleDeleteBot(playerId);
                } else {
                  assignTeam(playerId, 'none');
                }
@@ -891,143 +1430,6 @@ function ArenaInner() {
           })}
         </div>
       </div>
-
-      {isHost && isAdminOpen && createPortal(
-        <div 
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) toggleAdmin(false);
-          }}
-        >
-          <div className="bg-bg-secondary border border-border/80 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl flex flex-col gap-4 animate-in zoom-in-95 max-h-[85vh] overflow-y-auto custom-scrollbar">
-            <div className="flex items-center justify-between pb-3 border-b border-border/80 shrink-0">
-              <h2 className="text-base font-bold text-text-primary">Match Settings</h2>
-              <button 
-                type="button" 
-                onClick={() => toggleAdmin(false)} 
-                className="p-1 text-text-secondary hover:text-text-primary rounded-lg hover:bg-bg-hover transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-semibold text-text-secondary uppercase">Scoring Mode</label>
-                <select 
-                  value={settings.scoringMode} 
-                  onChange={e => updateSettings({ scoringMode: e.target.value as 'RANK_BASED' | 'DIFFERENTIAL' })}
-                  className="bg-bg-primary border border-border/80 rounded-lg p-1.5 text-xs text-text-primary outline-none focus:border-accent/50"
-                >
-                  <option value={ScoringMode.RANK_BASED}>Rank Based</option>
-                  <option value={ScoringMode.DIFFERENTIAL}>Differential Time</option>
-                </select>
-              </div>
-              
-              {settings.scoringMode === ScoringMode.RANK_BASED && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-semibold text-text-secondary uppercase truncate">1st Place Bonus</label>
-                    <input type="number" min={0} value={settings.firstPlaceBonus ?? 0} onChange={e => updateSettings({ firstPlaceBonus: parseInt(e.target.value) || 0 })} className="bg-bg-primary border border-border/80 rounded-lg p-1.5 text-xs text-text-primary outline-none focus:border-accent/50" />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-semibold text-text-secondary uppercase truncate">Points to Win</label>
-                    <input type="number" min={1} value={settings.rankPointsFloor ?? 1} onChange={e => updateSettings({ rankPointsFloor: parseInt(e.target.value) || 1 })} className="bg-bg-primary border border-border/80 rounded-lg p-1.5 text-xs text-text-primary outline-none focus:border-accent/50" />
-                  </div>
-                </div>
-              )}
-              
-              {settings.scoringMode === ScoringMode.DIFFERENTIAL && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-semibold text-text-secondary uppercase truncate">Gap to Win</label>
-                    <input type="number" min={1} value={settings.differentialGapThreshold ?? 500} onChange={e => updateSettings({ differentialGapThreshold: parseInt(e.target.value) || 500 })} className="bg-bg-primary border border-border/80 rounded-lg p-1.5 text-xs text-text-primary outline-none focus:border-accent/50" />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-semibold text-text-secondary uppercase truncate">DNF Score</label>
-                    <input type="number" min={0} value={settings.differentialDNFScore ?? 300} onChange={e => updateSettings({ differentialDNFScore: parseInt(e.target.value) || 300 })} className="bg-bg-primary border border-border/80 rounded-lg p-1.5 text-xs text-text-primary outline-none focus:border-accent/50" />
-                  </div>
-                </div>
-              )}
-              
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-semibold text-text-secondary uppercase truncate">Target Sets</label>
-                  <input type="number" min={1} value={settings.targetSets} onChange={e => updateSettings({ targetSets: parseInt(e.target.value) || 1 })} className="bg-bg-primary border border-border/80 rounded-lg p-1.5 text-xs text-text-primary outline-none focus:border-accent/50" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-semibold text-text-secondary uppercase truncate">Target Games</label>
-                  <input type="number" min={1} value={settings.targetGames} onChange={e => updateSettings({ targetGames: parseInt(e.target.value) || 1 })} className="bg-bg-primary border border-border/80 rounded-lg p-1.5 text-xs text-text-primary outline-none focus:border-accent/50" />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1 mt-2">
-                <label className="text-xs font-semibold text-text-secondary uppercase">Sound Effects</label>
-                <button 
-                  onClick={() => updateSettings({ soundEnabled: !settings.soundEnabled })} 
-                  className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-colors ${settings.soundEnabled ? 'bg-accent/10 border-accent/30 text-accent' : 'bg-bg-primary border-border/80 text-text-secondary hover:text-text-primary'}`}
-                >
-                  <span className="text-sm font-medium">{settings.soundEnabled ? 'Enabled' : 'Muted'}</span>
-                  {settings.soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div className="border-t border-border/80 pt-3 flex flex-col gap-3">
-              <button onClick={addBot} className="w-full py-2.5 rounded-xl border border-dashed border-border/80 hover:border-accent hover:text-accent hover:bg-accent/5 text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer text-text-primary">
-                <Bot className="w-4 h-4" /> Add Bot
-              </button>
-              
-              <div className="flex flex-col gap-2">
-                {tournamentPlayers.filter(p => p.role === 'BOT').map(bot => (
-                  <div key={bot.id} className="flex flex-col bg-bg-primary p-2.5 rounded-xl border border-border/80 gap-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col">
-                        <span className="text-xs font-bold text-text-primary">{bot.name}</span>
-                        <span className="text-[10px] text-text-secondary uppercase">{bot.team === 'RED' ? 'Red Team' : 'Blue Team'}</span>
-                      </div>
-                      <button onClick={() => removePlayer(bot.id)} className="p-1 text-text-secondary hover:text-red-500 rounded hover:bg-red-500/10 cursor-pointer">
-                        <Trash className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 mt-1">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] font-semibold text-text-secondary uppercase">Avg (s)</label>
-                        <input 
-                          type="number" 
-                          step="0.1"
-                          min="0"
-                          value={((bot.botConfig?.averageTimeMs ?? 5000) / 1000).toFixed(1)}
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value);
-                            if (!isNaN(val)) updatePlayerBotConfig(bot.id, { averageTimeMs: Math.round(val * 1000) });
-                          }}
-                          className="bg-bg-secondary border border-border/80 rounded-md p-1.5 text-xs text-text-primary outline-none focus:border-accent/50"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] font-semibold text-text-secondary uppercase">StdDev (s)</label>
-                        <input 
-                          type="number" 
-                          step="0.1"
-                          min="0"
-                          value={((bot.botConfig?.stdDevMs ?? 500) / 1000).toFixed(1)}
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value);
-                            if (!isNaN(val)) updatePlayerBotConfig(bot.id, { stdDevMs: Math.round(val * 1000) });
-                          }}
-                          className="bg-bg-secondary border border-border/80 rounded-md p-1.5 text-xs text-text-primary outline-none focus:border-accent/50"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   );
 }

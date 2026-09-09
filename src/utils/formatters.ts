@@ -39,12 +39,9 @@ export function formatTime(
 /**
  * Format points for display
  */
-export function formatPoints(points: number, mode: ScoringMode): string {
+export function formatPoints(points: number): string {
   if (points === undefined || points === null || isNaN(points)) {
     return '0';
-  }
-  if (mode === 'DIFFERENTIAL') {
-    return `+${points.toFixed(0)} pts`;
   }
   return `${points} pts`;
 }

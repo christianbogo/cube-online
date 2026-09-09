@@ -84,6 +84,18 @@ export default function Layout() {
     useEffect(() => localStorage.setItem('sidebar_right_width', rightWidth.toString()), [rightWidth]);
     useEffect(() => localStorage.setItem('sidebar_right_last_width', lastOpenRightWidth.toString()), [lastOpenRightWidth]);
     useEffect(() => localStorage.setItem('sidebar_data_width', dataWidth.toString()), [dataWidth]);
+
+    useEffect(() => {
+        const handleCustomWidth = (e: Event) => {
+            const customEvent = e as CustomEvent<{ width: number }>;
+            if (customEvent.detail && typeof customEvent.detail.width === 'number') {
+                setRightWidth(customEvent.detail.width);
+                setLastOpenRightWidth(customEvent.detail.width);
+            }
+        };
+        window.addEventListener('arena-sidebar-set-width', handleCustomWidth);
+        return () => window.removeEventListener('arena-sidebar-set-width', handleCustomWidth);
+    }, []);
     const [isResizingLeft, setIsResizingLeft] = useState(false);
     const [isResizingRight, setIsResizingRight] = useState(false);
     const [consoleInfo, setConsoleInfo] = useState<string | null>(null);
@@ -188,6 +200,10 @@ export default function Layout() {
                 return;
             }
 
+            if (isRoomPage) {
+                return;
+            }
+
             if (e.key === 'Escape') navigate('/');
 
             // Keybinds Navigation Hotkeys
@@ -215,7 +231,7 @@ export default function Layout() {
             window.removeEventListener('pointerup', handleGlobalPointerUp);
             window.removeEventListener('keydown', handleGlobalKeyDown, { capture: true });
         };
-    }, [navigate, toggleLeftSidebar, toggleRightSidebar, location.pathname, isSignInPage, user]);
+    }, [navigate, toggleLeftSidebar, toggleRightSidebar, location.pathname, isSignInPage, user, isRoomPage]);
 
     const startResizingLeft = useCallback(() => setIsResizingLeft(true), []);
     const startResizingRight = useCallback(() => setIsResizingRight(true), []);
@@ -337,12 +353,22 @@ export default function Layout() {
 
                 {/* Right Sidebar */}
                 {!['/account', '/logs', '/keybinds', '/dev', '/privacy', '/info'].some(p => location.pathname.startsWith(p)) && (
-                    <div style={{ width: rightWidth }} className="hidden md:flex flex-shrink-0 relative flex-col backdrop-blur-sm will-change-[width] border-l border-border z-20">
+                    <div
+                        style={{ width: rightWidth }}
+                        className={`hidden md:flex flex-shrink-0 relative flex-col backdrop-blur-sm will-change-[width] border-l border-border z-20 ${isResizingRight ? '' : 'transition-[width] duration-200 ease-out'}`}
+                    >
                         <div className="absolute top-0 left-[-5px] w-2.5 h-full cursor-col-resize z-50 group flex justify-center" onMouseDown={startResizingRight}>
                             <div className="w-[2px] h-full bg-transparent group-hover:bg-accent/50 transition-colors delay-75" />
                         </div>
                         {isRoomPage ? (
-                            <ArenaSidebar collapsed={isRightCollapsed} onToggleCollapse={toggleRightSidebar} />
+                            <ArenaSidebar
+                                collapsed={isRightCollapsed}
+                                onToggleCollapse={toggleRightSidebar}
+                                onSetWidth={(w) => {
+                                    setRightWidth(w);
+                                    setLastOpenRightWidth(w);
+                                }}
+                            />
                         ) : (
                             <RightSidebar collapsed={isRightCollapsed} onToggleCollapse={toggleRightSidebar} />
                         )}

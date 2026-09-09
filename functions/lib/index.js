@@ -23,7 +23,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getGoalStreaks = exports.getDailyVolumeStats = exports.getLogsBottomStats = exports.getLogsSidebarData = exports.getPaginatedSolves = exports.getEventSolves = exports.getRecordsData = exports.backfillAllUsersStats = exports.purgeStalePresenceManual = exports.cleanupStalePresence = exports.updateLeaderboards = exports.backfillUserStats = exports.aggregateUserStats = void 0;
+exports.adminDeleteUserAccountFn = exports.deleteImportedSolvesFn = exports.deleteAllSolvesFn = exports.deleteUserAccountFn = exports.exportUserData = exports.getGoalStreaks = exports.getDailyVolumeStats = exports.getLogsBottomStats = exports.getLogsSidebarData = exports.getPaginatedSolves = exports.getRecordsData = exports.backfillAllUsersStats = exports.purgeStalePresenceManual = exports.cleanupStaleRooms = exports.cleanupStalePresence = exports.updateLeaderboards = exports.backfillUserStats = exports.aggregateUserStats = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-admin/firestore");
@@ -325,6 +325,34 @@ exports.cleanupStalePresence = functions.pubsub.schedule('every 10 minutes').onR
     }
     return null;
 });
+exports.cleanupStaleRooms = functions.pubsub.schedule('every 5 minutes').onRun(async (context) => {
+    var _a;
+    const rtdb = admin.database();
+    const roomsRef = rtdb.ref('rooms');
+    const snapshot = await roomsRef.once('value');
+    const data = snapshot.val();
+    if (!data)
+        return null;
+    const now = Date.now();
+    const updates = {};
+    for (const [roomId, room] of Object.entries(data)) {
+        const players = (room === null || room === void 0 ? void 0 : room.players) ? Object.keys(room.players) : [];
+        const ageMs = now - ((room === null || room === void 0 ? void 0 : room.createdAt) || 0);
+        const heartbeatAgeMs = (room === null || room === void 0 ? void 0 : room.hostHeartbeat) ? (now - room.hostHeartbeat) : null;
+        // Stale if room is older than 30s with no host heartbeat, or if host heartbeat hasn't updated in > 45s
+        const isStale = (ageMs > 30000 && heartbeatAgeMs === null) || (heartbeatAgeMs !== null && heartbeatAgeMs > 45000);
+        const isMissingHost = Boolean((room === null || room === void 0 ? void 0 : room.host) && !((_a = room === null || room === void 0 ? void 0 : room.players) === null || _a === void 0 ? void 0 : _a[room.host]));
+        if (players.length === 0 || isMissingHost || isStale) {
+            updates[roomId] = null;
+        }
+    }
+    const count = Object.keys(updates).length;
+    if (count > 0) {
+        await roomsRef.update(updates);
+        console.log(`Cleaned up ${count} stale arena rooms:`, Object.keys(updates));
+    }
+    return null;
+});
 exports.purgeStalePresenceManual = functions.https.onRequest(async (req, res) => {
     const rtdb = admin.database();
     const presenceRef = rtdb.ref('presence');
@@ -485,8 +513,6 @@ exports.getRecordsData = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
     }
     return result.filter((r) => { var _a; return ((_a = r.count) !== null && _a !== void 0 ? _a : 0) > 0 || r.single !== null; });
 });
-var getEventSolves_1 = require("./getEventSolves");
-Object.defineProperty(exports, "getEventSolves", { enumerable: true, get: function () { return getEventSolves_1.getEventSolves; } });
 var solvesLogs_1 = require("./solvesLogs");
 Object.defineProperty(exports, "getPaginatedSolves", { enumerable: true, get: function () { return solvesLogs_1.getPaginatedSolves; } });
 Object.defineProperty(exports, "getLogsSidebarData", { enumerable: true, get: function () { return solvesLogs_1.getLogsSidebarData; } });
@@ -494,4 +520,10 @@ Object.defineProperty(exports, "getLogsBottomStats", { enumerable: true, get: fu
 var goalsFunctions_1 = require("./goalsFunctions");
 Object.defineProperty(exports, "getDailyVolumeStats", { enumerable: true, get: function () { return goalsFunctions_1.getDailyVolumeStats; } });
 Object.defineProperty(exports, "getGoalStreaks", { enumerable: true, get: function () { return goalsFunctions_1.getGoalStreaks; } });
+var bulkOperations_1 = require("./bulkOperations");
+Object.defineProperty(exports, "exportUserData", { enumerable: true, get: function () { return bulkOperations_1.exportUserData; } });
+Object.defineProperty(exports, "deleteUserAccountFn", { enumerable: true, get: function () { return bulkOperations_1.deleteUserAccountFn; } });
+Object.defineProperty(exports, "deleteAllSolvesFn", { enumerable: true, get: function () { return bulkOperations_1.deleteAllSolvesFn; } });
+Object.defineProperty(exports, "deleteImportedSolvesFn", { enumerable: true, get: function () { return bulkOperations_1.deleteImportedSolvesFn; } });
+Object.defineProperty(exports, "adminDeleteUserAccountFn", { enumerable: true, get: function () { return bulkOperations_1.adminDeleteUserAccountFn; } });
 //# sourceMappingURL=index.js.map

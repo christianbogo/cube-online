@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { SolvesProvider } from './contexts/SolvesContext';
@@ -20,6 +21,8 @@ import Info from './pages/Info';
 import WCACallback from './pages/WCACallback';
 import type { ReactNode } from 'react';
 
+const Arena = lazy(() => import('./pages/Arena'));
+
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const { user, loading } = useAuth();
   if (loading) return null;
@@ -34,9 +37,11 @@ const GuestLockedRoute = ({ children }: { children: ReactNode }) => {
   return children;
 };
 
-const ArenaRoute = () => {
-  return <Navigate to="/" replace />;
-};
+const ArenaRoute = () => (
+  <Suspense fallback={null}>
+    <Arena />
+  </Suspense>
+);
 
 function App() {
   return (

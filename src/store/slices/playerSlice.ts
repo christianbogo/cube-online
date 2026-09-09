@@ -2,6 +2,7 @@ import type { StateCreator } from 'zustand';
 import type { TournamentStore } from '../tournamentStore';
 import type { Player, TeamId, PlayerRole, BotConfig } from '@/types/tournament';
 import { DEFAULT_PLAYER_COLORS } from '@/types/tournament';
+import { AVAILABLE_COLORS } from '@/utils/arenaHelpers';
 
 const getInitialHostName = () => {
   if (typeof window !== 'undefined') {
@@ -30,7 +31,7 @@ export interface PlayerSlice {
   setPlayerTeam: (playerId: string, team: TeamId) => void;
   setPlayerRole: (playerId: string, role: PlayerRole) => void;
   updatePlayerBotConfig: (playerId: string, config: Partial<BotConfig>) => void;
-  addPlayer: (name: string, team?: TeamId, role?: PlayerRole, botConfig?: BotConfig) => void;
+  addPlayer: (name: string, team?: TeamId, role?: PlayerRole, botConfig?: BotConfig, id?: string, color?: string) => void;
   removePlayer: (id: string) => void;
   updatePlayerName: (id: string, name: string) => void;
   updatePlayerTimeNerf: (id: string, nerfMs: number) => void;
@@ -86,30 +87,34 @@ export const createPlayerSlice: StateCreator<TournamentStore, [['zustand/immer',
       Object.assign(p.botConfig, config);
     });
   },
-  addPlayer: (name, team = 'RED', role = 'BOT', botConfig) => {
+  addPlayer: (name, team = 'RED', role = 'BOT', botConfig, id, color) => {
     set((state) => {
       if (state.players.length >= 10) return;
 
       const nextIndex = state.players.length;
       const colorTheme = DEFAULT_PLAYER_COLORS[nextIndex % DEFAULT_PLAYER_COLORS.length];
-      const newId = `p-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const newId = id || `p-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
       const defaultBotConfig: BotConfig = botConfig || {
-        averageTimeMs: 20000,
+        averageTimeMs: 15000,
         stdDevMs: 1000,
         maturity: 'INTERMEDIATE',
       };
 
+      const isBot = role === 'BOT';
+      const randomColor = AVAILABLE_COLORS[Math.floor(Math.random() * AVAILABLE_COLORS.length)].hex;
+      const assignedColor = color || (isBot ? randomColor : colorTheme.color);
+
       state.players.push({
         id: newId,
-        name: name.toUpperCase().slice(0, 20),
+        name: isBot ? name.slice(0, 20) : name.toUpperCase().slice(0, 20),
         role,
         key: role === 'HOST' ? ' ' : `bot-${nextIndex + 1}`,
-        color: colorTheme.color,
-        accentColor: colorTheme.accentColor,
+        color: assignedColor,
+        accentColor: assignedColor,
         active: true,
         team,
-        botConfig: role === 'BOT' ? defaultBotConfig : undefined,
+        botConfig: isBot ? defaultBotConfig : undefined,
       });
     });
   },
@@ -122,7 +127,7 @@ export const createPlayerSlice: StateCreator<TournamentStore, [['zustand/immer',
   updatePlayerName: (id, name) => {
     set((state) => {
       const p = state.players.find((p) => p.id === id);
-      if (p) p.name = name.toUpperCase().slice(0, 20);
+      if (p) p.name = p.role === 'BOT' ? name.slice(0, 20) : name.toUpperCase().slice(0, 20);
     });
   },
   updatePlayerTimeNerf: (id, nerfMs) => {

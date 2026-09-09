@@ -4,7 +4,7 @@ import { useTheme } from '../ui/ThemeProvider';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGoals } from '../../contexts/GoalsContext';
-import { useConfirm } from '../../contexts/ConfirmationContext';
+import { useRoomLeave } from '@/hooks/useRoomLeave';
 
 export interface LeftSidebarProps {
     collapsed: boolean;
@@ -22,7 +22,7 @@ interface NavItem {
 const defaultPrimaryNavItems: NavItem[] = [
     { name: 'Cube', icon: Box, path: '/' },
     { name: 'Goals', icon: Target, path: '/goals' },
-    { name: 'Arena', icon: Swords, path: '/arena', underConstruction: true },
+    { name: 'Arena', icon: Swords, path: '/arena' },
     { name: 'Social', icon: Users, path: '/social' },
 ];
 
@@ -30,7 +30,7 @@ const guestPrimaryNavItems: NavItem[] = [
     { name: 'Cube', icon: Box, path: '/' },
     { name: 'Social', icon: Users, path: '/social' },
     { name: 'Goals', icon: Target, path: '/goals' },
-    { name: 'Arena', icon: Swords, path: '/arena', underConstruction: true },
+    { name: 'Arena', icon: Swords, path: '/arena' },
 ];
 
 const secondaryNavItems: NavItem[] = [
@@ -43,7 +43,6 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
     const { theme, setTheme } = useTheme();
     const { user } = useAuth();
     const { hasUnseenGoals } = useGoals();
-    const { confirm } = useConfirm();
 
     const primaryNavItems = user && !user.isAnonymous ? defaultPrimaryNavItems : guestPrimaryNavItems;
 
@@ -72,12 +71,10 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
         return () => clearTimeout(timer);
     }, [popupState]);
 
-    const knownPrefixes = ['/', '/arena', '/logs', '/social', '/account', '/keybinds', '/goals', '/dev', '/privacy', '/info', '/records', '/data', '/stats', '/callback'];
-    const isRoomPage = !knownPrefixes.some(p => location.pathname === p || (p !== '/' && location.pathname.startsWith(p + '/')));
-
+    const { isRoomPage, confirmLeaveRoom } = useRoomLeave();
 
     const renderNavItem = (item: NavItem) => {
-        const isUnderConstruction = !!item.underConstruction || item.name === 'Arena';
+        const isUnderConstruction = !!item.underConstruction;
         const isItemLocked = !isUnderConstruction && (!!item.locked || ((!user || user.isAnonymous) && ['Logs', 'Dev', 'Binds'].includes(item.name)));
 
         return (
@@ -96,9 +93,7 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
                         }
                         if (isRoomPage) {
                             e.preventDefault();
-                            const ok = await confirm('Are you sure you want to leave the Arena?', { confirmText: 'Leave', isDanger: true });
-                            if (!ok) return;
-                            navigate(item.path);
+                            await confirmLeaveRoom(item.path);
                             return;
                         }
                         if (item.path === '/social' && location.pathname.startsWith('/social') && location.pathname !== '/social') {
@@ -175,8 +170,12 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
             {popupState?.visible && (
                 <div
                     style={{ top: popupState.y, left: popupState.x }}
-                    onClick={() => {
+                    onClick={async () => {
                         setPopupState(null);
+                        if (isRoomPage) {
+                            await confirmLeaveRoom('/account', { mode: 'signup' });
+                            return;
+                        }
                         navigate('/account', { state: { mode: 'signup' } });
                     }}
                     className="fixed z-50 bg-zinc-900 border border-zinc-700 text-white text-xs font-semibold px-3 py-2 rounded-xl shadow-2xl flex items-center cursor-pointer hover:border-accent hover:bg-zinc-800 transition-all animate-in fade-in zoom-in-95 pointer-events-auto"
@@ -206,9 +205,7 @@ export default function LeftSidebar({ collapsed, onToggleCollapse }: LeftSidebar
                         (e.currentTarget as HTMLElement).blur();
                         if (isRoomPage) {
                             e.preventDefault();
-                            const ok = await confirm('Are you sure you want to leave the Arena?', { confirmText: 'Leave', isDanger: true });
-                            if (!ok) return;
-                            navigate('/privacy');
+                            await confirmLeaveRoom('/privacy');
                         }
                     }}
                     title="Privacy Policy"

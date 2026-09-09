@@ -30,6 +30,7 @@ export interface MatchSlice {
   teamGameWins: Record<TeamId, number>;
   matchBestTimeMs: number | null;
   setBestTimeMs: number | null;
+  gameBestTimeMs: number | null;
   matchWinnerPlayerId: string | null;
   matchWinnerTeamId: TeamId | null;
 
@@ -50,9 +51,20 @@ export interface MatchSlice {
     setWinnerTeam?: TeamId;
     matchWinnerTeam?: TeamId;
     isGameWon: boolean;
+    highlight?: {
+      type: 'HIGHLIGHT_SET' | 'HIGHLIGHT_GAME';
+      playerId: string;
+      playerName: string;
+      playerColor: string;
+      team?: TeamId;
+      timeMs: number;
+      formattedTime: string;
+      message: string;
+    };
   };
   applyPenalty: (gameId: string, playerId: string, penalty: PenaltyType, roundId?: string) => void;
   recalculateAllScores: () => void;
+  clearLastMatchPlaces: () => void;
   cancelMatchToSetup: () => void;
   resetTournament: () => void;
 }
@@ -81,6 +93,7 @@ export const createMatchSlice: StateCreator<TournamentStore, [['zustand/immer', 
   teamGameWins: { RED: 0, BLUE: 0 },
   matchBestTimeMs: null,
   setBestTimeMs: null,
+  gameBestTimeMs: null,
   matchWinnerPlayerId: null,
   matchWinnerTeamId: null,
 
@@ -137,6 +150,7 @@ export const createMatchSlice: StateCreator<TournamentStore, [['zustand/immer', 
       state.teamGameWins = { RED: 0, BLUE: 0 };
       state.matchBestTimeMs = null;
       state.setBestTimeMs = null;
+      state.gameBestTimeMs = null;
       state.matchWinnerPlayerId = null;
       state.matchWinnerTeamId = null;
       state.activityFeed = [];
@@ -221,6 +235,7 @@ export const createMatchSlice: StateCreator<TournamentStore, [['zustand/immer', 
           state.teamGameWins = { RED: 0, BLUE: 0 };
           state.teamGamePoints = { RED: 0, BLUE: 0 };
           state.setBestTimeMs = null;
+          state.gameBestTimeMs = null;
         } else {
           const nextGameIndex = state.currentGameIndex + 1;
           const nextGame: Game = {
@@ -237,6 +252,7 @@ export const createMatchSlice: StateCreator<TournamentStore, [['zustand/immer', 
           state.lastRoundScores = {};
           state.currentGameSolves = {};
           state.teamGamePoints = { RED: 0, BLUE: 0 };
+          state.gameBestTimeMs = null;
         }
       } else {
         const nextRoundIndex = state.currentRoundIndex + 1;
@@ -267,6 +283,17 @@ export const createMatchSlice: StateCreator<TournamentStore, [['zustand/immer', 
     const roundSolves: Record<string, Solve> = {};
     let newMatchBest = state.matchBestTimeMs;
     let newSetBest = state.setBestTimeMs;
+    let newGameBest = state.gameBestTimeMs;
+    let roundHighlight: {
+      type: 'HIGHLIGHT_SET' | 'HIGHLIGHT_GAME';
+      playerId: string;
+      playerName: string;
+      playerColor: string;
+      team?: TeamId;
+      timeMs: number;
+      formattedTime: string;
+      message: string;
+    } | undefined = undefined;
 
     set((draft) => {
       activePlayers.forEach((p) => {
@@ -343,11 +370,10 @@ export const createMatchSlice: StateCreator<TournamentStore, [['zustand/immer', 
         const timeSuffix = fastestRoundSolve.finalTimeMs < 60000 ? 's' : '';
         const previousMatchBest = state.matchBestTimeMs;
         const previousSetBest = state.setBestTimeMs;
+        const previousGameBest = state.gameBestTimeMs;
 
-        let isNewMatchRecord = false;
         if (!previousMatchBest || fastestRoundSolve.finalTimeMs < previousMatchBest) {
           newMatchBest = fastestRoundSolve.finalTimeMs;
-          isNewMatchRecord = true;
           draft.activityFeed.unshift({
             id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             timestamp: Date.now(),
@@ -363,19 +389,53 @@ export const createMatchSlice: StateCreator<TournamentStore, [['zustand/immer', 
 
         if (!previousSetBest || fastestRoundSolve.finalTimeMs < previousSetBest) {
           newSetBest = fastestRoundSolve.finalTimeMs;
-          if (!isNewMatchRecord) {
-            draft.activityFeed.unshift({
-              id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-              timestamp: Date.now(),
-              type: 'RECORD_BROKEN',
-              playerId: fastestRoundSolve.playerId,
-              playerName: bestPlayer?.name,
-              playerColor: bestPlayer?.color,
-              timeMs: fastestRoundSolve.finalTimeMs,
-              recordType: 'SET_RECORD',
-              message: `Set Record: ${bestFormattedTime}${timeSuffix} by ${bestPlayer?.name}`,
-            });
-          }
+          newGameBest = fastestRoundSolve.finalTimeMs;
+          roundHighlight = {
+            type: 'HIGHLIGHT_SET',
+            playerId: fastestRoundSolve.playerId,
+            playerName: bestPlayer?.name || 'Player',
+            playerColor: bestPlayer?.color || '#cccccc',
+            team: bestPlayer?.team,
+            timeMs: fastestRoundSolve.finalTimeMs,
+            formattedTime: `${bestFormattedTime}${timeSuffix}`,
+            message: `${bestPlayer?.name || 'Player'} had the fastest solve of the set (${bestFormattedTime}${timeSuffix})`,
+          };
+          draft.activityFeed.unshift({
+            id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            timestamp: Date.now(),
+            type: 'HIGHLIGHT_SET',
+            playerId: fastestRoundSolve.playerId,
+            playerName: bestPlayer?.name,
+            playerColor: bestPlayer?.color,
+            team: bestPlayer?.team,
+            timeMs: fastestRoundSolve.finalTimeMs,
+            recordType: 'SET_RECORD',
+            message: roundHighlight.message,
+          });
+        } else if (!previousGameBest || fastestRoundSolve.finalTimeMs < previousGameBest) {
+          newGameBest = fastestRoundSolve.finalTimeMs;
+          roundHighlight = {
+            type: 'HIGHLIGHT_GAME',
+            playerId: fastestRoundSolve.playerId,
+            playerName: bestPlayer?.name || 'Player',
+            playerColor: bestPlayer?.color || '#cccccc',
+            team: bestPlayer?.team,
+            timeMs: fastestRoundSolve.finalTimeMs,
+            formattedTime: `${bestFormattedTime}${timeSuffix}`,
+            message: `${bestPlayer?.name || 'Player'} had the fastest solve of the game (${bestFormattedTime}${timeSuffix})`,
+          };
+          draft.activityFeed.unshift({
+            id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            timestamp: Date.now(),
+            type: 'HIGHLIGHT_GAME',
+            playerId: fastestRoundSolve.playerId,
+            playerName: bestPlayer?.name,
+            playerColor: bestPlayer?.color,
+            team: bestPlayer?.team,
+            timeMs: fastestRoundSolve.finalTimeMs,
+            recordType: 'GAME_RECORD',
+            message: roundHighlight.message,
+          });
         }
       }
 
@@ -394,6 +454,7 @@ export const createMatchSlice: StateCreator<TournamentStore, [['zustand/immer', 
       draft.currentGameSolves = roundSolves;
       draft.matchBestTimeMs = newMatchBest;
       draft.setBestTimeMs = newSetBest;
+      draft.gameBestTimeMs = newGameBest;
       
       if (draft.activityFeed.length > 100) {
         draft.activityFeed = draft.activityFeed.slice(0, 100);
@@ -473,6 +534,7 @@ export const createMatchSlice: StateCreator<TournamentStore, [['zustand/immer', 
       setWinnerTeam: setWinnerTeam || undefined,
       matchWinnerTeam: matchWinnerTeam || undefined,
       isGameWon: !!(gameWinnerId || gameWinnerTeam),
+      highlight: roundHighlight,
     };
   },
 
@@ -555,11 +617,7 @@ export const createMatchSlice: StateCreator<TournamentStore, [['zustand/immer', 
             solvedList.forEach((item, idx) => {
               const rank = idx + 1;
               let score = 0;
-              if (state.settings.scoringMode === 'RANK_BASED') {
-                score = item.isDNF ? 0 : Math.max(1, activePlayers.length - (rank - 1)) + (rank === 1 ? state.settings.firstPlaceBonus : 0);
-              } else {
-                score = item.isDNF ? (state.settings.differentialDNFScore ?? 300) : Math.max(0, Math.round(((item.effectiveTimeMs - fastestMs) / 1000) * 100));
-              }
+              score = item.isDNF ? 0 : Math.max(1, activePlayers.length - (rank - 1));
 
               const fsDelta = item.rawSolve.falseStartDeltaMs || 0;
               const plus2 = item.rawSolve.penalty === 'PLUS_2' ? 2000 : 0;
@@ -593,31 +651,14 @@ export const createMatchSlice: StateCreator<TournamentStore, [['zustand/immer', 
           if (isTeamMode) {
             const redPts = runningTeamPoints.RED || 0;
             const bluePts = runningTeamPoints.BLUE || 0;
-            if (state.settings.scoringMode === 'RANK_BASED') {
-              if (redPts >= state.settings.rankPointsFloor || bluePts >= state.settings.rankPointsFloor) {
-                if (redPts > bluePts) gameWinnerTeam = 'RED';
-                else if (bluePts > redPts) gameWinnerTeam = 'BLUE';
-              }
-            } else {
-              const threshold = state.settings.differentialGapThreshold || 500;
-              if (redPts < bluePts && (bluePts - redPts) >= threshold) {
-                gameWinnerTeam = 'RED';
-              } else if (bluePts < redPts && (redPts - bluePts) >= threshold) {
-                gameWinnerTeam = 'BLUE';
-              }
+            if (redPts >= state.settings.rankPointsFloor || bluePts >= state.settings.rankPointsFloor) {
+              if (redPts > bluePts) gameWinnerTeam = 'RED';
+              else if (bluePts > redPts) gameWinnerTeam = 'BLUE';
             }
           } else {
-            if (state.settings.scoringMode === 'RANK_BASED') {
-              const eligible = Object.entries(runningGamePoints).filter(([, pts]) => pts >= state.settings.rankPointsFloor).sort((a, b) => b[1] - a[1]);
-              if (eligible.length > 0 && (eligible.length === 1 || eligible[0][1] > eligible[1][1])) {
-                gameWinnerId = eligible[0][0];
-              }
-            } else {
-              const threshold = state.settings.differentialGapThreshold || 500;
-              const sorted = Object.entries(runningGamePoints).sort((a, b) => a[1] - b[1]);
-              if (sorted.length >= 2 && (sorted[1][1] - sorted[0][1]) >= threshold) {
-                gameWinnerId = sorted[0][0];
-              }
+            const eligible = Object.entries(runningGamePoints).filter(([, pts]) => pts >= state.settings.rankPointsFloor).sort((a, b) => b[1] - a[1]);
+            if (eligible.length > 0 && (eligible.length === 1 || eligible[0][1] > eligible[1][1])) {
+              gameWinnerId = eligible[0][0];
             }
           }
 
@@ -650,6 +691,7 @@ export const createMatchSlice: StateCreator<TournamentStore, [['zustand/immer', 
                     penalty: s.penalty,
                     isDNF: s.isDNF,
                     score: s.score,
+                    falseStartDeltaMs: s.falseStartDeltaMs,
                   };
                 })
                 .sort((a, b) => a.rank - b.rank);
@@ -718,6 +760,12 @@ export const createMatchSlice: StateCreator<TournamentStore, [['zustand/immer', 
     });
   },
 
+  clearLastMatchPlaces: () => {
+    set((state) => {
+      state.lastMatchPlaces = [];
+    });
+  },
+
   cancelMatchToSetup: () => {
     const currentMatchId = get().matchId;
     get().resetTournament();
@@ -749,6 +797,7 @@ export const createMatchSlice: StateCreator<TournamentStore, [['zustand/immer', 
       state.teamGameWins = { RED: 0, BLUE: 0 };
       state.matchBestTimeMs = null;
       state.setBestTimeMs = null;
+      state.gameBestTimeMs = null;
       state.matchWinnerPlayerId = null;
       state.matchWinnerTeamId = null;
       state.activityFeed = [];

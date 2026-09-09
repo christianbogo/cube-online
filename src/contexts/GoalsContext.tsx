@@ -58,6 +58,7 @@ function getGoalCategoryIcon(category?: GoalCategory) {
 }
 
 const getDismissedGoalsKey = (uid?: string | null) => `cutter-cubing-dismissed-goals_${uid || 'guest'}`;
+const getHasUnseenGoalsKey = (uid?: string | null) => `cutter-cubing-has-unseen-goals_${uid || 'guest'}`;
 
 const getDismissedGoals = (uid?: string | null): Set<string> => {
     try {
@@ -86,13 +87,18 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
     const { solves } = useSolves();
 
     const [hasUnseenGoals, setHasUnseenGoals] = useState<boolean>(() => {
-        return localStorage.getItem('cutter-cubing-has-unseen-goals') === 'true';
+        return localStorage.getItem(getHasUnseenGoalsKey(user?.uid)) === 'true';
     });
 
     const clearUnseenGoals = useCallback(() => {
         setHasUnseenGoals(false);
-        localStorage.removeItem('cutter-cubing-has-unseen-goals');
-    }, []);
+        try {
+            localStorage.removeItem(getHasUnseenGoalsKey(user?.uid));
+            localStorage.removeItem('cutter-cubing-has-unseen-goals');
+        } catch {
+            // Ignore storage errors
+        }
+    }, [user?.uid]);
 
     // Clear unseen indicator whenever user views the Goals page
     useEffect(() => {
@@ -300,6 +306,11 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
             baselineInitializedRef.current = false;
             prevCompletedIdsRef.current = new Set();
             dismissedGoalsRef.current = getDismissedGoals(currentUid);
+            try {
+                setHasUnseenGoals(localStorage.getItem(getHasUnseenGoalsKey(currentUid)) === 'true');
+            } catch {
+                setHasUnseenGoals(false);
+            }
         }
     }, [user?.uid]);
 
@@ -351,7 +362,11 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
         if (hasNewGoals) {
             saveDismissedGoals(user?.uid, dismissed);
             setHasUnseenGoals(true);
-            localStorage.setItem('cutter-cubing-has-unseen-goals', 'true');
+            try {
+                localStorage.setItem(getHasUnseenGoalsKey(user?.uid), 'true');
+            } catch (e) {
+                console.warn("Failed to persist unseen goals flag:", e);
+            }
         }
     }, [completedGoalIds, goalsProgress, user, upsertNotification, removeNotification]);
 

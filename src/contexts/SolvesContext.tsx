@@ -627,34 +627,9 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
         if (user) {
             setSyncStatus('syncing');
             try {
-                // 1. Delete all solves for user in Firestore
-                const solvesQuery = query(collection(db, 'solves'), where('userId', '==', user.uid));
-                const solvesSnap = await getDocs(solvesQuery);
-                const BATCH_SIZE = 450;
-                for (let i = 0; i < solvesSnap.docs.length; i += BATCH_SIZE) {
-                    const chunk = solvesSnap.docs.slice(i, i + BATCH_SIZE);
-                    const batch = writeBatch(db);
-                    chunk.forEach(d => batch.delete(d.ref));
-                    await batch.commit();
-                }
-
-                // 2. Delete all sessions for user in Firestore
-                const sessionsQuery = query(collection(db, 'sessions'), where('userId', '==', user.uid));
-                const sessionsSnap = await getDocs(sessionsQuery);
-                for (let i = 0; i < sessionsSnap.docs.length; i += BATCH_SIZE) {
-                    const chunk = sessionsSnap.docs.slice(i, i + BATCH_SIZE);
-                    const batch = writeBatch(db);
-                    chunk.forEach(d => batch.delete(d.ref));
-                    await batch.commit();
-                }
-
-                // 3. Clear stats overview document in Firestore
-                try {
-                    await deleteDoc(doc(db, 'users', user.uid, 'stats', 'overview'));
-                } catch (e) {
-                    console.warn("Could not delete stats overview doc:", e);
-                }
-
+                const deleteFn = httpsCallable(functions, 'deleteAllSolvesFn');
+                await deleteFn();
+                
                 setSyncStatus('synced');
                 setTimeout(() => setSyncStatus('idle'), 2000);
             } catch (err) {
@@ -688,32 +663,8 @@ export function SolvesProvider({ children }: { children: ReactNode }) {
         if (user) {
             setSyncStatus('syncing');
             try {
-                // 1. Delete solves with this source from Firestore
-                const solvesQuery = query(collection(db, 'solves'), where('userId', '==', user.uid));
-                const snap = await getDocs(solvesQuery);
-                const toDeleteDocs = snap.docs.filter(d => {
-                    const data = d.data();
-                    return data.source === source || (typeof data.sessionId === 'string' && data.sessionId.startsWith(`${source}_`));
-                });
-
-                const BATCH_SIZE = 400;
-                for (let i = 0; i < toDeleteDocs.length; i += BATCH_SIZE) {
-                    const chunk = toDeleteDocs.slice(i, i + BATCH_SIZE);
-                    const batch = writeBatch(db);
-                    chunk.forEach(d => batch.delete(d.ref));
-                    await batch.commit();
-                }
-
-                // 2. Delete imported sessions from Firestore
-                const sessionsQuery = query(collection(db, 'sessions'), where('userId', '==', user.uid));
-                const sSnap = await getDocs(sessionsQuery);
-                const toDeleteSessions = sSnap.docs.filter(d => d.id.startsWith(`${source}_`) || d.data().source === source);
-                for (let i = 0; i < toDeleteSessions.length; i += BATCH_SIZE) {
-                    const chunk = toDeleteSessions.slice(i, i + BATCH_SIZE);
-                    const batch = writeBatch(db);
-                    chunk.forEach(d => batch.delete(d.ref));
-                    await batch.commit();
-                }
+                const deleteImportedFn = httpsCallable<{source: string}, {deletedCount: number}>(functions, 'deleteImportedSolvesFn');
+                await deleteImportedFn({ source });
 
                 // 3. Trigger recalculation of user stats overview
                 try {

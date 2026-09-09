@@ -243,25 +243,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!user || !user.uid) return;
 
         try {
-            // 1. Delete all user solves
-            const q = query(collection(db, 'solves'), where('userId', '==', user.uid));
-            const snapshot = await getDocs(q);
-            const batch = writeBatch(db);
-            snapshot.docs.forEach((doc) => {
-                batch.delete(doc.ref);
-            });
-            await batch.commit();
-
-            // 2. Delete user profile
-            await deleteDoc(doc(db, 'users', user.uid));
-
-            // 3. Delete Firebase Auth User
-            // Note: This requires re-authentication if recent login is old, 
-            // but for simplicity we assume active session.
-            const currentUser = auth.currentUser;
-            if (currentUser) {
-                await currentUser.delete();
-            }
+            const { httpsCallable } = await import('firebase/functions');
+            const { functions } = await import('../lib/firebase');
+            const deleteFn = httpsCallable(functions, 'deleteUserAccountFn');
+            await deleteFn();
+            
+            // Note: The cloud function handles Auth user deletion, but if we want to ensure
+            // the client state clears properly without throwing session errors, we can sign out:
+            await auth.signOut();
         } catch (error) {
             console.error("Error deleting account", error);
             throw error;

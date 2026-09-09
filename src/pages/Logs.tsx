@@ -13,7 +13,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { formatTime } from '../utils/formatTime';
 import { httpsCallable } from 'firebase/functions';
 import { functions, db } from '../lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import type { LogsTableSettings } from '../types/auth';
 
 
@@ -133,7 +133,7 @@ export default function Logs() {
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [approvedAnomalyIds, setApprovedAnomalyIds] = useState<Set<string>>(new Set());
 
-    const pageCacheRef = useRef<Map<number, { solves: Solve[]; anomalies: Solve[] }>>(new Map());
+    const pageCacheRef = useRef<Map<string, { solves: Solve[]; anomalies: Solve[] }>>(new Map());
     const totalCountRef = useRef<number | null>(totalCount);
     totalCountRef.current = totalCount;
 
@@ -178,9 +178,11 @@ export default function Logs() {
             return;
         }
 
+        const cacheKey = `${currentPage}_${sortConfig.key}_${sortConfig.direction}_${rowsPerPage}_${settings.scrambleType}_${grouping}_${selectedStr || ''}`;
+
         // If this page is already cached in memory, use it immediately
-        if (pageCacheRef.current.has(currentPage)) {
-            const cached = pageCacheRef.current.get(currentPage)!;
+        if (pageCacheRef.current.has(cacheKey)) {
+            const cached = pageCacheRef.current.get(cacheKey)!;
             setPaginatedSolves(cached.solves);
             setAnomalies(cached.anomalies);
             setLoading(false);
@@ -209,13 +211,18 @@ export default function Logs() {
                     const fetchedAnomalies = data.anomalies || [];
                     const fetchedTotal = typeof data.totalCount === 'number' ? data.totalCount : (totalCountRef.current ?? 0);
 
-                    pageCacheRef.current.set(currentPage, { solves: fetchedSolves, anomalies: fetchedAnomalies });
+                    pageCacheRef.current.set(cacheKey, { solves: fetchedSolves, anomalies: fetchedAnomalies });
                     setPaginatedSolves(fetchedSolves);
                     setTotalCount(fetchedTotal);
                     setAnomalies(fetchedAnomalies);
                 }
             } catch (err) {
-                console.warn('Failed to fetch paginated solves:', err);
+                console.warn('Failed to fetch paginated solves from function:', err);
+                if (isMounted) {
+                    setPaginatedSolves([]);
+                    setTotalCount(0);
+                    setAnomalies([]);
+                }
             } finally {
                 if (isMounted) setLoading(false);
             }
@@ -487,7 +494,9 @@ export default function Logs() {
                                         accessor: (s: Solve, i: number) => (
                                             <div className="flex items-center justify-center w-full relative">
                                                 <span className="group-hover:opacity-0 transition-opacity">
-                                                    {safeTotalCount - ((currentPage - 1) * rowsPerPage + i)}
+                                                    {sortConfig.direction === 'desc'
+                                                        ? safeTotalCount - ((currentPage - 1) * rowsPerPage + i)
+                                                        : ((currentPage - 1) * rowsPerPage + i + 1)}
                                                 </span>
                                                 <button 
                                                     onClick={(e) => handleAction(e, 'delete', s)}

@@ -155,38 +155,26 @@ export default function Account() {
         if (!user) return;
         setDownloadLoading(true);
         try {
-            const userDocSnap = await getDoc(doc(db, 'users', user.uid));
-            const userData = userDocSnap.exists() ? userDocSnap.data() : { uid: user.uid, email: user.email, username: user.username, color: user.color };
+            const { httpsCallable } = await import('firebase/functions');
+            const { functions } = await import('../lib/firebase');
+            const exportFn = httpsCallable(functions, 'exportUserData');
+            const result = await exportFn();
+            const exportData = result.data;
 
-            const solvesQuery = query(collection(db, 'solves'), where('userId', '==', user.uid));
-            const solvesSnap = await getDocs(solvesQuery);
-            const solvesList: any[] = [];
-            solvesSnap.forEach(d => solvesList.push({ id: d.id, ...d.data() }));
-
-            const sessionsQuery = query(collection(db, 'sessions'), where('userId', '==', user.uid));
-            const sessionsSnap = await getDocs(sessionsQuery);
-            const sessionsList: any[] = [];
-            sessionsSnap.forEach(d => sessionsList.push({ id: d.id, ...d.data() }));
-
-            const exportData = {
-                version: "1.0",
-                exportedAt: new Date().toISOString(),
-                user: userData,
-                solvesCount: solvesList.length,
-                solves: solvesList,
-                sessionsCount: sessionsList.length,
-                sessions: sessionsList
-            };
-
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
+            const jsonStr = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
             const downloadAnchor = document.createElement('a');
-            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("href", url);
             const dateStr = new Date().toISOString().slice(0, 10);
             const sanitizedName = (username || 'user').replace(/[^a-z0-9_-]/gi, '_');
             downloadAnchor.setAttribute("download", `cube-online-data-${sanitizedName}-${dateStr}.json`);
             document.body.appendChild(downloadAnchor);
             downloadAnchor.click();
             downloadAnchor.remove();
+            
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
         } catch (e) {
             console.error("Error downloading data:", e);
             alert("Failed to compile user data. Please try again.");

@@ -5,15 +5,16 @@ import { useTournamentStore } from '@/store/tournamentStore';
 import { useBotController } from '@/hooks/useBotController';
 import { formatTime } from '@/utils/formatters';
 import type { PenaltyType } from '@/types/tournament';
+import { rtdb } from '@/lib/firebase';
+import { ref, push } from 'firebase/database';
 
 const LOCK_IN_DURATION_MS = 500;
 const COUNTDOWN_STAGE_INTERVAL_MS = 400;
 
-export function useKeyboardController() {
+export function useKeyboardController({ roomId }: { roomId?: string } = {}) {
   const players = useTournamentStore((s) => s.players);
   const settings = useTournamentStore((s) => s.settings);
   const recordCompletedGame = useTournamentStore((s) => s.recordCompletedGame);
-  const isAdminOpen = useTournamentStore((s) => s.isAdminOpen);
 
   const raceState = useTimerStore((s) => s.raceState);
   const timerPlayers = useTimerStore((s) => s.players);
@@ -32,6 +33,9 @@ export function useKeyboardController() {
   const activePlayerIds = useMemo(() => activePlayers.map((p) => p.id), [activePlayers]);
   const activePlayerIdsKey = useMemo(() => activePlayerIds.join(','), [activePlayerIds]);
 
+  const humanPlayers = useMemo(() => activePlayers.filter((p) => p.role !== 'BOT'), [activePlayers]);
+  const humanPlayerIds = useMemo(() => humanPlayers.map((p) => p.id), [humanPlayers]);
+
   const hostPlayer = useMemo(
     () => activePlayers.find((p) => p.role === 'HOST') || activePlayers[0],
     [activePlayers]
@@ -40,15 +44,15 @@ export function useKeyboardController() {
   const settingsRef = useRef(settings);
   const activePlayersRef = useRef(activePlayers);
   const activePlayerIdsRef = useRef(activePlayerIds);
+  const humanPlayerIdsRef = useRef(humanPlayerIds);
   const hostPlayerRef = useRef(hostPlayer);
-  const isAdminOpenRef = useRef(isAdminOpen);
 
   useEffect(() => {
     settingsRef.current = settings;
     activePlayersRef.current = activePlayers;
     activePlayerIdsRef.current = activePlayerIds;
+    humanPlayerIdsRef.current = humanPlayerIds;
     hostPlayerRef.current = hostPlayer;
-    isAdminOpenRef.current = isAdminOpen;
   });
 
   // Sync sound settings
@@ -64,27 +68,26 @@ export function useKeyboardController() {
     initPlayers(activePlayerIds);
   }, [activePlayerIdsKey, initPlayers, activePlayerIds]);
 
-  // Check whether all active players (Host + Bots) are currently holding
+  // Check whether all active human players are currently holding (bots do not need to ready up)
   const allHeld = useMemo(() => {
     return (
-      activePlayerIds.length > 0 &&
-      activePlayerIds.every((id) => timerPlayers[id]?.isHeld)
+      humanPlayerIds.length > 0 &&
+      humanPlayerIds.every((id) => timerPlayers[id]?.isHeld)
     );
-  }, [timerPlayers, activePlayerIds]);
+  }, [timerPlayers, humanPlayerIds]);
 
   // Lock-in timer ref
   const lockInTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Check for continuous hold across all active players
+  // Check for continuous hold across all active human players
   useEffect(() => {
-    if (isAdminOpenRef.current) return;
     if (raceState !== 'WAITING_FOR_ALL' && raceState !== 'IDLE') return;
 
     if (allHeld) {
       if (!lockInTimeoutRef.current) {
         lockInTimeoutRef.current = setTimeout(() => {
           const checkPlayers = useTimerStore.getState().players;
-          const stillAllHeld = activePlayerIdsRef.current.every((id) => checkPlayers[id]?.isHeld);
+          const stillAllHeld = humanPlayerIdsRef.current.every((id) => checkPlayers[id]?.isHeld);
 
           if (stillAllHeld) {
             const now = Date.now();
@@ -156,6 +159,7 @@ export function useKeyboardController() {
 
     // Green Launch (at randomized delay after Stage 3)
     const greenTimer = setTimeout(() => {
+      useTournamentStore.getState().clearLastMatchPlaces();
       const greenTime = Date.now();
       startRace(greenTime);
       soundEngine.playGoTone();
@@ -195,18 +199,101 @@ export function useKeyboardController() {
         };
       });
 
-      const { matchWinnerId, setWinnerId } = recordCompletedGame(solvesData);
+      const { matchWinnerId, setWinnerId, matchWinnerTeam, setWinnerTeam, gameWinnerTeam, gameWinnerId, highlight } = recordCompletedGame(solvesData);
 
-      if (matchWinnerId || setWinnerId) {
+      if (matchWinnerId || setWinnerId || matchWinnerTeam || setWinnerTeam) {
         soundEngine.playVictoryFanfare();
       }
+
+      if (roomId) {
+        const feedRef = ref(rtdb, `rooms/${roomId}/feed`);
+        if (highlight) {
+          push(feedRef, {
+            type: highlight.type,
+            senderRole: 'host',
+            playerId: highlight.playerId,
+            playerName: highlight.playerName,
+            playerColor: highlight.playerColor,
+            team: highlight.team || null,
+            timeMs: highlight.timeMs,
+            formattedTime: highlight.formattedTime,
+            message: highlight.message,
+            timestamp: Date.now(),
+            likes: {},
+          }).catch(console.error);
+        }
+
+        if (matchWinnerTeam) {
+          push(feedRef, {
+            type: 'MATCH_WON',
+            senderRole: 'host',
+            team: matchWinnerTeam,
+            message: `${matchWinnerTeam} TEAM won the Tournament!`,
+            timestamp: Date.now(),
+            likes: {},
+          }).catch(console.error);
+        } else if (matchWinnerId) {
+          const p = useTournamentStore.getState().players.find(x => x.id === matchWinnerId);
+          push(feedRef, {
+            type: 'MATCH_WON',
+            senderRole: 'host',
+            playerId: matchWinnerId,
+            playerName: p?.name,
+            playerColor: p?.color,
+            message: `${p?.name || 'Player'} won the Tournament!`,
+            timestamp: Date.now(),
+            likes: {},
+          }).catch(console.error);
+        } else if (setWinnerTeam) {
+          push(feedRef, {
+            type: 'SET_WON',
+            senderRole: 'host',
+            team: setWinnerTeam,
+            message: `${setWinnerTeam} TEAM won the Set!`,
+            timestamp: Date.now(),
+            likes: {},
+          }).catch(console.error);
+        } else if (setWinnerId) {
+          const p = useTournamentStore.getState().players.find(x => x.id === setWinnerId);
+          push(feedRef, {
+            type: 'SET_WON',
+            senderRole: 'host',
+            playerId: setWinnerId,
+            playerName: p?.name,
+            playerColor: p?.color,
+            message: `${p?.name || 'Player'} won the Set!`,
+            timestamp: Date.now(),
+            likes: {},
+          }).catch(console.error);
+        } else if (gameWinnerTeam) {
+          push(feedRef, {
+            type: 'GAME_WON',
+            senderRole: 'host',
+            team: gameWinnerTeam,
+            message: `${gameWinnerTeam} TEAM won the Game!`,
+            timestamp: Date.now(),
+            likes: {},
+          }).catch(console.error);
+        } else if (gameWinnerId) {
+          const p = useTournamentStore.getState().players.find(x => x.id === gameWinnerId);
+          push(feedRef, {
+            type: 'GAME_WON',
+            senderRole: 'host',
+            playerId: gameWinnerId,
+            playerName: p?.name,
+            playerColor: p?.color,
+            message: `${p?.name || 'Player'} won the Game!`,
+            timestamp: Date.now(),
+            likes: {},
+          }).catch(console.error);
+        }
+      }
     }
-  }, [raceState, recordCompletedGame]);
+  }, [raceState, recordCompletedGame, roomId]);
 
   // Keyboard Spacebar Controller for the Host Player
   useEffect(() => {
     const handleKeyDownEvent = (e: KeyboardEvent) => {
-      if (isAdminOpenRef.current) return;
       if (e.code !== 'Space' && e.key !== ' ') return;
       if (e.repeat) return;
 
@@ -215,10 +302,8 @@ export function useKeyboardController() {
         target &&
         (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
       ) {
-        const val = (target as HTMLInputElement).value;
-        if (val === '') {
+        if ((target as HTMLInputElement).value === '') {
           target.blur();
-          // Fall through to execute timer
         } else {
           return;
         }
@@ -233,7 +318,6 @@ export function useKeyboardController() {
       if (currentRaceState === 'RACING') {
         const rank = stopPlayer(host.id, Date.now());
         if (rank > 0) {
-          soundEngine.playFinishChime(rank);
           const tp = useTimerStore.getState().players[host.id];
           const rawMs = tp?.finishTimeMs || 0;
           const timeFormatted = formatTime(rawMs);
@@ -276,7 +360,6 @@ export function useKeyboardController() {
     };
 
     const handleKeyUpEvent = (e: KeyboardEvent) => {
-      if (isAdminOpenRef.current) return;
       if (e.code !== 'Space' && e.key !== ' ') return;
 
       const target = e.target as HTMLElement | null;
