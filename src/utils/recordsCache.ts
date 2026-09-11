@@ -1,8 +1,8 @@
 import { get, set } from './idb';
 import type { EventRecordRow } from './recordCalculations';
 
-const IDB_RECORDS_PREFIX = 'cutter-cubing-records_';
-const LS_DIRTY_PREFIX = 'cutter-cubing-records-dirty_';
+const IDB_RECORDS_PREFIX = 'cutter-cubing-records-v2_';
+const LS_DIRTY_PREFIX = 'cutter-cubing-records-dirty-v2_';
 export const RECORDS_CACHE_EXPIRED_EVENT = 'records-cache-expired';
 
 const memoryCache = new Map<string, EventRecordRow[]>();

@@ -23,7 +23,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminDeleteUserAccountFn = exports.deleteImportedSolvesFn = exports.deleteAllSolvesFn = exports.deleteUserAccountFn = exports.exportUserData = exports.getGoalStreaks = exports.getDailyVolumeStats = exports.getLogsBottomStats = exports.getLogsSidebarData = exports.getPaginatedSolves = exports.getRecordsData = exports.backfillAllUsersStats = exports.purgeStalePresenceManual = exports.cleanupStaleRooms = exports.cleanupStalePresence = exports.updateLeaderboards = exports.backfillUserStats = exports.aggregateUserStats = void 0;
+exports.adminDeleteUserAccountFn = exports.deleteImportedSolvesFn = exports.deleteAllSolvesFn = exports.deleteUserAccountFn = exports.exportUserData = exports.getGoalStreaks = exports.getDailyVolumeStats = exports.getOldestSolveNumber = exports.getLogsBottomStats = exports.getLogsSidebarData = exports.getPaginatedSolves = exports.getUserRecentSolves = exports.getRecordsData = exports.backfillAllUsersStats = exports.purgeStalePresenceManual = exports.cleanupStaleRooms = exports.cleanupStalePresence = exports.updateLeaderboards = exports.backfillUserStats = exports.aggregateUserStats = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-admin/firestore");
@@ -459,7 +459,7 @@ exports.backfillAllUsersStats = functions.https.onRequest(async (req, res) => {
 });
 const SUPPORTED_EVENT_IDS = ['333', '222', '444', '555', '666', '777', '333oh', 'clock', 'minx', 'pyram', 'skewb', 'sq1'];
 exports.getRecordsData = functions.runWith({ timeoutSeconds: 540, memory: '1GB' }).https.onCall(async (data, context) => {
-    var _a;
+    var _a, _b;
     const userId = (data === null || data === void 0 ? void 0 : data.userId) || ((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid);
     if (!userId || typeof userId !== 'string') {
         throw new functions.https.HttpsError('invalid-argument', 'userId is required');
@@ -467,7 +467,7 @@ exports.getRecordsData = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
     const result = [];
     for (const eventId of SUPPORTED_EVENT_IDS) {
         const recordDoc = await db.collection('users').doc(userId).collection('records').doc(eventId).get();
-        if (recordDoc.exists) {
+        if (recordDoc.exists && ((_b = recordDoc.data()) === null || _b === void 0 ? void 0 : _b.version) === 2) {
             result.push(recordDoc.data());
         }
         else {
@@ -500,12 +500,13 @@ exports.getRecordsData = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
                 mean,
                 std,
                 single: (0, recordCalculations_1.calculateBestSingleRecord)(solves),
-                ao5: (0, recordCalculations_1.calculateBestAverageRecord)(solves, 5, 'ao5', 'Ao5', true),
-                ao12: (0, recordCalculations_1.calculateBestAverageRecord)(solves, 12, 'ao12', 'Ao12', true),
-                ao50: (0, recordCalculations_1.calculateBestAverageRecord)(solves, 50, 'ao50', 'Ao50', true),
-                ao100: (0, recordCalculations_1.calculateBestAverageRecord)(solves, 100, 'ao100', 'Ao100', true),
+                ao5: (0, recordCalculations_1.calculateBestAverageRecord)(solves, 5, 'ao5', 'Ao5', false),
+                ao12: (0, recordCalculations_1.calculateBestAverageRecord)(solves, 12, 'ao12', 'Ao12', false),
+                ao50: (0, recordCalculations_1.calculateBestAverageRecord)(solves, 50, 'ao50', 'Ao50', false),
+                ao100: (0, recordCalculations_1.calculateBestAverageRecord)(solves, 100, 'ao100', 'Ao100', false),
                 ao250: (0, recordCalculations_1.calculateBestAverageRecord)(solves, 250, 'ao250', 'Ao250', true),
-                ao1000: (0, recordCalculations_1.calculateBestAverageRecord)(solves, 1000, 'ao1000', 'Ao1000', true)
+                ao1000: (0, recordCalculations_1.calculateBestAverageRecord)(solves, 1000, 'ao1000', 'Ao1000', true),
+                version: 2
             };
             await db.collection('users').doc(userId).collection('records').doc(eventId).set(row);
             result.push(row);
@@ -513,10 +514,31 @@ exports.getRecordsData = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
     }
     return result.filter((r) => { var _a; return ((_a = r.count) !== null && _a !== void 0 ? _a : 0) > 0 || r.single !== null; });
 });
+exports.getUserRecentSolves = functions.runWith({ timeoutSeconds: 60, memory: '512MB' }).https.onCall(async (data, context) => {
+    var _a;
+    const userId = (data === null || data === void 0 ? void 0 : data.userId) || ((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid);
+    if (!userId || typeof userId !== 'string') {
+        throw new functions.https.HttpsError('invalid-argument', 'userId is required');
+    }
+    try {
+        const snap = await db.collection('solves')
+            .where('userId', '==', userId)
+            .orderBy('date', 'desc')
+            .limit(25)
+            .get();
+        const solves = snap.docs.map(doc => (Object.assign({ id: doc.id }, doc.data())));
+        return { solves };
+    }
+    catch (err) {
+        console.error('Error fetching recent solves for user:', userId, err);
+        throw new functions.https.HttpsError('internal', 'Failed to fetch recent solves');
+    }
+});
 var solvesLogs_1 = require("./solvesLogs");
 Object.defineProperty(exports, "getPaginatedSolves", { enumerable: true, get: function () { return solvesLogs_1.getPaginatedSolves; } });
 Object.defineProperty(exports, "getLogsSidebarData", { enumerable: true, get: function () { return solvesLogs_1.getLogsSidebarData; } });
 Object.defineProperty(exports, "getLogsBottomStats", { enumerable: true, get: function () { return solvesLogs_1.getLogsBottomStats; } });
+Object.defineProperty(exports, "getOldestSolveNumber", { enumerable: true, get: function () { return solvesLogs_1.getOldestSolveNumber; } });
 var goalsFunctions_1 = require("./goalsFunctions");
 Object.defineProperty(exports, "getDailyVolumeStats", { enumerable: true, get: function () { return goalsFunctions_1.getDailyVolumeStats; } });
 Object.defineProperty(exports, "getGoalStreaks", { enumerable: true, get: function () { return goalsFunctions_1.getGoalStreaks; } });

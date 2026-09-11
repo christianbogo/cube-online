@@ -84,8 +84,8 @@ export const UserCard = ({ user, onHide, draggable, onDragStart, className = '',
                 <div className={`flex items-center gap-1.5 overflow-hidden min-w-0 flex-1 ${onHide ? 'group-hover:pr-5 transition-all' : ''}`}>
                     <UserAvatar
                         user={user}
-                        className="w-4 h-4 sm:w-4.5 sm:h-4.5 flex-shrink-0 rounded-xs shadow-xs"
-                        roundedClassName="rounded-xs"
+                        className="w-4 h-4 sm:w-4.5 sm:h-4.5 flex-shrink-0 rounded-md shadow-xs"
+                        roundedClassName="rounded-md"
                     />
                     <span className="font-semibold text-text-primary truncate text-xs sm:text-[13px]">{user.username}</span>
                     {hasLinkedWca(user) && (

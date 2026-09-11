@@ -1,13 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
-import type { UserData, SocialProfile } from '../../types';
+import type { UserData, SocialProfile, Solve } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { db, functions } from '../../lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 import { evaluateUserGoals } from '../../utils/goalsCalculations';
 import { isAdmin, eraseUserProfileAndData } from '../../utils/admin';
 import RecordTable from '../records/RecordTable';
+import Table from '../ui/Table';
 import { UserAvatar, WcaBadge } from '../ui/UserAvatar';
 import { hasLinkedWca } from '../../utils/wca';
+import { useEvents } from '../../hooks/useEvents';
+import { formatTime } from '../../utils/formatTime';
 import {
     ArrowLeft,
     Copy,
@@ -21,7 +25,8 @@ import {
     Award,
     Trash2,
     AlertTriangle,
-    Loader2
+    Loader2,
+    History
 } from 'lucide-react';
 
 const NETWORK_LABELS: Record<string, string> = {
@@ -75,6 +80,46 @@ export function UserProfileView({
     const [copiedSocialId, setCopiedSocialId] = useState<string | null>(null);
     const [followLoading, setFollowLoading] = useState(false);
     const [blockLoading, setBlockLoading] = useState(false);
+
+    const { getEventLabel } = useEvents();
+    const [recentSolves, setRecentSolves] = useState<Solve[]>([]);
+    const [recentSolvesLoading, setRecentSolvesLoading] = useState(true);
+    const [copiedScrambleId, setCopiedScrambleId] = useState<string | null>(null);
+
+    useEffect(() => {
+        let isMounted = true;
+        setRecentSolvesLoading(true);
+
+        const fetchRecent = async () => {
+            try {
+                const getUserRecentSolves = httpsCallable<{ userId: string }, { solves: Solve[] }>(functions, 'getUserRecentSolves');
+                const result = await getUserRecentSolves({ userId: liveUser.uid });
+                if (isMounted) {
+                    setRecentSolves(result.data.solves || []);
+                    setRecentSolvesLoading(false);
+                }
+            } catch (err) {
+                console.error('Failed to fetch recent solves for user:', liveUser.uid, err);
+                if (isMounted) {
+                    setRecentSolves([]);
+                    setRecentSolvesLoading(false);
+                }
+            }
+        };
+
+        fetchRecent();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [liveUser.uid]);
+
+    const handleCopyScramble = (e: React.MouseEvent, solveId: string, scramble: string) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(scramble);
+        setCopiedScrambleId(solveId);
+        setTimeout(() => setCopiedScrambleId(null), 1500);
+    };
 
     // Dynamic Page Title & Meta Tags for browser tabs and sharing
     useEffect(() => {
@@ -522,6 +567,7 @@ export function UserProfileView({
                     userId={liveUser.uid} 
                     hideFootnote={true} 
                     activeEvents={activeEvents}
+                    dynamicColumns={true}
                 />
             </div>
 
@@ -589,7 +635,144 @@ export function UserProfileView({
                 )}
             </div>
 
-            {/* 3. PROFILES THEY ARE FOLLOWED BY */}
+            {/* 3. RECENT SOLVES */}
+            <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-1.5">
+                        <History className="w-3.5 h-3.5 text-accent" />
+                        <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider">
+                            Recent Solves
+                        </h3>
+                    </div>
+                    <span className="text-xs text-text-secondary font-mono">
+                        {recentSolvesLoading ? (
+                            <span className="inline-block h-3.5 w-16 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                        ) : (
+                            `${recentSolves.length} Solves`
+                        )}
+                    </span>
+                </div>
+
+                <div className="bg-surface-elevation-1 border border-border/60 rounded-xl overflow-hidden shadow-2xs">
+                    {recentSolvesLoading ? (
+                        <div className="w-full overflow-x-auto">
+                            <table className="w-full text-left text-sm border-collapse table-fixed select-none">
+                                <thead className="bg-bg-secondary border-b border-border">
+                                    <tr>
+                                        <th className="p-3 font-medium text-text-secondary border-b border-border w-16 text-center">
+                                            <div className="flex items-center gap-1 justify-center">#</div>
+                                        </th>
+                                        <th className="p-3 font-medium text-text-secondary border-b border-border w-28">
+                                            <div className="flex items-center gap-1">Type</div>
+                                        </th>
+                                        <th className="p-3 font-medium text-text-secondary border-b border-border w-28">
+                                            <div className="flex items-center gap-1">Time</div>
+                                        </th>
+                                        <th className="p-3 font-medium text-text-secondary border-b border-border hidden sm:table-cell">
+                                            <div className="flex items-center gap-1">Scramble</div>
+                                        </th>
+                                        <th className="p-3 font-medium text-text-secondary border-b border-border text-text-secondary w-44 text-right">
+                                            <div className="flex items-center gap-1 justify-end">Date</div>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border/40">
+                                    {Array.from({ length: 5 }).map((_, idx) => (
+                                        <tr key={idx} className="border-none hover:bg-bg-hover/40 transition-colors">
+                                            <td className="p-3 w-16 text-center">
+                                                <span className="inline-block h-3.5 w-6 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                                            </td>
+                                            <td className="p-3 w-28">
+                                                <span className="inline-block h-4 w-16 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                                            </td>
+                                            <td className="p-3 w-28">
+                                                <span className="inline-block h-4 w-16 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                                            </td>
+                                            <td className="p-3 hidden sm:table-cell">
+                                                <span className="inline-block h-3.5 w-4/5 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                                            </td>
+                                            <td className="p-3 text-text-secondary w-44 text-right">
+                                                <span className="inline-block h-3.5 w-28 bg-text-secondary/20 rounded animate-pulse align-middle" />
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : recentSolves.length === 0 ? (
+                        <div className="py-8 text-center text-text-secondary/60 text-xs italic bg-surface-elevation-1/50 border border-dashed border-border/40 m-3 rounded-lg">
+                            No recent solves recorded for this user.
+                        </div>
+                    ) : (
+                        <Table
+                            data={recentSolves}
+                            className="w-full border-none rounded-none"
+                            tableClassName="table-fixed"
+                            headerClassName="bg-bg-secondary border-b border-border"
+                            rowClassName="border-none"
+                            columns={[
+                                {
+                                    header: '#',
+                                    accessor: (_: Solve, i: number) => (
+                                        <div className="flex items-center justify-center w-full font-mono text-xs text-text-secondary/50">
+                                            {i + 1}
+                                        </div>
+                                    ),
+                                    className: 'w-16 text-center text-text-secondary/50'
+                                },
+                                {
+                                    header: 'Type',
+                                    accessor: (s: Solve) => (
+                                        <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-bg-tertiary text-text-secondary border border-border/50 whitespace-nowrap">
+                                            {getEventLabel(s.scrambleType || '333')}
+                                        </span>
+                                    ),
+                                    className: 'w-28'
+                                },
+                                {
+                                    header: 'Time',
+                                    accessor: (s: Solve) => (
+                                        <span className={`font-mono font-medium ${s.penalty === 'DNF' ? 'text-red-500' : 'text-text-primary'}`}>
+                                            {s.penalty === 'DNF' ? 'DNF' : formatTime(s.time + (s.penalty === '+2' ? 2000 : 0) + (s.inspectionPenalty === '+2' ? 2000 : 0))}
+                                            {s.penalty === '+2' && '+'}
+                                        </span>
+                                    ),
+                                    className: 'w-28'
+                                },
+                                {
+                                    header: 'Scramble',
+                                    accessor: (s: Solve) => (
+                                        <div
+                                            onClick={(e) => handleCopyScramble(e, s.id, s.scramble)}
+                                            className="font-mono text-xs text-text-secondary cursor-copy hover:text-text-primary transition-colors flex items-center justify-between gap-2 group/scramble w-full"
+                                            title="Click to copy scramble"
+                                        >
+                                            <span className="truncate">{s.scramble}</span>
+                                            {copiedScrambleId === s.id ? (
+                                                <Check className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                                            ) : (
+                                                <Copy className="w-3 h-3 opacity-0 group-hover/scramble:opacity-100 transition-opacity shrink-0" />
+                                            )}
+                                        </div>
+                                    ),
+                                    className: 'hidden sm:table-cell max-w-[200px] truncate'
+                                },
+                                {
+                                    header: 'Date',
+                                    accessor: (s: Solve) => (
+                                        <span className="text-text-secondary font-mono text-xs">
+                                            {new Date(s.date).toLocaleDateString()} {new Date(s.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                    ),
+                                    className: 'text-text-secondary w-44 text-right'
+                                }
+                            ]}
+                        />
+                    )}
+                </div>
+            </div>
+
+            {/* 4. PROFILES THEY ARE FOLLOWED BY */}
             <div className="flex flex-col gap-3 pt-2">
                 <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider px-1">
                     Followers ({userFollowers.length})

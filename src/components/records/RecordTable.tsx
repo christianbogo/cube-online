@@ -36,14 +36,25 @@ import {
     RECORDS_CACHE_EXPIRED_EVENT
 } from '../../utils/recordsCache';
 
+const ALL_RECORD_METRICS = [
+    { label: 'Single', key: 'single' as const },
+    { label: 'Ao5', key: 'ao5' as const },
+    { label: 'Ao12', key: 'ao12' as const },
+    { label: 'Ao50', key: 'ao50' as const },
+    { label: 'Ao100', key: 'ao100' as const },
+    { label: 'Ao250*', key: 'ao250' as const },
+    { label: 'Ao1000*', key: 'ao1000' as const }
+];
+
 export interface RecordTableProps {
     userId?: string;
     hideFootnote?: boolean;
     activeEvents?: string[];
     isGuestPreview?: boolean;
+    dynamicColumns?: boolean;
 }
 
-export default function RecordTable({ userId, hideFootnote = false, activeEvents, isGuestPreview }: RecordTableProps = {}) {
+export default function RecordTable({ userId, hideFootnote = false, activeEvents, isGuestPreview, dynamicColumns = false }: RecordTableProps = {}) {
     const { user } = useAuth();
     const isMobile = useIsMobile();
     const { allEvents } = useEvents();
@@ -245,6 +256,22 @@ export default function RecordTable({ userId, hideFootnote = false, activeEvents
         });
     }, [combinedRows, activeEvents]);
 
+    const visibleMetrics = useMemo(() => {
+        if (!dynamicColumns) {
+            return ALL_RECORD_METRICS;
+        }
+        const hasAo50 = displayRows.some(r => r.ao50 !== null);
+        if (!hasAo50) {
+            return ALL_RECORD_METRICS.slice(0, 3);
+        }
+        return ALL_RECORD_METRICS.filter(metric => {
+            if (metric.key === 'single' || metric.key === 'ao5' || metric.key === 'ao12') {
+                return true;
+            }
+            return displayRows.some(r => r[metric.key] !== null);
+        });
+    }, [dynamicColumns, displayRows]);
+
     const isSkeleton = loading && rows.length === 0;
 
     const skeletonEvents = useMemo(() => {
@@ -327,15 +354,7 @@ export default function RecordTable({ userId, hideFootnote = false, activeEvents
                                         <td key={row.type} className="px-3 py-2.5 text-right text-text-secondary font-mono text-xs whitespace-nowrap">{formatDuration(row.totalTime)}</td>
                                     ))}
                                 </tr>
-                                {[
-                                    { label: 'Single', key: 'single' },
-                                    { label: 'Ao5', key: 'ao5' },
-                                    { label: 'Ao12', key: 'ao12' },
-                                    { label: 'Ao50', key: 'ao50' },
-                                    { label: 'Ao100', key: 'ao100' },
-                                    { label: 'Ao250*', key: 'ao250' },
-                                    { label: 'Ao1000*', key: 'ao1000' }
-                                ].map(metric => (
+                                {visibleMetrics.map(metric => (
                                     <tr key={metric.key} className="hover:bg-bg-hover/40 transition-colors">
                                         <td className="px-4 py-2.5 font-semibold text-text-secondary text-xs uppercase sticky left-0 bg-bg-primary z-10 shadow-[1px_0_0_0_var(--color-border)]">{metric.label}</td>
                                         {isSkeleton ? skeletonEvents.map(row => (
@@ -365,13 +384,15 @@ export default function RecordTable({ userId, hideFootnote = false, activeEvents
                                     <th className="px-3 py-3 font-semibold text-right whitespace-nowrap">Mean</th>
                                     <th className="px-3 py-3 font-semibold text-right whitespace-nowrap">Std</th>
                                     <th className="px-3 py-3 font-semibold text-right whitespace-nowrap">Time</th>
-                                    <th className="px-3 py-3 font-semibold text-right whitespace-nowrap">Single</th>
-                                    <th className="px-3 py-3 font-semibold text-right whitespace-nowrap">Ao5</th>
-                                    <th className="px-3 py-3 font-semibold text-right whitespace-nowrap">Ao12</th>
-                                    <th className="px-3 py-3 font-semibold text-right whitespace-nowrap">Ao50</th>
-                                    <th className="px-3 py-3 font-semibold text-right whitespace-nowrap">Ao100</th>
-                                    <th className="px-3 py-3 font-semibold text-right whitespace-nowrap" title="Cross-session eligible">Ao250*</th>
-                                    <th className="px-3 py-3 font-semibold text-right whitespace-nowrap" title="Cross-session eligible">Ao1000*</th>
+                                    {visibleMetrics.map(metric => (
+                                        <th
+                                            key={metric.key}
+                                            className="px-3 py-3 font-semibold text-right whitespace-nowrap"
+                                            title={metric.key === 'ao250' || metric.key === 'ao1000' ? 'Cross-session eligible' : undefined}
+                                        >
+                                            {metric.label}
+                                        </th>
+                                    ))}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border/40">
@@ -393,7 +414,7 @@ export default function RecordTable({ userId, hideFootnote = false, activeEvents
                                             <td className="px-3 py-2.5 text-right font-mono text-xs whitespace-nowrap">
                                                 <span className="inline-block h-3.5 w-14 bg-text-secondary/20 rounded animate-pulse align-middle" />
                                             </td>
-                                            {[...Array(7)].map((_, i) => (
+                                            {[...Array(visibleMetrics.length)].map((_, i) => (
                                                 <td key={i} className="px-3 py-2.5 text-right font-mono text-xs">
                                                     <span className="inline-block h-3.5 w-11 bg-text-secondary/20 rounded animate-pulse align-middle" />
                                                 </td>
@@ -420,55 +441,16 @@ export default function RecordTable({ userId, hideFootnote = false, activeEvents
                                             </td>
 
                                             {/* Record Cells */}
-                                            <RecordCell
-                                                eventName={row.label}
-                                                eventType={row.type}
-                                                detail={row.single}
-                                                isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'single'}
-                                                onClick={handleRecordClick}
-                                            />
-                                            <RecordCell
-                                                eventName={row.label}
-                                                eventType={row.type}
-                                                detail={row.ao5}
-                                                isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao5'}
-                                                onClick={handleRecordClick}
-                                            />
-                                            <RecordCell
-                                                eventName={row.label}
-                                                eventType={row.type}
-                                                detail={row.ao12}
-                                                isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao12'}
-                                                onClick={handleRecordClick}
-                                            />
-                                            <RecordCell
-                                                eventName={row.label}
-                                                eventType={row.type}
-                                                detail={row.ao50}
-                                                isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao50'}
-                                                onClick={handleRecordClick}
-                                            />
-                                            <RecordCell
-                                                eventName={row.label}
-                                                eventType={row.type}
-                                                detail={row.ao100}
-                                                isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao100'}
-                                                onClick={handleRecordClick}
-                                            />
-                                            <RecordCell
-                                                eventName={row.label}
-                                                eventType={row.type}
-                                                detail={row.ao250}
-                                                isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao250'}
-                                                onClick={handleRecordClick}
-                                            />
-                                            <RecordCell
-                                                eventName={row.label}
-                                                eventType={row.type}
-                                                detail={row.ao1000}
-                                                isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === 'ao1000'}
-                                                onClick={handleRecordClick}
-                                            />
+                                            {visibleMetrics.map(metric => (
+                                                <RecordCell
+                                                    key={metric.key}
+                                                    eventName={row.label}
+                                                    eventType={row.type}
+                                                    detail={row[metric.key as keyof typeof row] as RecordDetail}
+                                                    isSelected={selectedRecord?.eventType === row.type && selectedRecord.detail.type === metric.key}
+                                                    onClick={handleRecordClick}
+                                                />
+                                            ))}
                                         </tr>
                                     ))
                                 )}

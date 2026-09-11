@@ -8,16 +8,80 @@ import { useConfirm } from '@/contexts/ConfirmationContext';
 import { rtdb } from '@/lib/firebase';
 import { ref, onValue, set, push, update, remove, onDisconnect } from 'firebase/database';
 import { ArenaMatchProvider } from '@/arena/context/ArenaMatchContext';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { OfflineState } from '@/components/ui/OfflineState';
 import type { LiveUser } from '@/types';
 
+import { useSettings } from '@/contexts/SettingsContext';
 import { useTimerStore } from '@/store/timerStore';
 import { useTournamentStore } from '@/store/tournamentStore';
 import { useKeyboardController } from '@/hooks/useKeyboardController';
-import { useFinishSoundController } from '@/hooks/useFinishSoundController';
-import { useFirebaseHost, useFirebaseGuest } from '@/hooks/useFirebaseMatch';
+import { useArenaSoundController } from '@/hooks/useArenaSoundController';
+import { soundEngine } from '@/audio/soundEffects';
+import { useFirebaseHost, useFirebaseGuest, normalizeSets } from '@/hooks/useFirebaseMatch';
 import { formatTime } from '@/utils/formatters';
 import { ScoringMode } from '@/types/tournament';
-import type { TeamId, Player, PlayerRole } from '@/types/tournament';
+import type { TeamId, Player, PlayerRole, SetMatch, Solve } from '@/types/tournament';
+
+function formatToTenth(ms: number | null | undefined): string {
+  if (ms == null || isNaN(ms) || ms < 0) return '0.0';
+  const totalSeconds = ms / 1000;
+  if (totalSeconds < 60) {
+    return totalSeconds.toFixed(1);
+  }
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = (totalSeconds % 60).toFixed(1);
+  const paddedSecs = parseFloat(secs) < 10 ? `0${secs}` : secs;
+  return `${mins}:${paddedSecs}`;
+}
+
+function formatBotNameToTenth(name: string): string {
+  let avgStr = '';
+  let stdStr = '';
+  if (name.includes('±')) {
+    const parts = name.split('±');
+    avgStr = parts[0];
+    stdStr = parts[1];
+  } else if (name.includes('-')) {
+    const parts = name.split('-');
+    avgStr = parts[0];
+    stdStr = parts[1];
+  }
+  if (!avgStr || !stdStr) return name;
+  const avgNum = parseFloat(avgStr);
+  const stdNum = parseFloat(stdStr);
+  if (isNaN(avgNum) || isNaN(stdNum)) return name;
+  return `${avgNum.toFixed(1)}±${stdNum.toFixed(1)}`;
+}
+
+function getPlayerContinualStats(playerId: string, sets: SetMatch[]) {
+  const times: number[] = [];
+  const safeSets = normalizeSets(sets);
+  for (const s of safeSets) {
+    for (const g of s.games || []) {
+      for (const r of g.rounds || []) {
+        const solve = r.solves?.[playerId];
+        if (solve && !solve.isDNF && solve.penalty !== 'DNF' && solve.finalTimeMs > 0) {
+          times.push(solve.finalTimeMs);
+        }
+      }
+    }
+  }
+
+  if (times.length === 0) return null;
+
+  const mean = times.reduce((acc, t) => acc + t, 0) / times.length;
+  const variance = times.length > 1
+    ? times.reduce((acc, t) => acc + Math.pow(t - mean, 2), 0) / times.length
+    : 0;
+  const stdDev = Math.sqrt(variance);
+
+  return {
+    count: times.length,
+    avgMs: mean,
+    stdDevMs: stdDev,
+  };
+}
 
 const AVAILABLE_COLORS = [
   { name: 'Red', hex: '#ef4444' },
@@ -111,29 +175,37 @@ function PlayerRow({
   isHost,
   onDelete,
   onUpdateBot,
+  stats,
 }: {
   p: Player;
   isHost: boolean;
   onDelete?: (id: string) => void;
   onUpdateBot?: (id: string, newName: string, avgMs: number, stdDevMs: number) => void;
+  stats?: { count: number; avgMs: number; stdDevMs: number } | null;
 }) {
   const isBot = p.role === 'BOT';
   const [isHeld, setIsHeld] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  const parts = p.name.includes('-') ? p.name.split('-') : [];
-  const defaultAvgStr = parts[0] || (p.botConfig ? (p.botConfig.averageTimeMs / 1000).toFixed(2) : '15.00');
-  const defaultStdStr = parts[1] || (p.botConfig ? (p.botConfig.stdDevMs / 1000).toString() : '1.0');
+  const parseBotName = (name: string) => {
+    if (name.includes('±')) return name.split('±');
+    if (name.includes('-')) return name.split('-');
+    return [];
+  };
+
+  const parts = parseBotName(p.name);
+  const defaultAvgStr = parts[0] ? (parseFloat(parts[0]) || 15.0).toFixed(1) : (p.botConfig ? (p.botConfig.averageTimeMs / 1000).toFixed(1) : '15.0');
+  const defaultStdStr = parts[1] ? (parseFloat(parts[1]) || 1.0).toFixed(1) : (p.botConfig ? (p.botConfig.stdDevMs / 1000).toFixed(1) : '1.0');
 
   const [avgInput, setAvgInput] = useState(defaultAvgStr);
   const [stdInput, setStdInput] = useState(defaultStdStr);
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (p.name.includes('-')) {
-      const [a, s] = p.name.split('-');
-      setAvgInput(a);
-      setStdInput(s);
+    const [a, s] = parseBotName(p.name);
+    if (a && s) {
+      setAvgInput((parseFloat(a) || 15.0).toFixed(1));
+      setStdInput((parseFloat(s) || 1.0).toFixed(1));
     }
   }, [p.name]);
 
@@ -163,7 +235,9 @@ function PlayerRow({
     }
 
     setError(false);
-    const newName = `${cleanAvg}-${cleanStd}`;
+    const formattedAvg = avgNum.toFixed(1);
+    const formattedStd = stdNum.toFixed(1);
+    const newName = `${formattedAvg}±${formattedStd}`;
     const avgMs = Math.round(avgNum * 1000);
     const stdMs = Math.round(stdNum * 1000);
 
@@ -172,8 +246,8 @@ function PlayerRow({
   };
 
   const handleCancel = () => {
-    if (p.name.includes('-')) {
-      const [a, s] = p.name.split('-');
+    const [a, s] = parseBotName(p.name);
+    if (a && s) {
       setAvgInput(a);
       setStdInput(s);
     } else {
@@ -225,7 +299,7 @@ function PlayerRow({
             }`}
             autoFocus
           />
-          <span className="text-text-secondary text-xs font-bold shrink-0">-</span>
+          <span className="text-text-secondary text-xs font-bold shrink-0 font-mono">±</span>
           <input
             type="text"
             value={stdInput}
@@ -261,11 +335,11 @@ function PlayerRow({
         <>
           <span
             onClick={isHost && isBot ? (e) => { e.stopPropagation(); setIsEditing(true); } : undefined}
-            className={`text-sm font-bold text-text-primary truncate flex-1 min-w-0 ${
+            className={`text-sm font-bold text-text-primary truncate min-w-0 ${isBot ? 'font-mono' : 'flex-1'} ${
               isHost && isBot ? 'cursor-pointer hover:text-accent transition-colors' : ''
             }`}
           >
-            {p.name}
+            {isBot ? formatBotNameToTenth(p.name) : p.name}
           </span>
           {isHost && isBot && (
             <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
@@ -292,6 +366,11 @@ function PlayerRow({
                 <Trash className="w-3.5 h-3.5" />
               </button>
             </div>
+          )}
+          {!isBot && stats && stats.count > 0 && (
+            <span className="ml-auto text-[11px] font-mono text-text-secondary/60 shrink-0 select-none">
+              {formatToTenth(stats.avgMs)}±{formatToTenth(stats.stdDevMs)}
+            </span>
           )}
         </>
       )}
@@ -390,7 +469,8 @@ function GuestMatchSync({ roomId, slotId }: { roomId: string; slotId: string }) 
           const rawTimeMs = raceStartTime ? Math.max(10, Date.now() - raceStartTime) : 0;
           // Optimistic local stop so the guest's own timer freezes immediately
           useTimerStore.getState().stopPlayer(slotId, Date.now());
-          pushSolve(rawTimeMs, 'NONE', 0);
+          const falseStartDeltaMs = useTimerStore.getState().players[slotId]?.falseStartDeltaMs || 0;
+          pushSolve(rawTimeMs, 'NONE', falseStartDeltaMs);
         }
       } else if (raceState === 'IDLE' || raceState === 'WAITING_FOR_ALL' || raceState === 'FINISHED') {
         setHeld(true);
@@ -404,6 +484,10 @@ function GuestMatchSync({ roomId, slotId }: { roomId: string; slotId: string }) 
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
 
       e.preventDefault();
+      const result = useTimerStore.getState().handleKeyUp(slotId, Date.now());
+      if (result.isFalseStart) {
+        soundEngine.playFalseStart();
+      }
       setHeld(false);
     };
 
@@ -461,6 +545,295 @@ function SyncDebuggerOverlay({ isHost }: { isHost: boolean }) {
   );
 }
 
+interface MatchStatsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  players: Player[];
+  sets: SetMatch[];
+  totalPoints: Record<string, number>;
+}
+
+function MatchStatsModal({ isOpen, onClose, players, sets, totalPoints }: MatchStatsModalProps) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  if (!isOpen) return null;
+
+  const safeSets = normalizeSets(sets);
+
+  interface FlatRound {
+    globalIndex: number;
+    setIndex: number;
+    gameIndex: number;
+    roundIndex: number;
+    solves: Record<string, Solve>;
+  }
+
+  const completedRounds: FlatRound[] = [];
+  let roundCount = 1;
+
+  safeSets.forEach((s, sIdx) => {
+    (s.games || []).forEach((g, gIdx) => {
+      (g.rounds || []).forEach((r, rIdx) => {
+        const solves = r.solves || {};
+        if (r.completed || Object.keys(solves).length > 0) {
+          completedRounds.push({
+            globalIndex: roundCount++,
+            setIndex: sIdx,
+            gameIndex: gIdx,
+            roundIndex: rIdx,
+            solves,
+          });
+        }
+      });
+    });
+  });
+
+  const activeMatchPlayers = players.filter((p) => p.team === 'RED' || p.team === 'BLUE');
+
+  const playerStats = activeMatchPlayers.map((p) => {
+    let totalPts = 0;
+    const validTimes: number[] = [];
+    let dnfCount = 0;
+    let roundsParticipated = 0;
+
+    completedRounds.forEach((r) => {
+      const s = r.solves[p.id];
+      if (s) {
+        roundsParticipated++;
+        totalPts += (s.score || 0);
+        if (!s.isDNF && s.penalty !== 'DNF' && s.finalTimeMs > 0) {
+          validTimes.push(s.finalTimeMs);
+        } else {
+          dnfCount++;
+        }
+      }
+    });
+
+    const storedPts = totalPoints[p.id] || 0;
+    const displayTotalPts = Math.max(totalPts, storedPts);
+
+    const avgPts = roundsParticipated > 0
+      ? (displayTotalPts / roundsParticipated).toFixed(1)
+      : (completedRounds.length > 0 ? (displayTotalPts / completedRounds.length).toFixed(1) : '0.0');
+
+    const bestSolveMs = validTimes.length > 0 ? Math.min(...validTimes) : null;
+    const worstSolveMs = validTimes.length > 0 ? Math.max(...validTimes) : null;
+    const meanMs = validTimes.length > 0
+      ? validTimes.reduce((acc, t) => acc + t, 0) / validTimes.length
+      : null;
+    const stdDevMs = validTimes.length > 1 && meanMs != null
+      ? Math.sqrt(validTimes.reduce((acc, t) => acc + Math.pow(t - meanMs, 2), 0) / validTimes.length)
+      : validTimes.length === 1
+      ? 0
+      : null;
+
+    return {
+      player: p,
+      totalPts: displayTotalPts,
+      avgPts,
+      bestSolveMs,
+      worstSolveMs,
+      meanMs,
+      stdDevMs,
+      roundsParticipated,
+      dnfCount,
+    };
+  });
+
+  playerStats.sort((a, b) => {
+    if (b.totalPts !== a.totalPts) return b.totalPts - a.totalPts;
+    if (a.meanMs !== null && b.meanMs !== null) return a.meanMs - b.meanMs;
+    if (a.meanMs !== null) return -1;
+    if (b.meanMs !== null) return 1;
+    return 0;
+  });
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[150] flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-6 animate-in fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-5xl max-h-[85vh] bg-bg-primary rounded-2xl border border-border/80 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/60 bg-bg-secondary/40 shrink-0">
+          <h2 className="text-base sm:text-lg font-bold text-text-primary flex items-center gap-2">
+            Match Stats
+            <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-md bg-bg-tertiary text-text-secondary border border-border/60">
+              {completedRounds.length} {completedRounds.length === 1 ? 'Round' : 'Rounds'}
+            </span>
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+            title="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content Table */}
+        <div className="overflow-auto flex-1 custom-scrollbar">
+          {playerStats.length === 0 ? (
+            <div className="p-12 text-center text-text-secondary text-sm">
+              No players or match data available yet.
+            </div>
+          ) : (
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-bg-secondary text-text-secondary font-bold uppercase tracking-wider border-b border-border sticky top-0 z-20 select-none">
+                  <th className="py-3 px-4 sticky left-0 z-30 bg-bg-secondary border-r border-border min-w-[160px] sm:min-w-[180px]">
+                    User
+                  </th>
+                  <th className="py-3 px-3 text-center min-w-[70px]">Total Pts</th>
+                  <th className="py-3 px-3 text-center min-w-[70px]">Avg Pts</th>
+                  <th className="py-3 px-3 text-center min-w-[75px]">Best</th>
+                  <th className="py-3 px-3 text-center min-w-[75px]">Mean</th>
+                  <th className="py-3 px-3 text-center min-w-[65px]">Std</th>
+                  <th className="py-3 px-3 text-center min-w-[75px]">Worst</th>
+                  {completedRounds.map((r) => (
+                    <th
+                      key={r.globalIndex}
+                      className="py-3 px-3 text-center min-w-[85px] font-mono border-l border-border/50 text-text-secondary"
+                      title={`Round ${r.globalIndex} (Set ${r.setIndex + 1}, Game ${r.gameIndex + 1})`}
+                    >
+                      R{r.globalIndex}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50 font-mono">
+                {playerStats.map((st, idx) => {
+                  const p = st.player;
+                  const isBot = p.role === 'BOT';
+                  const isRed = p.team === 'RED';
+                  const isBlue = p.team === 'BLUE';
+
+                  return (
+                    <tr
+                      key={p.id}
+                      className="hover:bg-bg-hover/50 transition-colors group"
+                    >
+                      <td className="py-2.5 px-4 sticky left-0 z-10 bg-bg-primary group-hover:bg-bg-hover border-r border-border transition-colors">
+                        <div className="flex items-center gap-2 min-w-0 font-sans">
+                          <span className="text-[11px] font-bold text-text-secondary/50 w-4 shrink-0 font-mono">
+                            {idx + 1}
+                          </span>
+                          <div
+                            className={`w-3 h-3 rounded-sm shrink-0 ${
+                              isRed ? 'bg-red-500' : isBlue ? 'bg-blue-500' : 'bg-zinc-500'
+                            }`}
+                            title={isRed ? 'Red Team' : isBlue ? 'Blue Team' : 'No Team'}
+                          />
+                          <span
+                            className={`font-bold text-xs truncate max-w-[120px] sm:max-w-[140px] ${
+                              isBot ? 'font-mono' : ''
+                            } text-text-primary`}
+                            title={p.name}
+                          >
+                            {isBot ? formatBotNameToTenth(p.name) : p.name}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="py-2.5 px-3 text-center font-bold text-accent">
+                        {st.totalPts}
+                      </td>
+
+                      <td className="py-2.5 px-3 text-center text-text-primary font-medium">
+                        {st.avgPts}
+                      </td>
+
+                      <td className="py-2.5 px-3 text-center text-emerald-500 dark:text-emerald-400 font-semibold">
+                        {st.bestSolveMs !== null ? formatTime(st.bestSolveMs) : (st.dnfCount > 0 ? 'DNF' : '—')}
+                      </td>
+
+                      <td className="py-2.5 px-3 text-center text-text-primary font-medium">
+                        {st.meanMs !== null ? formatToTenth(st.meanMs) : '—'}
+                      </td>
+
+                      <td className="py-2.5 px-3 text-center text-text-secondary font-medium">
+                        {st.stdDevMs !== null ? formatToTenth(st.stdDevMs) : '—'}
+                      </td>
+
+                      <td className="py-2.5 px-3 text-center text-text-secondary font-medium">
+                        {st.worstSolveMs !== null ? formatTime(st.worstSolveMs) : (st.dnfCount > 0 ? 'DNF' : '—')}
+                      </td>
+
+                      {completedRounds.map((r) => {
+                        const solve = r.solves[p.id];
+                        if (!solve) {
+                          return (
+                            <td key={r.globalIndex} className="py-2.5 px-3 text-center text-text-secondary/40 border-l border-border/40">
+                              —
+                            </td>
+                          );
+                        }
+
+                        const isDNF = solve.isDNF || solve.penalty === 'DNF';
+                        const timeStr = isDNF
+                          ? 'DNF'
+                          : formatTime(solve.finalTimeMs, { penalty: solve.penalty }) + (solve.penalty === 'PLUS_2' ? ' (+2)' : '');
+
+                        return (
+                          <td
+                            key={r.globalIndex}
+                            className="py-2.5 px-3 text-center border-l border-border/40"
+                          >
+                            <div className="flex flex-col items-center justify-center">
+                              <span
+                                className={`text-[11px] font-semibold ${
+                                  isDNF ? 'text-red-400 font-bold' : 'text-text-primary'
+                                }`}
+                              >
+                                {timeStr}
+                              </span>
+                              {solve.score > 0 && (
+                                <span className="text-[9px] text-accent/80 font-sans font-bold">
+                                  +{solve.score} pts
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-3 border-t border-border/60 bg-bg-secondary/40 shrink-0">
+          <div className="text-xs text-text-secondary font-medium">
+            Showing {playerStats.length} {playerStats.length === 1 ? 'player' : 'players'}
+            {completedRounds.length > 0 && ` · ${completedRounds.length} rounds recorded`}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-1.5 rounded-lg bg-bg-tertiary hover:bg-bg-hover text-text-primary font-bold text-xs border border-border/80 transition-colors cursor-pointer"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function ArenaInner() {
   const { user } = useAuth();
   const { confirm } = useConfirm();
@@ -474,13 +847,31 @@ function ArenaInner() {
 
   const isHost = roomData?.host === user?.uid;
 
+  const { settings: hostTimerSettings } = useSettings();
+
+  const [showMatchStats, setShowMatchStats] = useState(false);
+
   const {
     matchStatus, startMatch, currentScramble, settings, updateSettings, players: tournamentPlayers, addPlayer, removePlayer, updatePlayerBotConfig,
-    teamGamePoints, teamGameWins, teamSetWins, currentSetIndex, currentGameIndex, currentRoundIndex, lastMatchPlaces, sets, applyPenalty
+    teamGamePoints, teamGameWins, teamSetWins, currentSetIndex, currentGameIndex, currentRoundIndex, lastMatchPlaces, totalPoints, sets, applyPenalty
   } = useTournamentStore();
 
+  useEffect(() => {
+    if (isHost && hostTimerSettings?.scrambleSize && settings.scrambleSize !== hostTimerSettings.scrambleSize) {
+      updateSettings({ scrambleSize: hostTimerSettings.scrambleSize });
+    }
+  }, [isHost, hostTimerSettings?.scrambleSize, settings.scrambleSize, updateSettings]);
+
+  const playerStatsMap = useMemo(() => {
+    const map: Record<string, { count: number; avgMs: number; stdDevMs: number } | null> = {};
+    tournamentPlayers.forEach((p) => {
+      map[p.id] = getPlayerContinualStats(p.id, sets);
+    });
+    return map;
+  }, [tournamentPlayers, sets]);
+
   const localPlayerId = user?.uid || (isHost ? tournamentPlayers.find(p => p.role === 'HOST')?.id : undefined);
-  useFinishSoundController(localPlayerId);
+  useArenaSoundController(localPlayerId);
 
   const timerPlayers = useTimerStore((s) => s.players);
   const raceState = useTimerStore((s) => s.raceState);
@@ -786,7 +1177,7 @@ function ArenaInner() {
         const botColor = b.color || AVAILABLE_COLORS[Math.floor(Math.random() * AVAILABLE_COLORS.length)].hex;
         botMap[id] = {
           id,
-          name: b.name || '15.00-1.0',
+          name: b.name || '15.00±1.0',
           role: 'BOT',
           key: '',
           color: botColor,
@@ -879,9 +1270,9 @@ function ArenaInner() {
   const handleAddBot = (team: 'RED' | 'BLUE') => {
     if (!isHost || !roomId) return;
     const botId = `bot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const defaultAvg = '15.00';
+    const defaultAvg = '15.0';
     const defaultStd = '1.0';
-    const defaultName = `${defaultAvg}-${defaultStd}`;
+    const defaultName = `${defaultAvg}±${defaultStd}`;
     const avgMs = 15000;
     const stdDevMs = 1000;
     const randomColor = AVAILABLE_COLORS[Math.floor(Math.random() * AVAILABLE_COLORS.length)].hex;
@@ -1195,7 +1586,12 @@ function ArenaInner() {
         </div>
 
         
-        <div className="font-mono text-lg sm:text-xl md:text-2xl font-bold text-center tracking-wide text-text-primary mb-2 shrink-0 px-2">{currentScramble}</div>
+        <div 
+          className="font-mono font-bold text-center tracking-wide text-text-primary mb-2 shrink-0 px-2 leading-tight"
+          style={{ fontSize: `${settings.scrambleSize || 1.5}rem` }}
+        >
+          {currentScramble}
+        </div>
 
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 flex-1 min-h-0 w-full mb-2">
           {/* Red Team */}
@@ -1223,6 +1619,7 @@ function ArenaInner() {
                   key={p.id}
                   p={p}
                   isHost={isHost}
+                  stats={playerStatsMap[p.id]}
                   onDelete={handleDeleteBot}
                   onUpdateBot={handleUpdateBot}
                 />
@@ -1240,12 +1637,13 @@ function ArenaInner() {
             {(() => {
               const myPlayer = user?.uid ? timerPlayers[user.uid] : null;
               const isRacing = raceState === 'RACING';
-              const hideResultsForMe = isRacing && myPlayer && !myPlayer.isFinished;
+              const leftEarly = (raceState === 'LOCKED_IN' || raceState === 'DRAG_COUNTDOWN') && (myPlayer?.falseStartDeltaMs ?? 0) > 0;
+              const hideResultsForMe = (isRacing || leftEarly) && myPlayer && !myPlayer.isFinished;
 
               if (hideResultsForMe) {
                 return (
                   <div className="flex-1 flex items-center justify-center p-4">
-                    <span className="text-4xl md:text-5xl font-black text-text-primary tracking-tight">Solve</span>
+                    <span className="text-4xl md:text-5xl font-black text-text-primary tracking-tight">SOLVE</span>
                   </div>
                 );
               }
@@ -1259,100 +1657,138 @@ function ArenaInner() {
                 );
               }
 
+              const activePlayersCount = tournamentPlayers.filter(p => p.team === 'RED' || p.team === 'BLUE').length;
+              const redSolvePoints = displayPlaces.reduce((acc, result) => {
+                if (result.team === 'RED' || (result.team as any) === '1') {
+                  return acc + (result.score ?? (result.isDNF ? 0 : Math.max(1, activePlayersCount - (result.rank - 1))));
+                }
+                return acc;
+              }, 0);
+              const blueSolvePoints = displayPlaces.reduce((acc, result) => {
+                if (result.team === 'BLUE' || (result.team as any) === '2') {
+                  return acc + (result.score ?? (result.isDNF ? 0 : Math.max(1, activePlayersCount - (result.rank - 1))));
+                }
+                return acc;
+              }, 0);
+
               return (
-                <div className="flex flex-col gap-1.5 overflow-y-auto flex-1 custom-scrollbar pr-0.5">
-                {displayPlaces.map((result) => {
-                  const fsPenaltyMs = (result.falseStartDeltaMs || 0) * settings.falseStartMultiplier;
-                  const formattedTime = result.isDNF
-                    ? 'DNF'
-                    : formatTime(result.timeMs, { penalty: result.penalty }) + (result.penalty === 'PLUS_2' ? ' (+2)' : '');
-
-                  const activePlayersCount = tournamentPlayers.filter(p => p.team === 'RED' || p.team === 'BLUE').length;
-                  const pointsEarned = result.score ?? (result.isDNF ? 0 : Math.max(1, activePlayersCount - (result.rank - 1)));
-                  const isRed = result.team === 'RED' || (result.team as any) === '1';
-                  const isBlue = result.team === 'BLUE' || (result.team as any) === '2';
-                  const teamBgClass = isRed ? 'bg-red-500 text-white' : isBlue ? 'bg-blue-500 text-white' : 'bg-bg-tertiary text-text-secondary';
-                  const isMe = result.playerId === user?.uid;
-                  const isResultBot = tournamentPlayers.find(x => x.id === result.playerId)?.role === 'BOT';
-
-                  return (
+                <div className="flex flex-col flex-1 min-h-0">
+                  <div className="flex items-center justify-around w-full px-2 pb-2 mb-2 border-b border-border/60 shrink-0">
                     <div
-                      key={result.playerId}
-                      className={`group relative flex items-center justify-between px-2.5 py-2 rounded-xl transition-all border bg-bg-primary border-border/70 text-text-primary ${isMe ? 'hover:border-border' : ''}`}
+                      className="w-7 h-7 rounded-lg bg-red-500 text-white font-mono font-bold text-sm flex items-center justify-center shadow-xs"
+                      title={`Red Team: ${redSolvePoints} pts`}
                     >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <div
-                          className={`w-5 h-5 rounded-md shadow-xs shrink-0 flex items-center justify-center font-mono font-bold text-xs ${teamBgClass}`}
-                          title={`${pointsEarned} ${pointsEarned === 1 ? 'point' : 'points'}`}
-                        >
-                          {pointsEarned}
-                        </div>
-                        {isResultBot ? (
-                          <div
-                            className="w-5 h-5 rounded-full shadow-xs shrink-0"
-                            style={{ backgroundColor: result.color === '#18181b' ? 'var(--profile-black, #2d333b)' : (result.color || '#64748b') }}
-                          />
-                        ) : (
-                          <div
-                            className="w-5 h-5 rounded-md shadow-xs shrink-0"
-                            style={{ backgroundColor: result.color === '#18181b' ? 'var(--profile-black, #2d333b)' : result.color }}
-                          />
-                        )}
-                        
-                        {/* Name (hidden on hover if it's the current user) */}
-                        <span className={`text-xs font-bold text-text-primary truncate ${isMe ? 'group-hover:hidden' : ''}`}>
-                          {result.name}
-                        </span>
-
-                        {/* Action Buttons (visible only on hover if it's the current user) */}
-                        {isMe && (
-                          <div className="hidden group-hover:flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                handlePenalty(result.playerId, result.penalty === 'PLUS_2' ? 'NONE' : 'PLUS_2');
-                              }}
-                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
-                                result.penalty === 'PLUS_2' 
-                                  ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-500 hover:bg-yellow-500/30' 
-                                  : 'bg-bg-secondary border-border/80 text-text-secondary hover:text-text-primary hover:border-text-secondary'
-                              }`}
-                            >
-                              +2
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                handlePenalty(result.playerId, result.penalty === 'DNF' ? 'NONE' : 'DNF');
-                              }}
-                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
-                                result.penalty === 'DNF' 
-                                  ? 'bg-red-500/20 border-red-500/50 text-red-500 hover:bg-red-500/30' 
-                                  : 'bg-bg-secondary border-border/80 text-text-secondary hover:text-text-primary hover:border-text-secondary'
-                              }`}
-                            >
-                              DNF
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      <div className="font-mono text-xs font-bold shrink-0 ml-2 flex items-center gap-1">
-                        {!result.isDNF && fsPenaltyMs > 0 && (
-                          <span className="text-[10px] text-red-400">+{formatTime(fsPenaltyMs)}</span>
-                        )}
-                        <span className={result.isDNF ? 'text-red-400' : 'text-text-primary'}>
-                          {formattedTime}
-                        </span>
-                      </div>
+                      {redSolvePoints}
                     </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-        </div>
+                    <div
+                      className="w-7 h-7 rounded-lg bg-blue-500 text-white font-mono font-bold text-sm flex items-center justify-center shadow-xs"
+                      title={`Blue Team: ${blueSolvePoints} pts`}
+                    >
+                      {blueSolvePoints}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5 overflow-y-auto flex-1 custom-scrollbar pr-0.5">
+                    {displayPlaces.map((result) => {
+                      const fsPenaltyMs = (result.falseStartDeltaMs || 0) * settings.falseStartMultiplier;
+                      const formattedTime = result.isDNF
+                        ? 'DNF'
+                        : formatTime(result.timeMs, { penalty: result.penalty }) + (result.penalty === 'PLUS_2' ? ' (+2)' : '');
+
+                      const pointsEarned = result.score ?? (result.isDNF ? 0 : Math.max(1, activePlayersCount - (result.rank - 1)));
+                      const isRed = result.team === 'RED' || (result.team as any) === '1';
+                      const isBlue = result.team === 'BLUE' || (result.team as any) === '2';
+                      const teamBgClass = isRed ? 'bg-red-500 text-white' : isBlue ? 'bg-blue-500 text-white' : 'bg-bg-tertiary text-text-secondary';
+                      const isMe = result.playerId === user?.uid;
+                      const isResultBot = tournamentPlayers.find(x => x.id === result.playerId)?.role === 'BOT';
+
+                      return (
+                        <div
+                          key={result.playerId}
+                          className={`group relative flex items-center justify-between px-2.5 py-2 rounded-xl transition-all border bg-bg-primary border-border/70 text-text-primary ${isMe ? 'hover:border-border' : ''}`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <div
+                              className={`w-5 h-5 rounded-md shadow-xs shrink-0 flex items-center justify-center font-mono font-bold text-xs ${teamBgClass}`}
+                              title={`${pointsEarned} ${pointsEarned === 1 ? 'point' : 'points'}`}
+                            >
+                              {pointsEarned}
+                            </div>
+                            {isResultBot ? (
+                              <div
+                                className="w-5 h-5 rounded-full shadow-xs shrink-0"
+                                style={{ backgroundColor: result.color === '#18181b' ? 'var(--profile-black, #2d333b)' : (result.color || '#64748b') }}
+                              />
+                            ) : (
+                              <div
+                                className="w-5 h-5 rounded-md shadow-xs shrink-0"
+                                style={{ backgroundColor: result.color === '#18181b' ? 'var(--profile-black, #2d333b)' : result.color }}
+                              />
+                            )}
+                            
+                            {/* Name (hidden on hover if it's the current user) */}
+                            <span className={`text-xs font-bold text-text-primary truncate ${isMe ? 'group-hover:hidden' : ''} ${isResultBot ? 'font-mono' : ''}`}>
+                              {isResultBot ? formatBotNameToTenth(result.name) : result.name}
+                            </span>
+
+                            {/* Action Buttons (visible only on hover if it's the current user) */}
+                            {isMe && (
+                              <div className="hidden group-hover:flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handlePenalty(result.playerId, result.penalty === 'PLUS_2' ? 'NONE' : 'PLUS_2');
+                                  }}
+                                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                                    result.penalty === 'PLUS_2' 
+                                      ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-500 hover:bg-yellow-500/30' 
+                                      : 'bg-bg-secondary border-border/80 text-text-secondary hover:text-text-primary hover:border-text-secondary'
+                                  }`}
+                                >
+                                  +2
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handlePenalty(result.playerId, result.penalty === 'DNF' ? 'NONE' : 'DNF');
+                                  }}
+                                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                                    result.penalty === 'DNF' 
+                                      ? 'bg-red-500/20 border-red-500/50 text-red-500 hover:bg-red-500/30' 
+                                      : 'bg-bg-secondary border-border/80 text-text-secondary hover:text-text-primary hover:border-text-secondary'
+                                  }`}
+                                >
+                                  DNF
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          <div className="font-mono text-xs font-bold shrink-0 ml-2 flex items-center gap-1">
+                            {!result.isDNF && fsPenaltyMs > 0 && (
+                              <span className="text-[10px] text-red-400">+{formatTime(fsPenaltyMs)}</span>
+                            )}
+                            <span className={result.isDNF ? 'text-red-400' : 'text-text-primary'}>
+                              {formattedTime}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Match Stats Link */}
+            <button
+              type="button"
+              onClick={() => setShowMatchStats(true)}
+              className="mt-2 text-xs font-semibold text-text-secondary hover:text-text-primary transition-colors cursor-pointer text-center w-full"
+            >
+              Match Stats
+            </button>
+          </div>
 
           {/* Blue Team */}
           <div 
@@ -1379,6 +1815,7 @@ function ArenaInner() {
                   key={p.id}
                   p={p}
                   isHost={isHost}
+                  stats={playerStatsMap[p.id]}
                   onDelete={handleDeleteBot}
                   onUpdateBot={handleUpdateBot}
                 />
@@ -1430,11 +1867,27 @@ function ArenaInner() {
           })}
         </div>
       </div>
+
+      {showMatchStats && (
+        <MatchStatsModal
+          isOpen={showMatchStats}
+          onClose={() => setShowMatchStats(false)}
+          players={tournamentPlayers}
+          sets={sets}
+          totalPoints={totalPoints}
+        />
+      )}
     </div>
   );
 }
 
 export default function Arena() {
+  const isOnline = useOnlineStatus();
+
+  if (!isOnline) {
+    return <OfflineState featureName="the Multiplayer Arena" />;
+  }
+
   return (
     <ArenaMatchProvider>
       <ArenaInner />

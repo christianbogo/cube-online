@@ -9,6 +9,8 @@ import { UserProfileView } from '../components/social/UserProfileView';
 import { UserAvatar, WcaBadge } from '../components/ui/UserAvatar';
 import { hasLinkedWca } from '../utils/wca';
 import { Search, Loader2 } from 'lucide-react';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { OfflineState } from '../components/ui/OfflineState';
 
 // Module-level in-memory cache to prevent flashing "only my account" during page transitions
 let cachedUsers: UserData[] = [];
@@ -16,6 +18,7 @@ let cachedHasLoaded = false;
 let cachedLeaderboards: any = null;
 
 export default function Social() {
+    const isOnline = useOnlineStatus();
     const scrollRef = useRef<HTMLDivElement>(null);
     const { user: currentUser } = useAuth();
     const { userId: routeUserId } = useParams<{ userId?: string }>();
@@ -397,6 +400,10 @@ export default function Social() {
         setManualSelectedUserUid(null);
         navigate('/social');
     };
+
+    if (!isOnline) {
+        return <OfflineState featureName="Social & Leaderboards" />;
+    }
 
     const isInitialLoading = (loadingUsers || loadingLeaderboards) && (allUsers.length <= 1 || !leaderboards);
 

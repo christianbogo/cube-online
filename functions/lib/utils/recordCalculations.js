@@ -127,6 +127,7 @@ const calculateBestSingleRecord = (solves) => {
 };
 exports.calculateBestSingleRecord = calculateBestSingleRecord;
 const calculateBestAverageRecord = (solvesChronological, size, type, label, allowCrossSession) => {
+    var _a;
     if (solvesChronological.length < size)
         return null;
     let bestDetail = null;
@@ -172,7 +173,9 @@ const calculateBestAverageRecord = (solvesChronological, size, type, label, allo
         if (bestValue === null || avg < bestValue) {
             bestValue = avg;
             const windowSolves = solvesChronological.slice(i, i + size);
-            const detail = (0, exports.calculateWindowAverageDetails)(windowSolves, size, type, label, allowCrossSession);
+            const firstSessionId = (_a = windowSolves[0]) === null || _a === void 0 ? void 0 : _a.sessionId;
+            const actuallyCrossSession = !firstSessionId || windowSolves.some(s => s.sessionId !== firstSessionId);
+            const detail = (0, exports.calculateWindowAverageDetails)(windowSolves, size, type, label, actuallyCrossSession);
             if (detail && typeof detail.value === 'number') {
                 bestDetail = detail;
                 bestValue = detail.value; // ensure they stay in sync

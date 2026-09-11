@@ -5,6 +5,8 @@ import { format, subDays, eachDayOfInterval } from 'date-fns';
 
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../lib/firebase';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { OfflineState } from '../components/ui/OfflineState';
 import {
     getCachedDailyVolumeSync,
     getCachedDailyVolume,
@@ -256,6 +258,7 @@ import RecordTable from '../components/records/RecordTable';
 type StatusFilter = 'all' | 'completed' | 'in-progress';
 
 export default function Goals() {
+    const isOnline = useOnlineStatus();
     const { user } = useAuth();
     const { userStats, solves } = useSolves();
     const {
@@ -409,6 +412,10 @@ export default function Goals() {
         const combined = Array.from(new Set([...fromStats, ...fromSolves]));
         return combined.length > 0 ? combined : undefined;
     }, [userStats?.validSolvesPerEvent, solves]);
+
+    if (!isOnline) {
+        return <OfflineState featureName="Goals & Achievements" />;
+    }
 
     return (
         <div className="flex-1 flex flex-col min-h-0 bg-bg-primary overflow-y-auto custom-scrollbar select-none">

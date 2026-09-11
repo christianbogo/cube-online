@@ -9,7 +9,7 @@ export default function Info() {
                     Documentation &amp; Features
                 </h1>
                 <p className="text-xs text-text-secondary">
-                    Version 0.4.0 &bull; Cube Online Reference Manual
+                    Version 0.4.1 &bull; Cube Online Reference Manual
                 </p>
                 <p className="text-sm text-text-secondary mt-3 leading-relaxed">
                     Cube Online (<a href="https://cubeonline.org" className="underline text-accent">cubeonline.org</a>) is an open speedcubing platform providing precise timing, analytics, goal milestones, and live multiplayer practice. This guide explains the core features across every section of the application and how to use them.
@@ -172,17 +172,57 @@ export default function Info() {
                     </ul>
                 </section>
 
-                {/* 6. Keybinds & Shortcuts */}
+                {/* 6. Arena (Live Multiplayer Battles) */}
                 <section className="space-y-3">
                     <h2 className="text-base font-semibold text-text-primary">
-                        6. Keybinds &amp; Shortcuts
+                        6. Arena (Live Multiplayer Battles)
+                    </h2>
+                    <p>
+                        Real-time competitive multiplayer cubing matches with team battles, spectator rooms, and automated bot opponents (<Link to="/arena" className="underline text-accent">/arena</Link>):
+                    </p>
+                    <ul className="list-disc pl-5 space-y-2">
+                        <li>
+                            <strong className="text-text-primary">How Arena Matches Work:</strong> Solvers join a room and are placed on Red Team or Blue Team (or watch as spectators). When all active human solvers hold spacebar, the match locks in and triggers a drag race Christmas tree countdown (red light, progressive yellow staging lights, then sudden green light launch). All solvers solve the exact same scramble simultaneously.
+                        </li>
+                        <li>
+                            <strong className="text-text-primary">Match Scoring &amp; Structure:</strong> Matches are structured into Games and Sets:
+                            <ul className="list-circle pl-5 mt-1 space-y-1 text-xs">
+                                <li><strong>Rank-Based Points:</strong> Each round awards points to finishers based on their finish order (faster solves earn more points, with DNF solves receiving zero).</li>
+                                <li><strong>Winning Games &amp; Sets:</strong> The first team to accumulate the target Points to Win wins the game. Winning target games takes the set, and target sets secures match victory.</li>
+                                <li><strong>False Start Penalties:</strong> Releasing the spacebar before the green light triggers a false start penalty scaled to the early delta (5x multiplier added to final solve time). Leaving early immediately switches the center console to show &quot;SOLVE&quot;.</li>
+                            </ul>
+                        </li>
+                        <li>
+                            <strong className="text-text-primary">Host Powers &amp; Rules:</strong> The room creator serves as authoritative match referee:
+                            <ul className="list-circle pl-5 mt-1 space-y-1 text-xs">
+                                <li><strong>Room Configuration:</strong> Set custom target sets, target games, and points-to-win thresholds. The scramble size automatically matches the host&apos;s timer settings.</li>
+                                <li><strong>Team Management:</strong> Drag and drop players freely between Red Team, Blue Team, and Spectators.</li>
+                                <li><strong>AI Bot Management:</strong> Add custom AI bots to either team. Click or edit bot cards to adjust average solve time and standard deviation in monospace format, or remove bots with the trash icon.</li>
+                                <li><strong>Score &amp; Penalty Overrides:</strong> Manually increment or decrement game points, game wins, and set wins, and apply penalties. Host can also kick or ban disruptive players.</li>
+                            </ul>
+                        </li>
+                        <li>
+                            <strong className="text-text-primary">Guest Powers &amp; Experience:</strong>
+                            <ul className="list-circle pl-5 mt-1 space-y-1 text-xs">
+                                <li><strong>Match Participation:</strong> Once assigned to a team, hold spacebar to ready up. Release upon green to start solving, and tap spacebar to record your time.</li>
+                                <li><strong>Self-Reporting Penalties:</strong> In the center solve history console, hover over your result to quickly self-report a +2 or DNF penalty.</li>
+                                <li><strong>Continual Lobby Stats:</strong> Player cards display your rolling average and standard deviation based on all completed, non-DNF round times throughout the lobby session.</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </section>
+
+                {/* 7. Keybinds & Shortcuts */}
+                <section className="space-y-3">
+                    <h2 className="text-base font-semibold text-text-primary">
+                        7. Keybinds &amp; Shortcuts
                     </h2>
                     <p>
                         Fast keyboard navigation and control reference (<Link to="/keybinds" className="underline text-accent">/keybinds</Link>):
                     </p>
                     <ul className="list-disc pl-5 space-y-2">
                         <li>
-                            <strong className="text-text-primary">Navigation:</strong> Press <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">Esc</kbd> for Timer, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">L</kbd> for Logs, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">G</kbd> for Goals, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">S</kbd> for Social, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">A</kbd> for Account, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">B</kbd> for Keybinds, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">Shift</kbd> to toggle the left sidebar, and <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">Tab</kbd> to toggle the right sidebar.
+                            <strong className="text-text-primary">Navigation:</strong> Press <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">Esc</kbd> for Timer, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">L</kbd> for Logs, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">G</kbd> for Goals, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">S</kbd> for Social, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">A</kbd> for Arena, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">B</kbd> for Keybinds, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">Shift</kbd> to toggle the left sidebar, and <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">Tab</kbd> to toggle the right sidebar.
                         </li>
                         <li>
                             <strong className="text-text-primary">Puzzle Switching Hotkeys:</strong> Press <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">2</kbd>–<kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">7</kbd> for 2x2 through 7x7, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">1</kbd> for Square-1, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">C</kbd> for Clock, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">M</kbd> for Megaminx, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">Y</kbd> for Pyraminx, <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">K</kbd> for Skewb, or <kbd className="px-1.5 py-0.5 text-xs font-mono bg-bg-secondary border border-border rounded">F</kbd> for FTO.
@@ -193,10 +233,10 @@ export default function Info() {
                     </ul>
                 </section>
 
-                {/* 7. Account & Data Management */}
+                {/* 8. Account & Data Management */}
                 <section className="space-y-3">
                     <h2 className="text-base font-semibold text-text-primary">
-                        7. Account &amp; Data Management
+                        8. Account &amp; Data Management
                     </h2>
                     <p>
                         Profile settings, data portability, and preferences (<Link to="/account" className="underline text-accent">/account</Link>):
@@ -223,10 +263,10 @@ export default function Info() {
                     </ul>
                 </section>
 
-                {/* 8. Developer Portal & Feedback */}
+                {/* 9. Developer Portal & Feedback */}
                 <section className="space-y-3">
                     <h2 className="text-base font-semibold text-text-primary">
-                        8. Developer Portal &amp; Feedback
+                        9. Developer Portal &amp; Feedback
                     </h2>
                     <p>
                         Community feedback and release history (<Link to="/dev" className="underline text-accent">/dev</Link>):
@@ -241,10 +281,10 @@ export default function Info() {
                     </ul>
                 </section>
 
-                {/* 9. Notifications, Theme & Offline Mode */}
+                {/* 10. Notifications, Theme & Offline Mode */}
                 <section className="space-y-3">
                     <h2 className="text-base font-semibold text-text-primary">
-                        9. Notifications, Themes &amp; Offline Mode
+                        10. Notifications, Themes &amp; Offline Mode
                     </h2>
                     <ul className="list-disc pl-5 space-y-2">
                         <li>

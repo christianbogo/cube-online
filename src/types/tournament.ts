@@ -173,6 +173,7 @@ export interface TournamentSettings {
   soundVolume?: number;
   scrambleEvent: string;
   lockInDurationMs?: number;
+  scrambleSize?: number;
 }
 
 export interface ActivityFeedItem {

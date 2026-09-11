@@ -55,14 +55,6 @@ export function useKeyboardController({ roomId }: { roomId?: string } = {}) {
     hostPlayerRef.current = hostPlayer;
   });
 
-  // Sync sound settings
-  useEffect(() => {
-    soundEngine.setEnabled(settings.soundEnabled);
-    if (settings.soundVolume !== undefined) {
-      soundEngine.setVolume(settings.soundVolume);
-    }
-  }, [settings.soundEnabled, settings.soundVolume]);
-
   // Initialize timer players when active players change
   useEffect(() => {
     initPlayers(activePlayerIds);
@@ -102,7 +94,6 @@ export function useKeyboardController({ roomId }: { roomId?: string } = {}) {
             });
 
             setRaceState('LOCKED_IN');
-            soundEngine.playLockIn();
 
             setTimeout(() => {
               setRaceState('DRAG_COUNTDOWN');
@@ -143,18 +134,15 @@ export function useKeyboardController({ roomId }: { roomId?: string } = {}) {
 
     // Stage 1 Yellow (immediate)
     setCountdownStage(1);
-    soundEngine.playCountdownBeep(1);
 
     // Stage 2 Yellow (at stageInterval)
     const timer2 = setTimeout(() => {
       setCountdownStage(2);
-      soundEngine.playCountdownBeep(2);
     }, stageInterval);
 
     // Stage 3 Yellow (at stageInterval * 2)
     const timer3 = setTimeout(() => {
       setCountdownStage(3);
-      soundEngine.playCountdownBeep(3);
     }, stageInterval * 2);
 
     // Green Launch (at randomized delay after Stage 3)
@@ -162,7 +150,6 @@ export function useKeyboardController({ roomId }: { roomId?: string } = {}) {
       useTournamentStore.getState().clearLastMatchPlaces();
       const greenTime = Date.now();
       startRace(greenTime);
-      soundEngine.playGoTone();
     }, totalDurationBeforeGreen);
 
     return () => {
@@ -201,9 +188,6 @@ export function useKeyboardController({ roomId }: { roomId?: string } = {}) {
 
       const { matchWinnerId, setWinnerId, matchWinnerTeam, setWinnerTeam, gameWinnerTeam, gameWinnerId, highlight } = recordCompletedGame(solvesData);
 
-      if (matchWinnerId || setWinnerId || matchWinnerTeam || setWinnerTeam) {
-        soundEngine.playVictoryFanfare();
-      }
 
       if (roomId) {
         const feedRef = ref(rtdb, `rooms/${roomId}/feed`);

@@ -41,7 +41,7 @@ export default function Keybinds() {
                 { key: 'g', action: 'Go to Goals' },
                 { key: 'l', action: 'Go to Logs' },
                 { key: 's', action: 'Go to Social' },
-                { key: 'a', action: 'Go to Account' },
+                { key: 'a', action: 'Go to Arena' },
                 { key: 'Tab', action: 'Toggle Right Sidebar' },
                 { key: 'Shift', action: 'Toggle Left Sidebar' },
             ]

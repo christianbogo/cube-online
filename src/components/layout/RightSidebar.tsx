@@ -3,12 +3,15 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSession } from '../../contexts/SessionContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useLive } from '../../contexts/LiveContext';
-import { Trash2, ChevronLeft, ChevronRight, Ghost, ChevronDown, Check, Plus } from 'lucide-react';
+import { Trash2, ChevronLeft, ChevronRight, Ghost, ChevronDown, Check, Plus, WifiOff } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { calculateBestAverage, calculateBestSingle, formatTime, calculateAverage } from '../../utils/calculations';
 import { useEvents } from '../../hooks/useEvents';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import CreateEventModal from '../timer/CreateEventModal';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../../lib/firebase';
 
 export interface RightSidebarProps {
     collapsed: boolean;
@@ -17,7 +20,17 @@ export interface RightSidebarProps {
 
 type StatsMode = 'best' | 'session';
 
+interface SolveAnchor {
+    solveId: string;
+    solveNumber: number;
+    scrambleType: string;
+}
+
+const getSolveAnchorKey = (userId?: string, scrambleType?: string) =>
+    `cutter-cubing-solve-anchor-${userId || 'guest'}-${scrambleType || '333'}`;
+
 export default function RightSidebar({ onToggleCollapse, collapsed }: RightSidebarProps) {
+    const isOnline = useOnlineStatus();
     const { solves: allSolves, updateSolve, deleteSolve } = useSolves();
     const { isGhostMode, toggleGhostMode } = useLive();
     const { user } = useAuth();
@@ -51,6 +64,92 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
             return allSolves.filter(s => s.userId === user?.uid && (s.scrambleType || '333') === settings.scrambleType);
         }
     }, [allSolves, isLocalExperience, user, settings.scrambleType]);
+
+    // -- Numbering Anchor (Cloud Function Integration) --
+    const [anchor, setAnchor] = useState<SolveAnchor | null>(() => {
+        if (!user) return null;
+        try {
+            const raw = localStorage.getItem(getSolveAnchorKey(user.uid, settings.scrambleType));
+            if (raw) return JSON.parse(raw);
+        } catch {}
+        return null;
+    });
+
+    useEffect(() => {
+        if (!user) {
+            setAnchor(null);
+            return;
+        }
+        try {
+            const raw = localStorage.getItem(getSolveAnchorKey(user.uid, settings.scrambleType));
+            if (raw) {
+                setAnchor(JSON.parse(raw));
+                return;
+            }
+        } catch {}
+        setAnchor(null);
+    }, [user?.uid, settings.scrambleType]);
+
+    const oldestLocalSolve = displaySolves.length > 0 ? displaySolves[displaySolves.length - 1] : null;
+    const oldestLocalSolveId = oldestLocalSolve?.id;
+    const oldestLocalSolveDate = oldestLocalSolve?.date;
+
+    useEffect(() => {
+        if (!user || !oldestLocalSolveId || !oldestLocalSolveDate) return;
+
+        // If current anchor matches current event and its solve still exists in displaySolves, no need to query
+        const hasValidAnchor = Boolean(
+            anchor &&
+            anchor.scrambleType === settings.scrambleType &&
+            displaySolves.some(s => s.id === anchor.solveId)
+        );
+
+        if (hasValidAnchor) return;
+
+        let isMounted = true;
+
+        const fetchOldestSolveNumber = async () => {
+            try {
+                const getOldestSolveNumberFn = httpsCallable<
+                    { scrambleType: string; solveId: string; solveDate: string },
+                    { solveNumber: number; solveId: string | null; scrambleType: string }
+                >(functions, 'getOldestSolveNumber');
+
+                const res = await getOldestSolveNumberFn({
+                    scrambleType: settings.scrambleType,
+                    solveId: oldestLocalSolveId,
+                    solveDate: oldestLocalSolveDate
+                });
+
+                if (!isMounted) return;
+
+                if (res.data?.solveNumber && res.data.solveId) {
+                    const newAnchor: SolveAnchor = {
+                        solveId: res.data.solveId,
+                        solveNumber: res.data.solveNumber,
+                        scrambleType: res.data.scrambleType || settings.scrambleType
+                    };
+                    setAnchor(newAnchor);
+                    try {
+                        localStorage.setItem(getSolveAnchorKey(user.uid, settings.scrambleType), JSON.stringify(newAnchor));
+                    } catch {}
+                }
+            } catch (err) {
+                console.warn('Failed to calculate oldest solve number:', err);
+            }
+        };
+
+        fetchOldestSolveNumber();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [user?.uid, settings.scrambleType, oldestLocalSolveId, oldestLocalSolveDate, anchor, displaySolves]);
+
+    const anchorIndex = useMemo(() => {
+        if (!anchor || anchor.scrambleType !== settings.scrambleType) return -1;
+        return displaySolves.findIndex(s => s.id === anchor.solveId);
+    }, [anchor, settings.scrambleType, displaySolves]);
 
     // -- Pagination --
     const [pageLimit, setPageLimit] = useState(100);
@@ -260,6 +359,16 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                     </div>
                 )}
 
+                {/* Offline Mode Notice */}
+                {!isOnline && (
+                    <div className="py-2 px-3 bg-amber-500/10 border-b border-amber-500/20 flex items-center gap-2 text-left animate-in fade-in">
+                        <WifiOff className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <span className="text-[11px] text-amber-500/90 leading-tight">
+                            Offline — Solves are saved locally and will sync when you reconnect.
+                        </span>
+                    </div>
+                )}
+
                 <div className="flex flex-col">
                     {paginatedSolves.map((solve, index) => {
                         const newerSolve = paginatedSolves[index - 1];
@@ -268,7 +377,9 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                             (newerSolve.sessionId !== solve.sessionId)
                         );
 
-                        const solveNumber = displaySolves.length - index;
+                        const solveNumber = (!isLocalExperience && anchor && anchorIndex !== -1)
+                            ? anchor.solveNumber + (anchorIndex - index)
+                            : displaySolves.length - index;
 
                         return (
                             <div key={solve.id}>
@@ -294,12 +405,18 @@ export default function RightSidebar({ onToggleCollapse, collapsed }: RightSideb
                 </div>
 
                 {hasMore && (
-                    <button
-                        onClick={handleLoadMore}
-                        className="w-full p-4 text-xs text-text-secondary hover:text-text-primary transition-colors border-t border-border/50"
-                    >
-                        Load 100 More
-                    </button>
+                    isOnline ? (
+                        <button
+                            onClick={handleLoadMore}
+                            className="w-full p-4 text-xs text-text-secondary hover:text-text-primary transition-colors border-t border-border/50 cursor-pointer"
+                        >
+                            Load 100 More
+                        </button>
+                    ) : (
+                        <div className="w-full p-3.5 text-center text-[11px] text-text-secondary/70 border-t border-border/50 bg-bg-primary/20">
+                            Connect to the internet to load older solves
+                        </div>
+                    )
                 )}
 
                 {/* Empty State */}
@@ -418,7 +535,7 @@ const SolveItem = ({ solve, number, expanded, onToggle, onDelete, onPenalty, onC
         >
             <div className="flex items-center justify-between px-4 py-2">
                 <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-text-secondary/40 font-mono w-6 text-right text-[10px]">{number}</span>
+                    <span className="text-text-secondary/40 font-mono min-w-[20px] text-right text-[10px] tabular-nums shrink-0">{number}</span>
                     <span className={`font-mono font-medium ${solve.penalty === 'DNF' ? 'text-red-500' : 'text-text-primary'}`}>
                         {formatTimeDisplay(solve)}
                     </span>

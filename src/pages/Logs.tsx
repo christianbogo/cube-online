@@ -8,8 +8,9 @@ import {
 } from 'lucide-react';
 import { type Solve, useSolves } from '../contexts/SolvesContext';
 import { useSettings } from '../contexts/SettingsContext';
-
 import { useAuth } from '../contexts/AuthContext';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { OfflineState } from '../components/ui/OfflineState';
 import { formatTime } from '../utils/formatTime';
 import { httpsCallable } from 'firebase/functions';
 import { functions, db } from '../lib/firebase';
@@ -32,6 +33,7 @@ const DEFAULT_TABLE_SETTINGS: LogsTableSettings = {
 };
 
 export default function Logs() {
+    const isOnline = useOnlineStatus();
     const { solves, updateSolve, deleteSolve, userStats } = useSolves();
     const { settings } = useSettings();
     const { user } = useAuth();
@@ -317,6 +319,10 @@ export default function Logs() {
         );
     }
 
+    if (!isOnline) {
+        return <OfflineState featureName="Solve Logs" />;
+    }
+
     const showEmptyState = !isInitialLoading && !loading && safeTotalCount === 0;
 
     return (
@@ -441,7 +447,7 @@ export default function Logs() {
                                 </p>
                             </div>
                         ) : loading ? (
-                            <div className="w-full overflow-x-auto border border-border rounded-lg">
+                            <div className="w-full overflow-x-auto">
                                 <table className="w-full text-left text-sm border-collapse table-fixed select-none">
                                     <thead className="bg-bg-secondary border border-border">
                                         <tr>

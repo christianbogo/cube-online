@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useConfirm } from '@/contexts/ConfirmationContext';
 
 export const KNOWN_PREFIXES = [
-  '/', '/arena', '/logs', '/social', '/account', '/keybinds',
+  '/', '/arena', '/logs', '/store', '/social', '/account', '/keybinds',
   '/goals', '/dev', '/privacy', '/info', '/records', '/data',
   '/stats', '/callback'
 ];

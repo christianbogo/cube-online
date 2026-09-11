@@ -10,6 +10,7 @@ import LogsSidebar from './LogsSidebar';
 import { useSolves } from '../../contexts/SolvesContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useIsMobile } from '../../utils/useIsMobile';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import BottomNav from './BottomNav';
 
 export default function Layout() {
@@ -23,20 +24,7 @@ export default function Layout() {
 
     // Online presence and network status
     const [onlineCubersCount, setOnlineCubersCount] = useState<number>(0);
-    const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
-
-    useEffect(() => {
-        const handleOnline = () => setIsOnline(true);
-        const handleOffline = () => setIsOnline(false);
-
-        window.addEventListener('online', handleOnline);
-        window.addEventListener('offline', handleOffline);
-
-        return () => {
-            window.removeEventListener('online', handleOnline);
-            window.removeEventListener('offline', handleOffline);
-        };
-    }, []);
+    const isOnline = useOnlineStatus();
 
     useEffect(() => {
         const presenceRef = ref(rtdb, 'presence');
@@ -75,7 +63,7 @@ export default function Layout() {
     // Toggle States
     const [dataCollapsed, setDataCollapsed] = useState(false);
 
-    const knownPrefixes = ['/', '/arena', '/logs', '/social', '/account', '/keybinds', '/goals', '/dev', '/privacy', '/info', '/records', '/data', '/stats', '/callback'];
+    const knownPrefixes = ['/', '/arena', '/logs', '/store', '/social', '/account', '/keybinds', '/goals', '/dev', '/privacy', '/info', '/records', '/data', '/stats', '/callback'];
     const isRoomPage = !knownPrefixes.some(p => location.pathname === p || (p !== '/' && location.pathname.startsWith(p + '/')));
 
     // Persistence Effects
@@ -222,7 +210,7 @@ export default function Layout() {
                 navigate('/social');
             }
             if (e.key === 'a' || e.key === 'A') {
-                navigate('/account');
+                navigate('/arena');
             }
         };
 
@@ -337,7 +325,7 @@ export default function Layout() {
                     {(!location.pathname.startsWith('/logs') && location.pathname !== '/account' && !isMobileCubePage) && (
                         <footer className="p-2 text-xs text-text-secondary border-t border-border/20 flex justify-between items-center h-8 shrink-0">
                             <div className="flex gap-2 items-center">
-                                <span>{isOnline ? 'Online' : 'Offline'} • v0.4.0</span>
+                                <span>{isOnline ? 'Online' : 'Offline'} • v0.4.1</span>
                                 <SyncIndicator status={syncStatus} />
                             </div>
                             <div className="flex items-center gap-3">
@@ -352,7 +340,7 @@ export default function Layout() {
                 </main>
 
                 {/* Right Sidebar */}
-                {!['/account', '/logs', '/keybinds', '/dev', '/privacy', '/info'].some(p => location.pathname.startsWith(p)) && (
+                {!['/account', '/logs', '/keybinds', '/dev', '/privacy', '/info', '/store'].some(p => location.pathname.startsWith(p)) && (
                     <div
                         style={{ width: rightWidth }}
                         className={`hidden md:flex flex-shrink-0 relative flex-col backdrop-blur-sm will-change-[width] border-l border-border z-20 ${isResizingRight ? '' : 'transition-[width] duration-200 ease-out'}`}

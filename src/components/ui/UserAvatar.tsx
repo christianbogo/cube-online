@@ -28,17 +28,38 @@ export function UserAvatar({
     ariaLabel,
 }: UserAvatarProps) {
     const effectiveColor = color || user?.color || '#ef4444';
+    const isGradient = effectiveColor.includes('gradient');
     const isBlackProfile =
-        effectiveColor.toLowerCase() === '#18181b' ||
-        effectiveColor.toLowerCase() === '#000000' ||
-        effectiveColor.toLowerCase() === '#27272a' ||
-        effectiveColor.toLowerCase() === '#2d333b';
+        !isGradient && (
+            effectiveColor.toLowerCase() === '#18181b' ||
+            effectiveColor.toLowerCase() === '#000000' ||
+            effectiveColor.toLowerCase() === '#27272a' ||
+            effectiveColor.toLowerCase() === '#2d333b'
+        );
     const fillColor = isBlackProfile ? 'var(--profile-black, #2d333b)' : effectiveColor;
+
+    const seedStr = user?.username || (user as { uid?: string } | null | undefined)?.uid || effectiveColor;
+    const hash = seedStr
+        .split('')
+        .reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
+    const duration = 7 + (hash % 6);
+    const delay = -(hash % 10);
+
+    const backgroundStyle: React.CSSProperties = isGradient
+        ? {
+            background: fillColor,
+            backgroundSize: '300% 300%',
+            animation: `store-gradient-pan ${duration}s ease-in-out infinite`,
+            animationDelay: `${delay}s`,
+        }
+        : {
+            backgroundColor: fillColor
+        };
 
     return (
         <div
-            className={`${roundedClassName || 'rounded-lg'} shrink-0 ${className || ''}`}
-            style={{ backgroundColor: fillColor, ...style }}
+            className={`${roundedClassName || 'rounded-lg'} shrink-0 overflow-hidden ${className || ''}`}
+            style={{ ...backgroundStyle, ...style }}
             onClick={onClick}
             title={title || (user?.username ? `${user.username}'s profile` : undefined)}
             aria-label={ariaLabel || (user?.username ? `${user.username}'s profile` : undefined)}

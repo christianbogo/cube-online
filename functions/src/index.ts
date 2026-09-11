@@ -487,7 +487,7 @@ export const getRecordsData = functions.runWith({ timeoutSeconds: 540, memory: '
 
     for (const eventId of SUPPORTED_EVENT_IDS) {
         const recordDoc = await db.collection('users').doc(userId).collection('records').doc(eventId).get();
-        if (recordDoc.exists) {
+        if (recordDoc.exists && recordDoc.data()?.version === 2) {
             result.push(recordDoc.data());
         } else {
             const solvesSnap = await db.collection('solves')
@@ -523,12 +523,13 @@ export const getRecordsData = functions.runWith({ timeoutSeconds: 540, memory: '
                 mean,
                 std,
                 single: calculateBestSingleRecord(solves),
-                ao5: calculateBestAverageRecord(solves, 5, 'ao5', 'Ao5', true),
-                ao12: calculateBestAverageRecord(solves, 12, 'ao12', 'Ao12', true),
-                ao50: calculateBestAverageRecord(solves, 50, 'ao50', 'Ao50', true),
-                ao100: calculateBestAverageRecord(solves, 100, 'ao100', 'Ao100', true),
+                ao5: calculateBestAverageRecord(solves, 5, 'ao5', 'Ao5', false),
+                ao12: calculateBestAverageRecord(solves, 12, 'ao12', 'Ao12', false),
+                ao50: calculateBestAverageRecord(solves, 50, 'ao50', 'Ao50', false),
+                ao100: calculateBestAverageRecord(solves, 100, 'ao100', 'Ao100', false),
                 ao250: calculateBestAverageRecord(solves, 250, 'ao250', 'Ao250', true),
-                ao1000: calculateBestAverageRecord(solves, 1000, 'ao1000', 'Ao1000', true)
+                ao1000: calculateBestAverageRecord(solves, 1000, 'ao1000', 'Ao1000', true),
+                version: 2
             };
             
             await db.collection('users').doc(userId).collection('records').doc(eventId).set(row);
@@ -538,6 +539,32 @@ export const getRecordsData = functions.runWith({ timeoutSeconds: 540, memory: '
 
     return result.filter((r: any) => (r.count ?? 0) > 0 || r.single !== null);
 });
-export { getPaginatedSolves, getLogsSidebarData, getLogsBottomStats } from './solvesLogs';
+
+export const getUserRecentSolves = functions.runWith({ timeoutSeconds: 60, memory: '512MB' }).https.onCall(async (data: any, context: any) => {
+    const userId = data?.userId || context.auth?.uid;
+    if (!userId || typeof userId !== 'string') {
+        throw new functions.https.HttpsError('invalid-argument', 'userId is required');
+    }
+
+    try {
+        const snap = await db.collection('solves')
+            .where('userId', '==', userId)
+            .orderBy('date', 'desc')
+            .limit(25)
+            .get();
+
+        const solves = snap.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        } as Solve));
+
+        return { solves };
+    } catch (err: any) {
+        console.error('Error fetching recent solves for user:', userId, err);
+        throw new functions.https.HttpsError('internal', 'Failed to fetch recent solves');
+    }
+});
+
+export { getPaginatedSolves, getLogsSidebarData, getLogsBottomStats, getOldestSolveNumber } from './solvesLogs';
 export { getDailyVolumeStats, getGoalStreaks } from './goalsFunctions';
 export { exportUserData, deleteUserAccountFn, deleteAllSolvesFn, deleteImportedSolvesFn, adminDeleteUserAccountFn } from './bulkOperations';

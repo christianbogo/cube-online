@@ -13,6 +13,36 @@ import { useTimerStore } from '@/store/timerStore';
 import type { PlayerTimerData } from '@/store/timerStore';
 import { useTournamentStore } from '@/store/tournamentStore';
 import type { TournamentStore } from '@/store/tournamentStore';
+import type { SetMatch } from '@/types/tournament';
+
+export function normalizeSets(rawSets: any): SetMatch[] {
+  if (!rawSets) return [];
+  const setsArr: any[] = Array.isArray(rawSets) ? rawSets : Object.values(rawSets);
+  return setsArr.filter(Boolean).map((s: any) => {
+    const rawGames = s.games || [];
+    const gamesArr: any[] = Array.isArray(rawGames) ? rawGames : Object.values(rawGames);
+    const games = gamesArr.filter(Boolean).map((g: any) => {
+      const rawRounds = g.rounds || [];
+      const roundsArr: any[] = Array.isArray(rawRounds) ? rawRounds : Object.values(rawRounds);
+      const rounds = roundsArr.filter(Boolean).map((r: any) => {
+        return {
+          ...r,
+          solves: r.solves || {},
+        };
+      });
+      return {
+        ...g,
+        rounds,
+        solves: g.solves || {},
+        scores: g.scores || {},
+      };
+    });
+    return {
+      ...s,
+      games,
+    };
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Serialisable snapshot written by the Host to Firebase
@@ -331,7 +361,7 @@ export function useFirebaseGuest(roomId: string, slotId: string) {
         teamTotalPoints: data.teamTotalPoints || {},
         teamSetWins: data.teamSetWins || {},
         teamGameWins: data.teamGameWins || {},
-        sets: data.sets || [],
+        sets: normalizeSets(data.sets),
         activityFeed: data.activityFeed || [],
         matchBestTimeMs: data.matchBestTimeMs ?? null,
         setBestTimeMs: data.setBestTimeMs ?? null,

@@ -36,6 +36,7 @@ export interface EventRecordRow {
     ao100: RecordDetail | null;
     ao250: RecordDetail | null;
     ao1000: RecordDetail | null;
+    version?: number;
 }
 
 export const getEffectiveTime = (s: Solve): number => {
@@ -228,7 +229,9 @@ export const calculateBestAverageRecord = (
         if (bestValue === null || avg < bestValue) {
             bestValue = avg;
             const windowSolves = solvesChronological.slice(i, i + size);
-            const detail = calculateWindowAverageDetails(windowSolves, size, type, label, allowCrossSession);
+            const firstSessionId = windowSolves[0]?.sessionId;
+            const actuallyCrossSession = !firstSessionId || windowSolves.some(s => s.sessionId !== firstSessionId);
+            const detail = calculateWindowAverageDetails(windowSolves, size, type, label, actuallyCrossSession);
             if (detail && typeof detail.value === 'number') {
                 bestDetail = detail;
                 bestValue = detail.value; // ensure they stay in sync

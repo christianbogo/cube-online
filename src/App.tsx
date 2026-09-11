@@ -18,6 +18,7 @@ import Keybinds from './pages/Keybinds';
 import Dev from './pages/Dev';
 import Privacy from './pages/Privacy';
 import Info from './pages/Info';
+import Store from './pages/Store';
 import WCACallback from './pages/WCACallback';
 import type { ReactNode } from 'react';
 
@@ -62,6 +63,7 @@ function App() {
                           <Route path=":roomId" element={<ArenaRoute />} />
                           <Route path="logs" element={<GuestLockedRoute><Logs /></GuestLockedRoute>} />
                           <Route path="logs/:type/:id" element={<GuestLockedRoute><Logs /></GuestLockedRoute>} />
+                          <Route path="store" element={<Store />} />
                           <Route path="data" element={<Navigate to="/logs" replace />} />
                           <Route path="data/*" element={<Navigate to="/logs" replace />} />
                           <Route path="stats" element={<Navigate to="/logs" replace />} />

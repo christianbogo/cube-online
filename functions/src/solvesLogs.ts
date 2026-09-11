@@ -395,3 +395,67 @@ export const getLogsBottomStats = functions.runWith({ timeoutSeconds: 60, memory
 
     return { stats };
 });
+
+/**
+ * Cloud Function: getOldestSolveNumber
+ * Calculates the 1-based solve number of a specific solve (typically the oldest
+ * locally saved solve of the selected scramble type) across all solves for this user.
+ */
+export const getOldestSolveNumber = functions.runWith({ timeoutSeconds: 30, memory: '512MB' }).https.onCall(async (data: any, context: any) => {
+    if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+    const userId = context.auth.uid;
+    const scrambleType = data?.scrambleType || '333';
+    const solveId = data?.solveId;
+    let solveDate = data?.solveDate;
+
+    // If solveDate not provided, look up by solveId if available
+    if (!solveDate && solveId) {
+        const docSnap = await db.collection('solves').doc(solveId).get();
+        if (docSnap.exists) {
+            solveDate = docSnap.data()?.date;
+        }
+    }
+
+    if (!solveDate) {
+        // Fallback: If no solveDate or solveId, return total count for scrambleType
+        const totalSnap = await db.collection('solves')
+            .where('userId', '==', userId)
+            .where('scrambleType', '==', scrambleType)
+            .count()
+            .get();
+        return { solveNumber: totalSnap.data().count, solveId: null, scrambleType };
+    }
+
+    // Count solves strictly older than solveDate for this event
+    const olderCountSnap = await db.collection('solves')
+        .where('userId', '==', userId)
+        .where('scrambleType', '==', scrambleType)
+        .where('date', '<', solveDate)
+        .count()
+        .get();
+    const olderCount = olderCountSnap.data().count;
+
+    // Check solves with the exact same date to break ties deterministically
+    const sameDateSnap = await db.collection('solves')
+        .where('userId', '==', userId)
+        .where('scrambleType', '==', scrambleType)
+        .where('date', '==', solveDate)
+        .get();
+
+    let tieIndex = 0;
+    if (!sameDateSnap.empty && solveId) {
+        const sortedDocs = sameDateSnap.docs.sort((a, b) => a.id.localeCompare(b.id));
+        const idx = sortedDocs.findIndex(d => d.id === solveId);
+        if (idx !== -1) {
+            tieIndex = idx;
+        }
+    }
+
+    const solveNumber = olderCount + tieIndex + 1;
+
+    return {
+        solveNumber,
+        solveId: solveId || null,
+        scrambleType
+    };
+});

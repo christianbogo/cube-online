@@ -32,6 +32,7 @@ export interface EventRecordRow {
     ao100: RecordDetail | null;
     ao250: RecordDetail | null;
     ao1000: RecordDetail | null;
+    version?: number;
 }
 
 export const getEffectiveTime = (s: Solve): number => {
@@ -224,7 +225,9 @@ export const calculateBestAverageRecord = (
         if (bestValue === null || avg < bestValue) {
             bestValue = avg;
             const windowSolves = solvesChronological.slice(i, i + size);
-            const detail = calculateWindowAverageDetails(windowSolves, size, type, label, allowCrossSession);
+            const firstSessionId = windowSolves[0]?.sessionId;
+            const actuallyCrossSession = !firstSessionId || windowSolves.some(s => s.sessionId !== firstSessionId);
+            const detail = calculateWindowAverageDetails(windowSolves, size, type, label, actuallyCrossSession);
             if (detail && typeof detail.value === 'number') {
                 bestDetail = detail;
                 bestValue = detail.value; // ensure they stay in sync
@@ -303,11 +306,12 @@ export const calculateEventRecordRow = (
         mean,
         std,
         single: calculateBestSingleRecord(chronological),
-        ao5: calculateBestAverageRecord(chronological, 5, 'ao5', 'Ao5', true),
-        ao12: calculateBestAverageRecord(chronological, 12, 'ao12', 'Ao12', true),
-        ao50: calculateBestAverageRecord(chronological, 50, 'ao50', 'Ao50', true),
-        ao100: calculateBestAverageRecord(chronological, 100, 'ao100', 'Ao100', true),
+        ao5: calculateBestAverageRecord(chronological, 5, 'ao5', 'Ao5', false),
+        ao12: calculateBestAverageRecord(chronological, 12, 'ao12', 'Ao12', false),
+        ao50: calculateBestAverageRecord(chronological, 50, 'ao50', 'Ao50', false),
+        ao100: calculateBestAverageRecord(chronological, 100, 'ao100', 'Ao100', false),
         ao250: calculateBestAverageRecord(chronological, 250, 'ao250', 'Ao250', true),
         ao1000: calculateBestAverageRecord(chronological, 1000, 'ao1000', 'Ao1000', true),
+        version: 2,
     };
 };

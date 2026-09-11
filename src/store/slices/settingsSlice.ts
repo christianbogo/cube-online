@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS: TournamentSettings = {
   falseStartMultiplier: 5,
   soundEnabled: true,
   scrambleEvent: '333',
+  scrambleSize: 1.5,
 };
 
 export interface SettingsSlice {
